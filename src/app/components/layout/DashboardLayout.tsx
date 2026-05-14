@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Flame, ChevronLeft, ChevronRight, Bell, Search } from "lucide-react";
 
 interface NavItem {

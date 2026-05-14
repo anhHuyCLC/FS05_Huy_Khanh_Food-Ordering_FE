@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { Flame, ArrowLeft, ArrowRight, User, Store, Bike } from "lucide-react";
 import { useTranslation } from "react-i18next";
 

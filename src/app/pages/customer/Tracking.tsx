@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { Phone, MessageCircle, Star, CheckCircle, Clock, MapPin, Navigation, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { ShoppingCart, ChevronDown, Flame } from "lucide-react";
 import { Button } from "../ui/button";
 import { LanguageSwitcher } from "../LanguageSwitcher";
@@ -24,9 +24,8 @@ export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        transparent ? "bg-transparent" : "bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm"
-      }`}
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${transparent ? "bg-transparent" : "bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm"
+        }`}
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-8">
         {/* Logo */}
@@ -93,16 +92,25 @@ export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
             </Link>
           )}
 
-          <Link to="/login">
-            <Button variant="ghost" size="sm" className={transparent ? "text-white hover:bg-white/10" : ""}>
-              {t('home.Sign In')}
-            </Button>
-          </Link>
-          <Link to="/explore">
-            <Button size="sm" className="text-white font-semibold px-5" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-              {t('home.Order Now')}
-            </Button>
-          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={transparent ? "text-white hover:bg-white/10" : ""}
+            onClick={() => navigate("/login")}
+          >
+            {t("home.Sign In")}
+          </Button>
+
+          <Button
+            size="sm"
+            className="text-white font-semibold px-5"
+            style={{
+              background: "linear-gradient(135deg, #FF4500, #FF6B35)",
+            }}
+            onClick={() => navigate("/explore")}
+          >
+            {t("home.Order Now")}
+          </Button>
         </div>
       </div>
     </nav>

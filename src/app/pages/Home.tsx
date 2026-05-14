@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   MapPin, Star, Clock, Zap, Brain, CreditCard, Gift, Users,  Heart, Trophy,

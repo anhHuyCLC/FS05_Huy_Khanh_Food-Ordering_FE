@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Heart, MessageCircle, Share2, BookmarkPlus, Search, Trophy, TrendingUp, Star } from "lucide-react";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";

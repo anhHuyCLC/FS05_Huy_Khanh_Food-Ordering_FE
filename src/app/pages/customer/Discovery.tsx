@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { Search, SlidersHorizontal, Star, Clock, MapPin, Heart, Brain} from "lucide-react";
 import { Navbar } from "../../components/layout/Navbar";
 import { restaurants, categories, IMGS } from "../../data/mock";
