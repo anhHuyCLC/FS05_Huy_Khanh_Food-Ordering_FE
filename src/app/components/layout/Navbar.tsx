@@ -4,6 +4,8 @@ import { ShoppingCart, ChevronDown, Flame } from "lucide-react";
 import { Button } from "../ui/button";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { useTranslation } from "react-i18next";
+import { useAppDispatch, useAppSelector } from "../../store";
+import { logout } from "../../features/authSlice";
 
 const demoRoles = [
   { label: "🛍️ Customer View", path: "/explore" },
@@ -21,6 +23,13 @@ export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
   const [demoOpen, setDemoOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  const dispatch = useAppDispatch();
+  const { user } = useAppSelector((state) => state.auth);
+  const handleLogout = () => {
+    dispatch(logout());
+    navigate("/");
+  }
 
   return (
     <nav
@@ -91,15 +100,37 @@ export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
               </span>
             </Link>
           )}
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className={transparent ? "text-white hover:bg-white/10" : ""}
-            onClick={() => navigate("/login")}
-          >
-            {t("home.Sign In")}
-          </Button>
+          {user ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={transparent ? "text-white hover:bg-white/10" : ""}
+                onClick={() => navigate("/profile")}
+              >
+                {user.fullName}
+              </Button>
+              <Button
+                size="sm"
+                className="text-white font-semibold px-5"
+                style={{
+                  background: "linear-gradient(135deg, #ff0008, #FF6B35)",
+                }}
+                onClick={handleLogout}
+              >
+                {t("home.Logout")}
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={transparent ? "text-white hover:bg-white/10" : ""}
+              onClick={() => navigate("/login")}
+            >
+              {t("home.Sign In")}
+            </Button>
+          )}
 
           <Button
             size="sm"
