@@ -22,6 +22,12 @@ export default function Login() {
     dispatch(loginUser(form));
   };
 
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Left: Image */}

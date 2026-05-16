@@ -12,10 +12,6 @@ interface GoogleAuthConfig {
   redirectUri: string;
 }
 
-/**
- * Initialize Google SDK
- * Call this once in your app initialization (e.g., in App component)
- */
 export function initGoogleSDK(clientId: string) {
   const script = document.createElement('script');
   script.src = 'https://accounts.google.com/gsi/client';
@@ -24,10 +20,6 @@ export function initGoogleSDK(clientId: string) {
   document.head.appendChild(script);
 }
 
-/**
- * Start Google OAuth flow with authorization code
- * This is used for server-side token exchange
- */
 export function startGoogleOAuthFlow(clientId: string, redirectUri: string) {
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
   const params = new URLSearchParams({
@@ -41,10 +33,6 @@ export function startGoogleOAuthFlow(clientId: string, redirectUri: string) {
   window.location.href = `${authUrl}?${params.toString()}`;
 }
 
-/**
- * Extract authorization code from URL query parameters
- * Call this in your OAuth callback page
- */
 export function getAuthorizationCodeFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
   return params.get('code');

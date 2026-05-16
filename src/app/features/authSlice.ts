@@ -1,15 +1,32 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import * as authService from "../services/authService";
 
-interface User {
-  id: number;
-  name: string;
+// Cấu trúc User do Backend của bạn trả về
+export interface User {
+  id: string;
   email: string;
-  role: 'admin' | 'teacher' | 'student';
-  balance: number;
-  avatar?: string;
-  created_at: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl?: string;
+  googleId?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING';
+  phoneNumber?: string | null;
+  address?: string | null;
+  gender?: string | null;
+  deleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+
+  fullName: string;
+  roles: string[]; 
 }
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}
+
 
 interface LoginData {
     email: string;
@@ -25,7 +42,14 @@ interface AuthState {
 }
 
 const initialState: AuthState = {
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
+  user: (() => {
+    try {
+      const user = localStorage.getItem('user');
+      return (user && user !== 'undefined') ? JSON.parse(user) : null;
+    } catch (e) {
+      return null;
+    }
+  })(),
   token: localStorage.getItem('token'),
   refreshToken: localStorage.getItem('refreshToken'),
   loading: false,
@@ -56,10 +80,13 @@ export const loginWithGoogleIdToken = createAsyncThunk(
     async (idToken: string, {rejectWithValue}) => {
         try {
             const response = await authService.verifyGoogleIdToken(idToken);
-            localStorage.setItem('token', response.accessToken);
-            localStorage.setItem('refreshToken', response.refreshToken);
-            localStorage.setItem('user', JSON.stringify(response.user));
-            return response;
+            const payload = response.data || response;
+            const token = payload.accessToken || payload.token;
+            localStorage.setItem('token', token);
+            if (payload.refreshToken) localStorage.setItem('refreshToken', payload.refreshToken);
+            localStorage.setItem('user', JSON.stringify(payload.user));
+            console.log(payload.user);
+            return payload;
         } catch (error: any) {
             const message = error.response?.data?.message || error.message || "Đăng nhập bằng Google thất bại.";
             return rejectWithValue(message);
@@ -76,10 +103,12 @@ export const loginWithGoogleCode = createAsyncThunk(
     async (code: string, {rejectWithValue}) => {
         try {
             const response = await authService.exchangeGoogleCode(code);
-            localStorage.setItem('token', response.accessToken);
-            localStorage.setItem('refreshToken', response.refreshToken);
-            localStorage.setItem('user', JSON.stringify(response.user));
-            return response;
+            const payload = response.data || response;
+            const token = payload.accessToken || payload.token;
+            localStorage.setItem('token', token);
+            if (payload.refreshToken) localStorage.setItem('refreshToken', payload.refreshToken);
+            localStorage.setItem('user', JSON.stringify(payload.user));
+            return payload;
         } catch (error: any) {
             const message = error.response?.data?.message || error.message || "Xác thực Google thất bại.";
             return rejectWithValue(message);
@@ -99,6 +128,15 @@ const authSlice = createSlice({
             localStorage.removeItem('token');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('user');
+        },
+        setAuthData: (state, action) => {
+            state.user = action.payload.user;
+            state.token = action.payload.token;
+            state.refreshToken = action.payload.refreshToken;
+            state.error = null;
+            if (action.payload.token) localStorage.setItem('token', action.payload.token);
+            if (action.payload.refreshToken) localStorage.setItem('refreshToken', action.payload.refreshToken);
+            if (action.payload.user) localStorage.setItem('user', JSON.stringify(action.payload.user));
         }
     },
     extraReducers: (builder) => {
@@ -128,7 +166,7 @@ const authSlice = createSlice({
             .addCase(loginWithGoogleIdToken.fulfilled, (state, action) => {
                 state.loading = false;
                 state.user = action.payload.user;
-                state.token = action.payload.accessToken;
+                state.token = action.payload.accessToken || action.payload.token;
                 state.refreshToken = action.payload.refreshToken;
                 state.error = null;
             })
@@ -146,7 +184,7 @@ const authSlice = createSlice({
             .addCase(loginWithGoogleCode.fulfilled, (state, action) => {
                 state.loading = false;
                 state.user = action.payload.user;
-                state.token = action.payload.accessToken;
+                state.token = action.payload.accessToken || action.payload.token;
                 state.refreshToken = action.payload.refreshToken;
                 state.error = null;
             })
@@ -157,5 +195,5 @@ const authSlice = createSlice({
     }
 })
 
-export const { logout } = authSlice.actions;
+export const { logout, setAuthData } = authSlice.actions;
 export default authSlice.reducer;
