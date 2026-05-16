@@ -1,14 +1,26 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Flame, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { IMGS } from "../data/mock";
+import { useAppDispatch, useAppSelector } from "../store";
+import { loginUser } from "../features/authSlice";
+import { useGoogleAuth } from "../hooks/useGoogleAuth";
 
 export default function Login() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
+
+  const dispatch = useAppDispatch();
+  const { loading, error, user } = useAppSelector((state) => state.auth);
+  const { handleGoogleOAuthFlow, isLoading: googleLoading, error: googleError } = useGoogleAuth();
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    dispatch(loginUser(form));
+  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -53,11 +65,20 @@ export default function Login() {
 
           {/* Social logins */}
           <div className="grid grid-cols-2 gap-3 mb-6">
-            {[{ label: t('auth.continue_with_google'), icon: "🌐" }, { label: t('auth.continue_with_apple'), icon: "🍎" }].map((s) => (
-              <button key={s.label} className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700">
-                {s.icon} {s.label}
-              </button>
-            ))}
+            <button
+              onClick={handleGoogleOAuthFlow}
+              disabled={googleLoading}
+              className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 hover:bg-gray-50 disabled:opacity-50 transition-colors text-sm font-medium text-gray-700"
+            >
+              {googleLoading ? (
+                <span className="spinner-small"></span>
+              ) : (
+                <>🌐 {t('auth.continue_with_google')}</>
+              )}
+            </button>
+            <button className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700">
+              🍎 {t('auth.continue_with_apple')}
+            </button>
           </div>
 
           <div className="flex items-center gap-3 mb-6">
@@ -66,7 +87,7 @@ export default function Login() {
             <div className="flex-1 h-px bg-gray-100" />
           </div>
 
-          <form onSubmit={(e) => { e.preventDefault(); navigate("/explore"); }} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t('auth.email')}</label>
               <input
@@ -101,12 +122,25 @@ export default function Login() {
               <a href="#" className="text-sm font-medium" style={{ color: "#FF4500" }}>{t('auth.forgot_password')}</a>
             </div>
 
+            {(error || googleError) && (
+              <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {typeof (error || googleError) === 'string' ? (error || googleError) : 'Login failed'}
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all hover:opacity-90 hover:scale-[1.01]"
-              style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }}
+              className="auth-button auth-btn-primary"
+              disabled={loading}
             >
-              {t('auth.sign_in')}
+              {loading ? (
+                <span className="button-loading">
+                  <span className="spinner-small"></span>
+                  Đang đăng nhập...
+                </span>
+              ) : (
+                "Đăng nhập"
+              )}
             </button>
           </form>
 
@@ -139,6 +173,8 @@ export default function Login() {
           </div>
         </div>
       </div>
-    </div>
+    </div >
   );
 }
+
+

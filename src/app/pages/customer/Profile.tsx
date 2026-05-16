@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trophy, Star, Clock, CheckCircle} from "lucide-react";
 import { restaurants, IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";

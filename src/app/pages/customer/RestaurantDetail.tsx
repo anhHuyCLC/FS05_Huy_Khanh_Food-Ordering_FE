@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, Clock, MapPin, Heart, Plus, Minus, ShoppingCart, Flame } from "lucide-react";
 import { menuCategories, restaurants } from "../../data/mock";
 import { useTranslation } from "react-i18next";

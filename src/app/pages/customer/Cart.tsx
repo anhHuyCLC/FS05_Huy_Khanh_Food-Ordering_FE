@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, Trash2, Tag, Users, Share2, CheckCircle } from "lucide-react";
 import { menuCategories } from "../../data/mock";
 import { useTranslation } from "react-i18next";
