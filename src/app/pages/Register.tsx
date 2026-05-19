@@ -1,26 +1,59 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Flame, ArrowLeft, ArrowRight, User, Store, Bike } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useAuthActions } from "../hooks/useAuth";
+import { useAuthStore } from "../stores/authStore";
 
 
 export default function Register() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [step, setStep] = useState(1);
-  const [selectedRole, setSelectedRole] = useState("customer");
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [selectedRole, setSelectedRole] = useState("CUSTOMER");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const user = useAuthStore((state) => state.user);
+  const { register } = useAuthActions();
+
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
+  const [form, setForm] = useState({
+    firstname: "",
+    middlename: "",
+    lastname: "",
+    email: "",
+    password: "",
+    confirmpassword: "",
+    phonenumber: "",
+    address: "",
+  });
+
+
 
   const roles = [
-    { id: "customer", icon: <User className="w-6 h-6" />, label: t('auth.customer'), desc: t('auth.role_customer') },
-    { id: "restaurant", icon: <Store className="w-6 h-6" />, label: t('auth.restaurant'), desc: t('auth.role_restaurant') },
-    { id: "driver", icon: <Bike className="w-6 h-6" />, label: t('auth.driver'), desc: t('auth.role_driver') },
+    { id: "CUSTOMER", icon: <User className="w-6 h-6" />, label: t('auth.customer'), desc: t('auth.role_customer') },
+    { id: "RESTAURANT", icon: <Store className="w-6 h-6" />, label: t('auth.restaurant'), desc: t('auth.role_restaurant') },
+    { id: "DRIVER", icon: <Bike className="w-6 h-6" />, label: t('auth.driver'), desc: t('auth.role_driver') },
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const paths: Record<string, string> = { customer: "/explore", restaurant: "/restaurant-dashboard", driver: "/driver-dashboard" };
-    navigate(paths[selectedRole] || "/explore");
+    setLoading(true);
+    setError(null);
+
+    try {
+      await register({ ...form, role: selectedRole });
+      alert("Đăng ký thành công!");
+      navigate("/login");
+    } catch (error: any) {
+      setError(error.response?.data?.message || error.message || "Đăng ký thất bại. Vui lòng thử lại.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -93,16 +126,21 @@ export default function Register() {
               <h2 className="text-lg font-bold text-gray-900 mb-5">{t('auth.your_details')}</h2>
               <div className="space-y-4 mb-6">
                 {[
-                  { label: t('auth.full_name'), key: "name", type: "text", placeholder: "John Doe" },
-                  { label: t('auth.email'), key: "email", type: "email", placeholder: "john@example.com" },
+                  { label: t('auth.firstname', 'First Name'), key: "firstname", type: "text", placeholder: t('auth.firstname_placeholder', 'John') },
+                  { label: t('auth.middlename', 'Middle Name'), key: "middlename", type: "text", placeholder: t('auth.middlename_placeholder', 'Quincy') },
+                  { label: t('auth.lastname', 'Last Name'), key: "lastname", type: "text", placeholder: t('auth.lastname_placeholder', 'Doe') },
+                  { label: t('auth.email'), key: "email", type: "email", placeholder: t('auth.email_placeholder') },
+                  { label: t('auth.phonenumber', 'Phone Number'), key: "phonenumber", type: "tel", placeholder: t('auth.phonenumber_placeholder', 'Your phone number') },
+                  { label: t('auth.address', 'Address'), key: "address", type: "text", placeholder: t('auth.address_placeholder', 'Your address') },
                   { label: t('auth.password'), key: "password", type: "password", placeholder: t('auth.min_8_chars') },
+                  { label: t('auth.confirm_password'), key: "confirmpassword", type: "password", placeholder: t('auth.confirmpassword_placeholder', 'Confirm your password') },
                 ].map((field) => (
                   <div key={field.key}>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">{field.label}</label>
                     <input
                       type={field.type}
                       placeholder={field.placeholder}
-                      value={(form as any)[field.key]}
+                      value={form[field.key as keyof typeof form]}
                       onChange={(e) => setForm({ ...form, [field.key]: e.target.value })}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
                     />
@@ -112,12 +150,18 @@ export default function Register() {
               <p className="text-xs text-gray-400 mb-4">
                 {t('auth.terms_agree')} <a href="#" className="text-[#FF4500]">{t('auth.terms_of_service')}</a> và <a href="#" className="text-[#FF4500]">{t('auth.privacy_policy')}</a>.
               </p>
+              {error && (
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
               <button
                 type="submit"
+                disabled={loading}
                 className="w-full py-4 rounded-2xl text-white font-bold transition-all hover:opacity-90"
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
-                {t('auth.create_account_btn')}
+                {loading ? "Đang đăng ký..." : t('auth.create_account_btn')}
               </button>
             </form>
           )}

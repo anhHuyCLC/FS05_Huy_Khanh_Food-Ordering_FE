@@ -13,26 +13,33 @@ import Community from "./pages/customer/Community";
 import RestaurantDashboard from "./pages/restaurant/RestaurantDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import DriverDashboard from "./pages/driver/DriverDashboard";
+import Forbidden from "./pages/Forbidden";
+import { AuthBootstrap } from "./components/auth/AuthBootstrap";
+import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { PERMISSIONS } from "./constants/permissions";
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/auth/google/callback" element={<GoogleOAuthCallback />} />
-      <Route path="/explore" element={<Discovery />} />
-      <Route path="/cart" element={<Cart />} />
-      <Route path="/restaurant/:id" element={<RestaurantDetail />} />
-      <Route path="/checkout" element={<Checkout />} />
-      <Route path="/tracking" element={<Tracking />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/community" element={<Community />} />
-      <Route path="/restaurant-dashboard" element={<RestaurantDashboard />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/driver-dashboard" element={<DriverDashboard />} />
+    <AuthBootstrap>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/403" element={<Forbidden />} />
+        <Route path="/auth/google/callback" element={<GoogleOAuthCallback />} />
+        <Route path="/explore" element={<Discovery />} />
+        <Route path="/cart" element={<Cart />} />
+        <Route path="/restaurant/:id" element={<RestaurantDetail />} />
+        <Route path="/checkout" element={<ProtectedRoute permission="order:create"><Checkout /></ProtectedRoute>} />
+        <Route path="/tracking" element={<ProtectedRoute permission="order:track"><Tracking /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/community" element={<Community />} />
+        <Route path="/restaurant-dashboard" element={<ProtectedRoute permission="restaurant:dashboard:view"><RestaurantDashboard /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGEMENT.READ}><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/driver-dashboard" element={<ProtectedRoute permission="driver:dashboard:view"><DriverDashboard /></ProtectedRoute>} />
 
-    </Routes>
+      </Routes>
+    </AuthBootstrap>
   )
 }
 

@@ -4,6 +4,7 @@ import { revenueData, topDishes, menuCategories } from "../../data/mock";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, ShoppingBag, Star, Users, Plus, Edit, Eye,  CheckCircle, XCircle, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Can } from "../../components/auth/Can";
 
 const kpis = [
   { label: "Today's Revenue", value: "$1,284", change: "+12.5%", up: true, icon: TrendingUp, color: "#FF4500" },
@@ -48,13 +49,27 @@ export default function RestaurantDashboard() {
     { icon: "⭐", label: t('restaurant_dashboard.nav.reviews'), path: "/restaurant-dashboard/reviews" },
     { icon: "⚙️", label: t('restaurant_dashboard.nav.settings'), path: "/restaurant-dashboard/settings" },
   ];
+  const navPermissions: Record<string, string> = {
+    "/restaurant-dashboard": "restaurant:dashboard:view",
+    "/restaurant-dashboard/orders": "order:view",
+    "/restaurant-dashboard/menu": "menu:view",
+    "/restaurant-dashboard/pricing": "pricing:view",
+    "/restaurant-dashboard/promotions": "promotion:view",
+    "/restaurant-dashboard/analytics": "analytics:view",
+    "/restaurant-dashboard/reviews": "review:view",
+    "/restaurant-dashboard/settings": "restaurant:settings:view",
+  };
+  const authorizedNavItems = translatedNavItems.map((item) => ({
+    ...item,
+    permission: navPermissions[item.path],
+  }));
 
   const acceptOrder = (id: string) => {
     setOrders((o) => o.map((ord) => ord.id === id && ord.status === "new" ? { ...ord, status: "preparing" } : ord));
   };
 
   return (
-    <DashboardLayout navItems={translatedNavItems} role="restaurant" userName="Burger Republic" userAvatar="BR">
+    <DashboardLayout navItems={authorizedNavItems} role="restaurant" userName="Burger Republic" userAvatar="BR">
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -66,9 +81,11 @@ export default function RestaurantDashboard() {
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span className="text-sm font-semibold text-green-600">{t('restaurant_dashboard.restaurant_open')}</span>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-            <Plus className="w-4 h-4" /> {t('restaurant_dashboard.add_item')}
-          </button>
+          <Can permission="menu:create">
+            <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+              <Plus className="w-4 h-4" /> {t('restaurant_dashboard.add_item')}
+            </button>
+          </Can>
         </div>
       </div>
 
@@ -167,12 +184,16 @@ export default function RestaurantDashboard() {
                   <div className="flex gap-2 shrink-0">
                     {order.status === "new" && (
                       <>
-                        <button onClick={() => acceptOrder(order.id)} className="w-8 h-8 rounded-xl bg-green-50 text-green-500 flex items-center justify-center hover:bg-green-100 transition-colors">
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
-                        <button className="w-8 h-8 rounded-xl bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors">
-                          <XCircle className="w-4 h-4" />
-                        </button>
+                        <Can permission="order:approve">
+                          <button onClick={() => acceptOrder(order.id)} className="w-8 h-8 rounded-xl bg-green-50 text-green-500 flex items-center justify-center hover:bg-green-100 transition-colors">
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        </Can>
+                        <Can permission="order:delete">
+                          <button className="w-8 h-8 rounded-xl bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors">
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </Can>
                       </>
                     )}
                     {order.status === "preparing" && (
@@ -196,7 +217,9 @@ export default function RestaurantDashboard() {
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-gray-50">
             <h2 className="font-bold text-gray-900">{t('restaurant_dashboard.menu_items')}</h2>
-            <button className="text-xs text-[#FF4500] font-semibold hover:underline">{t('restaurant_dashboard.manage_all')}</button>
+            <Can permission="menu:view">
+              <button className="text-xs text-[#FF4500] font-semibold hover:underline">{t('restaurant_dashboard.manage_all')}</button>
+            </Can>
           </div>
           <div className="divide-y divide-gray-50">
             {menuCategories.flatMap((c) => c.items).slice(0, 5).map((item) => (
@@ -210,9 +233,11 @@ export default function RestaurantDashboard() {
                   <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
                     <Eye className="w-3.5 h-3.5" />
                   </button>
-                  <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
-                    <Edit className="w-3.5 h-3.5" />
-                  </button>
+                  <Can permission="menu:edit">
+                    <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  </Can>
                 </div>
               </div>
             ))}

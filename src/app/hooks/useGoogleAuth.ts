@@ -1,16 +1,24 @@
-import { useCallback, useEffect } from 'react';
-import { loginWithGoogleCode, loginWithGoogleIdToken } from '../features/authSlice';
+import { useCallback, useEffect, useState } from 'react';
 import { getAuthorizationCodeFromUrl, initGoogleSDK, renderGoogleOneTap, startGoogleOAuthFlow } from '../services/googleOAuth';
-import { useAppDispatch, useAppSelector } from '../store';
+import { useAuthActions } from './useAuth';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-// QUAN TRỌNG: Đây chính là chuỗi phải khớp 100% với Google Cloud và Backend
 const REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/auth/google/callback`;
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === "object" && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+  }
+
+  if (error instanceof Error) return error.message;
+  return fallback;
+};
+
 export function useGoogleAuth() {
-  const dispatch = useAppDispatch();
-  const { loading, error } = useAppSelector((state) => state.auth);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { loginWithGoogleCode, loginWithGoogleIdToken } = useAuthActions();
 
   useEffect(() => {
     if (GOOGLE_CLIENT_ID) {
@@ -19,25 +27,40 @@ export function useGoogleAuth() {
   }, []);
 
   useEffect(() => {
-    // Lấy code từ URL do Google trả về
     const code = getAuthorizationCodeFromUrl();
-    
-    if (code) {
-      dispatch(loginWithGoogleCode(code));
-      
-      // Dọn dẹp URL cho sạch sẽ (ẩn code đi)
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [dispatch]);
 
-  const handleCredentialResponse = useCallback(async (response: any) => {
-    if (response.credential) {
-      dispatch(loginWithGoogleIdToken(response.credential) as any);
+    if (!code) return;
+
+    setLoading(true);
+    setError(null);
+    loginWithGoogleCode(code)
+      .then(() => {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      })
+      .catch((error: unknown) => {
+        setError(getErrorMessage(error, "Đăng nhập bằng Google thất bại."));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [loginWithGoogleCode]);
+
+  const handleCredentialResponse = useCallback(async (response: { credential?: string }) => {
+    if (!response.credential) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await loginWithGoogleIdToken(response.credential);
+    } catch (error) {
+      setError(getErrorMessage(error, "Đăng nhập bằng Google thất bại."));
+    } finally {
+      setLoading(false);
     }
-  }, [dispatch]);
+  }, [loginWithGoogleIdToken]);
 
   const handleGoogleOAuthFlow = useCallback(() => {
-    // Chuyển hướng sang màn hình đăng nhập của Google từ Frontend
     if (GOOGLE_CLIENT_ID) {
       startGoogleOAuthFlow(GOOGLE_CLIENT_ID, REDIRECT_URI);
     } else {
