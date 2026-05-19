@@ -5,6 +5,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Store, Bike, ShoppingBag, TrendingUp, AlertTriangle, CheckCircle, XCircle, Eye, Search, Filter, Shield, Activity } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Can } from "../../components/auth/Can";
+import { PERMISSIONS } from "../../constants/permissions";
 
 const kpis = [
   { label: "Total Revenue", value: "$124,840", change: "+18.2%", up: true, icon: TrendingUp, color: "#FF4500", sub: "This month" },
@@ -63,15 +64,15 @@ export default function AdminDashboard() {
     { icon: "⚙️", label: t('admin.nav.settings'), path: "/admin/settings" },
   ];
   const navPermissions: Record<string, string> = {
-    "/admin": "admin:dashboard:view",
-    "/admin/users": "user:view",
-    "/admin/restaurants": "restaurant:view",
-    "/admin/drivers": "driver:view",
-    "/admin/orders": "order:view",
-    "/admin/revenue": "revenue:view",
-    "/admin/fraud": "fraud:view",
-    "/admin/community": "community:view",
-    "/admin/settings": "admin:settings:view",
+    "/admin": PERMISSIONS.ADMIN_MANAGEMENT.READ,
+    "/admin/users": PERMISSIONS.USER_MANAGEMENT.READ,
+    "/admin/restaurants": PERMISSIONS.ADMIN_MANAGEMENT.READ,
+    "/admin/drivers": PERMISSIONS.ADMIN_MANAGEMENT.READ,
+    "/admin/orders": PERMISSIONS.ADMIN_MANAGEMENT.READ,
+    "/admin/revenue": PERMISSIONS.ADMIN_MANAGEMENT.READ,
+    "/admin/fraud": PERMISSIONS.ADMIN_MANAGEMENT.READ,
+    "/admin/community": PERMISSIONS.CHAT.READ,
+    "/admin/settings": PERMISSIONS.ADMIN_MANAGEMENT.UPDATE,
   };
   const authorizedNavItems = translatedNavItems.map((item) => ({
     ...item,
@@ -246,12 +247,12 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Can permission="restaurant:approve">
+                    <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
                       <button className="flex-1 py-1.5 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-1" style={{ background: "#10B981" }}>
                         <CheckCircle className="w-3 h-3" /> {t('admin.approve')}
                       </button>
                     </Can>
-                    <Can permission="restaurant:delete">
+                    <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.DELETE}>
                       <button className="flex-1 py-1.5 rounded-xl text-xs font-semibold text-red-500 border border-red-200 flex items-center justify-center gap-1 hover:bg-red-50">
                         <XCircle className="w-3 h-3" /> {t('admin.reject')}
                       </button>
@@ -286,7 +287,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-gray-400 mb-2">{alert.detail}</p>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-400">{alert.id} · {alert.time}</span>
-                    <Can permission="fraud:approve">
+                    <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
                       <button className="text-xs font-semibold text-red-500 hover:underline">{t('admin.investigate')}</button>
                     </Can>
                   </div>
@@ -355,7 +356,7 @@ export default function AdminDashboard() {
                       <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
                         <Eye className="w-3.5 h-3.5" />
                       </button>
-                      <Can permission="user:edit">
+                      <Can permission={PERMISSIONS.USER_MANAGEMENT.UPDATE}>
                         <button className="px-2.5 py-1 rounded-lg text-xs font-medium text-red-400 border border-red-100 hover:bg-red-50 transition-colors">
                           {user.status === "active" ? t('admin.suspend') : t('admin.restore')}
                         </button>

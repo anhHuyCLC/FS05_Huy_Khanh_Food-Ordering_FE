@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { AuthResponse, User } from "../types/auth";
+import { normalizeUser } from "../lib/authPayload";
 
 interface AuthStoreState {
   accessToken: string | null;
@@ -19,7 +20,7 @@ const readLegacyUser = (): User | null => {
 
   try {
     const storedUser = window.localStorage.getItem("user");
-    return storedUser && storedUser !== "undefined" ? JSON.parse(storedUser) : null;
+    return storedUser && storedUser !== "undefined" ? normalizeUser(JSON.parse(storedUser)) : null;
   } catch {
     return null;
   }
@@ -75,16 +76,17 @@ export const useAuthStore = create<AuthStoreState>()(
         const nextState = {
           accessToken: auth.accessToken,
           refreshToken: auth.refreshToken ?? get().refreshToken,
-          user: auth.user ?? get().user,
+          user: auth.user ? normalizeUser(auth.user) : get().user,
         };
 
         persistLegacyAuth(nextState);
         set(nextState);
       },
       setUser: (user) => {
-        const nextState = { ...get(), user };
+        const nextUser = user ? normalizeUser(user) : null;
+        const nextState = { ...get(), user: nextUser };
         persistLegacyAuth(nextState);
-        set({ user });
+        set({ user: nextUser });
       },
       logout: () => {
         clearLegacyAuth();
@@ -103,6 +105,14 @@ export const useAuthStore = create<AuthStoreState>()(
         refreshToken: state.refreshToken,
         user: state.user,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AuthStoreState>;
+        return {
+          ...currentState,
+          ...persisted,
+          user: persisted.user ? normalizeUser(persisted.user) : currentState.user,
+        };
+      },
     },
   ),
 );

@@ -1,5 +1,6 @@
 import apiClient from "./apiClient"
-import type { AuthResponse, RefreshTokenResponse, RegisterPayload, User } from "../types/auth";
+import type { RefreshTokenResponse, RegisterPayload } from "../types/auth";
+import { normalizeAuthResponse, normalizeUser } from "../lib/authPayload";
 
 const unwrapResponse = <T>(payload: unknown): T => {
     if (
@@ -16,7 +17,7 @@ const unwrapResponse = <T>(payload: unknown): T => {
 
 export const login = async (email: string, password: string) => {
     const response = await apiClient.post("/v1/auth/login", {email, password})
-    return unwrapResponse<AuthResponse>(response.data)
+    return normalizeAuthResponse(response.data)
 }
 
 export const register = async (payload: RegisterPayload) => {
@@ -26,13 +27,13 @@ export const register = async (payload: RegisterPayload) => {
 
 export const verifyGoogleIdToken = async (idToken: string) => {
     const response = await apiClient.post("/v1/auth/google/verify", { idToken })
-    return unwrapResponse<AuthResponse>(response.data)
+    return normalizeAuthResponse(response.data)
 }
 
 export const exchangeGoogleCode = async (code: string) => {
     const redirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/auth/google/callback`;
     const response = await apiClient.post("/v1/auth/google/callback", { code, redirectUri })
-    return unwrapResponse<AuthResponse>(response.data)
+    return normalizeAuthResponse(response.data)
 }
 
 export const refreshAccessToken = async (refreshToken: string) => {
@@ -41,15 +42,6 @@ export const refreshAccessToken = async (refreshToken: string) => {
 }
 
 export const getMe = async () => {
-    try {
-        const response = await apiClient.get("/auth/me")
-        return unwrapResponse<User>(response.data)
-    } catch (error: any) {
-        if (error.response?.status !== 404) {
-            throw error
-        }
-
-        const response = await apiClient.get("/v1/auth/me")
-        return unwrapResponse<User>(response.data)
-    }
+    const response = await apiClient.get("/v1/auth/me")
+    return normalizeUser(response.data)
 }

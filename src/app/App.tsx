@@ -16,6 +16,7 @@ import DriverDashboard from "./pages/driver/DriverDashboard";
 import Forbidden from "./pages/Forbidden";
 import { AuthBootstrap } from "./components/auth/AuthBootstrap";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
+import { PERMISSIONS } from "./constants/permissions";
 
 function App() {
   return (
@@ -34,7 +35,7 @@ function App() {
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/community" element={<Community />} />
         <Route path="/restaurant-dashboard" element={<ProtectedRoute permission="restaurant:dashboard:view"><RestaurantDashboard /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute permission="admin:dashboard:view"><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGEMENT.READ}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/driver-dashboard" element={<ProtectedRoute permission="driver:dashboard:view"><DriverDashboard /></ProtectedRoute>} />
 
       </Routes>

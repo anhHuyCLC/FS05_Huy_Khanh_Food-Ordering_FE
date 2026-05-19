@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import * as authService from "../services/authService";
+import { normalizeUser } from "../lib/authPayload";
 
 export type UserStatus =
   | 'ACTIVE'
@@ -74,8 +75,8 @@ const initialState: AuthState = {
   user: (() => {
     try {
       const user = localStorage.getItem('user');
-      return (user && user !== 'undefined') ? JSON.parse(user) : null;
-    } catch (e) {
+      return (user && user !== 'undefined') ? normalizeUser(JSON.parse(user)) : null;
+    } catch {
       return null;
     }
   })(),
@@ -167,13 +168,13 @@ const authSlice = createSlice({
             localStorage.removeItem('user');
         },
         setAuthData: (state, action) => {
-            state.user = action.payload.user;
+            state.user = action.payload.user ? normalizeUser(action.payload.user) : null;
             state.token = action.payload.token;
             state.refreshToken = action.payload.refreshToken;
             state.error = null;
             if (action.payload.token) localStorage.setItem('token', action.payload.token);
             if (action.payload.refreshToken) localStorage.setItem('refreshToken', action.payload.refreshToken);
-            if (action.payload.user) localStorage.setItem('user', JSON.stringify(action.payload.user));
+            if (action.payload.user) localStorage.setItem('user', JSON.stringify(normalizeUser(action.payload.user)));
         }
     },
     extraReducers: (builder) => {
