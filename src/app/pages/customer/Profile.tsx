@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trophy, Star, Clock, CheckCircle} from "lucide-react";
-import { restaurants, IMGS } from "../../data/mock";
+import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
+import { useAppDispatch, useAppSelector } from "../../stores/store";
+import { fetchRestaurants } from "../../features/restaurantSlice";
 
 const orderHistory = [
   { id: "#ORD-7710", restaurant: "Burger Republic", date: "May 10, 2026", total: "$34.90", status: "delivered", img: IMGS.burger },
@@ -20,10 +22,21 @@ const badges = [
   { icon: "🚀", name: "Speed Order", desc: "Ordered in < 60s", earned: false },
 ];
 
+const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
+
+const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
+
 export default function Profile() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const [activeTab, setActiveTab] = useState("Orders");
   const { t } = useTranslation();
+  const { restaurants } = useAppSelector((state) => state.restaurants);
+
+  useEffect(() => {
+    dispatch(fetchRestaurants());
+  }, [dispatch]);
+
   const translatedTabs = [
     t('profile.orders'),
     t('profile.addresses'),
@@ -150,14 +163,14 @@ export default function Profile() {
 
         {activeTab === t('profile.favorites') && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {restaurants.slice(0, 4).map((r) => (
+            {restaurants.slice(0, 4).map((r, index) => (
               <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
-                <img src={r.image} alt={r.name} className="w-full h-32 object-cover" />
+                <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
                 <div className="p-4">
                   <p className="font-bold text-gray-900">{r.name}</p>
                   <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
-                    <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating}</span>
-                    <span><Clock className="w-3.5 h-3.5 inline mr-1" />{r.deliveryTime}</span>
+                    <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
+                    <span><Clock className="w-3.5 h-3.5 inline mr-1" />20-30 min</span>
                   </div>
                 </div>
               </div>
