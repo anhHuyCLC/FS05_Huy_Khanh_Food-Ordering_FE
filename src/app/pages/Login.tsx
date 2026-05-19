@@ -1,25 +1,37 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Flame, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { IMGS } from "../data/mock";
-import { useAppDispatch, useAppSelector } from "../store";
-import { loginUser } from "../features/authSlice";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
+import { useAuthActions } from "../hooks/useAuth";
+import { useAuthStore } from "../stores/authStore";
 
 export default function Login() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const dispatch = useAppDispatch();
-  const { loading, error, user } = useAppSelector((state) => state.auth);
+  const user = useAuthStore((state) => state.user);
+  const { login } = useAuthActions();
   const { handleGoogleOAuthFlow, isLoading: googleLoading, error: googleError } = useGoogleAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    dispatch(loginUser(form));
+    setLoading(true);
+    setError(null);
+
+    try {
+      await login(form);
+      navigate("/");
+    } catch (error: any) {
+      setError(error.response?.data?.message || error.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

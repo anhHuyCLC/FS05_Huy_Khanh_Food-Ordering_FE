@@ -4,6 +4,7 @@ import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { MapPin, Navigation, Clock, Phone, CheckCircle, Star,  Package, DollarSign } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Can } from "../../components/auth/Can";
 
 const earningsData = [
   { day: "Mon", earnings: 84 },
@@ -42,12 +43,24 @@ export default function DriverDashboard() {
     { icon: "📊", label: t('driver_dashboard.nav.performance'), path: "/driver-dashboard/performance" },
     { icon: "⚙️", label: t('driver_dashboard.nav.settings'), path: "/driver-dashboard/settings" },
   ];
+  const navPermissions: Record<string, string> = {
+    "/driver-dashboard": "driver:dashboard:view",
+    "/driver-dashboard/deliveries": "delivery:view",
+    "/driver-dashboard/earnings": "earning:view",
+    "/driver-dashboard/heatmap": "delivery:heatmap:view",
+    "/driver-dashboard/performance": "driver:performance:view",
+    "/driver-dashboard/settings": "driver:settings:view",
+  };
+  const authorizedNavItems = translatedNavItems.map((item) => ({
+    ...item,
+    permission: navPermissions[item.path],
+  }));
 
   const acceptOrder = () => { setPendingOrder(false); setActiveDelivery(true); };
   const declineOrder = () => setPendingOrder(false);
 
   return (
-    <DashboardLayout navItems={translatedNavItems} role="driver" userName="Alex Kowalski" userAvatar="AK">
+    <DashboardLayout navItems={authorizedNavItems} role="driver" userName="Alex Kowalski" userAvatar="AK">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -101,13 +114,15 @@ export default function DriverDashboard() {
             ))}
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={acceptOrder}
-              className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90"
-              style={{ background: "linear-gradient(135deg, #10B981, #34D399)" }}
-            >
-              <CheckCircle className="w-5 h-5" /> {t('driver_dashboard.accept_delivery')}
-            </button>
+            <Can permission="delivery:approve">
+              <button
+                onClick={acceptOrder}
+                className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90"
+                style={{ background: "linear-gradient(135deg, #10B981, #34D399)" }}
+              >
+                <CheckCircle className="w-5 h-5" /> {t('driver_dashboard.accept_delivery')}
+              </button>
+            </Can>
             <button
               onClick={declineOrder}
               className="flex-1 py-3.5 rounded-2xl text-gray-300 font-bold border border-white/20 hover:bg-white/10 transition-all"
@@ -138,13 +153,15 @@ export default function DriverDashboard() {
             <button className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-green-600 bg-white border border-green-200 flex items-center justify-center gap-2">
               <Phone className="w-4 h-4" /> {t('driver_dashboard.call_customer')}
             </button>
-            <button
-              onClick={() => setActiveDelivery(false)}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2"
-              style={{ background: "#10B981" }}
-            >
-              <CheckCircle className="w-4 h-4" /> {t('driver_dashboard.mark_delivered')}
-            </button>
+            <Can permission="delivery:edit">
+              <button
+                onClick={() => setActiveDelivery(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2"
+                style={{ background: "#10B981" }}
+              >
+                <CheckCircle className="w-4 h-4" /> {t('driver_dashboard.mark_delivered')}
+              </button>
+            </Can>
           </div>
         </div>
       )}

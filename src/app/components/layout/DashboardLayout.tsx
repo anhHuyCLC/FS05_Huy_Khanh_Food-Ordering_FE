@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Flame, ChevronLeft, ChevronRight, Bell, Search } from "lucide-react";
+import { usePermissions } from "../../hooks/usePermissions";
+import { useAuthStore } from "../../stores/authStore";
 
 interface NavItem {
-  icon: string;
-  label: string;
+  icon?: string;
+  label?: string;
+  title?: string;
   path: string;
   badge?: number;
+  permission?: string;
 }
 
 interface DashboardLayoutProps {
@@ -34,6 +38,17 @@ export function DashboardLayout({
   const location = useLocation();
   const navigate = useNavigate();
   const colors = roleColors[role];
+  const { hasPermission } = usePermissions();
+  const currentUser = useAuthStore((state) => state.user);
+  const visibleNavItems = navItems.filter((item) => !item.permission || hasPermission(item.permission));
+  const displayName = currentUser?.fullName ?? userName;
+  const displayAvatar = currentUser?.fullName
+    ?.split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((name) => name[0])
+    .join("")
+    .toUpperCase() || userAvatar;
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -60,8 +75,9 @@ export function DashboardLayout({
 
         {/* Nav Items */}
         <nav className="flex-1 py-4 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = location.pathname === item.path;
+            const itemTitle = item.label ?? item.title ?? item.path;
             return (
               <Link
                 key={item.path}
@@ -72,12 +88,12 @@ export function DashboardLayout({
                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 } ${collapsed ? "justify-center" : ""}`}
                 style={active ? { background: colors.gradient } : {}}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? itemTitle : undefined}
               >
-                <span className="text-base shrink-0">{item.icon}</span>
+                {item.icon && <span className="text-base shrink-0">{item.icon}</span>}
                 {!collapsed && (
                   <>
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1">{itemTitle}</span>
                     {item.badge != null && (
                       <span className="px-1.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600">
                         {item.badge}
@@ -98,10 +114,10 @@ export function DashboardLayout({
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                 style={{ background: colors.gradient }}
               >
-                {userAvatar}
+                {displayAvatar}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
                 <p className="text-xs text-gray-400 capitalize">{role}</p>
               </div>
             </div>
@@ -148,7 +164,7 @@ export function DashboardLayout({
               className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
               style={{ background: colors.gradient }}
             >
-              {userAvatar}
+              {displayAvatar}
             </div>
           </div>
         </header>

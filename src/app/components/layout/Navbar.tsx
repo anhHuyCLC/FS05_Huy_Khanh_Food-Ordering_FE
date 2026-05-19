@@ -4,8 +4,7 @@ import { ShoppingCart, ChevronDown, Flame } from "lucide-react";
 import { Button } from "../ui/button";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { useTranslation } from "react-i18next";
-import { useAppDispatch, useAppSelector } from "../../store";
-import { logout } from "../../features/authSlice";
+import { useAuthStore } from "../../stores/authStore";
 
 const demoRoles = [
   { label: "🛍️ Customer View", path: "/explore" },
@@ -24,10 +23,10 @@ export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const dispatch = useAppDispatch();
-  const { user } = useAppSelector((state) => state.auth);
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
   const handleLogout = () => {
-    dispatch(logout());
+    logout();
     navigate("/");
   }
 
