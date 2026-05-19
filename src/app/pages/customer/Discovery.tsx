@@ -1,23 +1,62 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, SlidersHorizontal, Star, Clock, MapPin, Heart, Brain} from "lucide-react";
 import { Navbar } from "../../components/layout/Navbar";
-import { restaurants, categories, IMGS } from "../../data/mock";
+import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
+import { useAppDispatch, useAppSelector } from "../../stores/store";
+import { fetchRestaurants } from "../../features/restaurantSlice";
+
+const categoryIcons: Record<string, string> = {
+  Burger: "🍔",
+  Pizza: "🍕",
+  Chicken: "🍗",
+  Drinks: "🥤",
+  Coffee: "☕",
+  Sushi: "🍣",
+  Ramen: "🍜",
+  Dessert: "🍰",
+  BBQ: "🔥",
+  "Fast Food": "🍟",
+};
+
+const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
+
+const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
 
 export default function Discovery() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [activeCategory, setActiveCategory] = useState("All");
   const [cartCount] = useState(2);
   const { t } = useTranslation();
+  const { restaurants, loading } = useAppSelector((state) => state.restaurants);
 
-  const filtered = restaurants.filter(
-    (r) =>
-      r.name.toLowerCase().includes(search.toLowerCase()) ||
-      r.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
-  );
+  useEffect(() => {
+    dispatch(fetchRestaurants());
+  }, [dispatch]);
+
+  const apiCategories = useMemo(() => {
+    const categoryNames = restaurants.flatMap((restaurant) => restaurant.categories.map((category) => category.name));
+    return Array.from(new Set(categoryNames));
+  }, [restaurants]);
+
+  const filtered = useMemo(() => {
+    const keyword = search.toLowerCase();
+    return restaurants.filter((restaurant) => {
+      const matchesSearch =
+        restaurant.name.toLowerCase().includes(keyword) ||
+        restaurant.categories.some((category) => category.name.toLowerCase().includes(keyword));
+      const matchesCategory =
+        activeCategory === "All" ||
+        activeCategory === t('common.all') ||
+        restaurant.categories.some((category) => category.name === activeCategory);
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [activeCategory, restaurants, search, t]);
 
   const translatedFilters = [
     "All",
@@ -67,7 +106,7 @@ export default function Discovery() {
           {/* Categories */}
           <div className="max-w-7xl mx-auto px-6 pb-4">
             <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {[t('common.all'), ...categories.map((c) => c.label)].map((cat) => (
+              {[t('common.all'), ...apiCategories].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
@@ -76,7 +115,7 @@ export default function Discovery() {
                   }`}
                   style={activeCategory === cat ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
                 >
-                  {categories.find((c) => c.label === cat)?.icon} {cat}
+                  {categoryIcons[cat]} {cat}
                 </button>
               ))}
             </div>
@@ -128,21 +167,23 @@ export default function Discovery() {
             </select>
           </div>
 
-          <p className="text-sm text-gray-500 mb-5">{filtered.length} {t('discovery.restaurants_near')}</p>
+          <p className="text-sm text-gray-500 mb-5">
+            {loading ? t('common.loading') : `${filtered.length} ${t('discovery.restaurants_near')}`}
+          </p>
 
           {/* Restaurant grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filtered.map((r) => (
+            {filtered.map((r, index) => (
               <div
                 key={r.id}
                 onClick={() => navigate(`/restaurant/${r.id}`)}
                 className="group bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
               >
                 <div className="relative h-44 overflow-hidden">
-                  <img src={r.image} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  {r.promo && (
+                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  {r.isActive && (
                     <span className="absolute top-3 left-3 px-2.5 py-1 rounded-xl text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      {r.promo}
+                      Open
                     </span>
                   )}
                   <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center hover:scale-110 transition-transform">
@@ -152,23 +193,22 @@ export default function Discovery() {
                 <div className="p-4">
                   <h3 className="font-bold text-gray-900 mb-1">{r.name}</h3>
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {r.tags.map((t) => (
-                      <span key={t} className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{t}</span>
+                    {r.categories.slice(0, 3).map((category) => (
+                      <span key={category.id} className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{category.name}</span>
                     ))}
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="flex items-center gap-1 text-gray-600">
                       <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="font-semibold text-gray-800">{r.rating}</span>
-                      <span className="text-gray-400 text-xs">({r.reviews})</span>
+                      <span className="font-semibold text-gray-800">{r.rating ?? "New"}</span>
                     </span>
                     <span className="flex items-center gap-1 text-gray-500 text-xs">
-                      <Clock className="w-3.5 h-3.5" /> {r.deliveryTime} 
+                      <Clock className="w-3.5 h-3.5" /> 20-30 min
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">
-                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{r.distance}</span>
-                    <span className={r.deliveryFee === "Free" ? "text-green-500 font-semibold" : ""}>{r.deliveryFee === "Free" ? t('restaurant.free_delivery_promo') : `${r.deliveryFee} ${t('restaurant.delivery_fee')}`}</span>
+                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{r.address}</span>
+                    <span className="text-green-500 font-semibold">{t('restaurant.free_delivery_promo')}</span>
                   </div>
                 </div>
               </div>

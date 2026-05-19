@@ -1,13 +1,15 @@
-import React, { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   MapPin, Star, Clock, Zap, Brain, CreditCard, Gift, Users,  Heart, Trophy,
-  ChevronRight, Play, ArrowRight, CheckCircle, TrendingUp, Shield, Smartphone
+  ChevronRight, Play, ArrowRight, CheckCircle, Smartphone
 } from "lucide-react";
 import { Navbar } from "../components/layout/Navbar";
 import { Footer } from "../components/layout/Footer";
-import { restaurants, categories, testimonials, faqItems, IMGS } from "../data/mock";
+import { testimonials, faqItems, IMGS } from "../data/mock";
+import { useAppDispatch, useAppSelector } from "../stores/store";
+import { fetchRestaurants } from "../features/restaurantSlice";
 
 const features = [
   { icon: <MapPin className="w-6 h-6" />, title: "Real-Time Tracking", desc: "Watch your order move from kitchen to doorstep on a live map.", large: true, color: "#FF4500" },
@@ -26,36 +28,54 @@ const steps = [
   { num: "03", icon: "🚀", title: "Track & Enjoy", desc: "Watch your driver live on the map. Rate your experience and earn rewards." },
 ];
 
-const partnerStats = [
-  { label: "Avg. Monthly Revenue", value: "$12,400", icon: TrendingUp },
-  { label: "Onboarding Time", value: "< 24hrs", icon: Zap },
-  { label: "Platform Commission", value: "15%", icon: Shield },
-];
 
-const driverStats = [
-  { label: "Avg. Hourly Earnings", value: "$22/hr", icon: TrendingUp },
-  { label: "Active Cities", value: "45+", icon: MapPin },
-  { label: "Driver App Rating", value: "4.9 ★", icon: Star },
-];
+const categoryIcons: Record<string, string> = {
+  Burger: "🍔",
+  Pizza: "🍕",
+  Chicken: "🍗",
+  Drinks: "🥤",
+  Coffee: "☕",
+  Sushi: "🍣",
+  Ramen: "🍜",
+  Dessert: "🍰",
+  BBQ: "🔥",
+  "Fast Food": "🍟",
+};
+
+const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
+
+const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
 
 export default function Home() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { t } = useTranslation();
   const [address, setAddress] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { restaurants } = useAppSelector((state) => state.restaurants);
+
+  useEffect(() => {
+    dispatch(fetchRestaurants());
+  }, [dispatch]);
+
+  const apiCategories = useMemo(() => {
+    const categoryNames = restaurants.flatMap((restaurant) => restaurant.categories.map((category) => category.name));
+    return Array.from(new Set(categoryNames));
+  }, [restaurants]);
+
+  const visibleRestaurants = useMemo(() => {
+    if (activeCategory === "All" || activeCategory === t('common.all')) return restaurants;
+    return restaurants.filter((restaurant) =>
+      restaurant.categories.some((category) => category.name === activeCategory)
+    );
+  }, [activeCategory, restaurants, t]);
 
   const featureKeys = ["tracking", "ai", "payments", "promos", "group", "fast", "community", "rewards"];
   const featuresWithTranslations = features.map((f, i) => ({
     ...f,
     title: t(`home.features.${featureKeys[i]}.title`),
     desc: t(`home.features.${featureKeys[i]}.desc`),
-  }));
-
-  const stepsWithTranslations = steps.map((s) => ({
-    ...s,
-    title: t(`home.how_it_works.${s.num}.title`),
-    desc: t(`home.how_it_works.${s.num}.desc`),
   }));
 
   return (
@@ -189,7 +209,7 @@ export default function Home() {
       <section className="py-12 bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-            {[t('common.all'), ...categories.map((c) => c.label)].map((cat) => (
+            {[t('common.all'), ...apiCategories].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
@@ -200,8 +220,8 @@ export default function Home() {
                 }`}
                 style={activeCategory === cat ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
               >
-                {categories.find((c) => c.label === cat)?.icon && (
-                  <span>{categories.find((c) => c.label === cat)?.icon}</span>
+                {categoryIcons[cat] && (
+                  <span>{categoryIcons[cat]}</span>
                 )}
                 {cat}
               </button>
@@ -227,17 +247,17 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {restaurants.slice(0, 8).map((r) => (
+            {visibleRestaurants.slice(0, 8).map((r, index) => (
               <div
                 key={r.id}
                 onClick={() => navigate(`/restaurant/${r.id}`)}
                 className="group bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
               >
                 <div className="relative h-44 overflow-hidden">
-                  <img src={r.image} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  {r.promo && (
+                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  {r.isActive && (
                     <div className="absolute top-3 left-3 px-2.5 py-1 rounded-xl text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      {r.promo}
+                      Open
                     </div>
                   )}
                   <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center hover:scale-110 transition-transform">
@@ -247,23 +267,22 @@ export default function Home() {
                 <div className="p-4">
                   <h3 className="font-bold text-gray-900 mb-1">{r.name}</h3>
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {r.tags.map((t) => (
-                      <span key={t} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{t}</span>
+                    {r.categories.slice(0, 3).map((category) => (
+                      <span key={category.id} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{category.name}</span>
                     ))}
                   </div>
                   <div className="flex items-center justify-between text-sm text-gray-500">
                     <span className="flex items-center gap-1">
                       <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="font-medium text-gray-700">{r.rating}</span>
-                      <span className="text-gray-400">({r.reviews})</span>
+                      <span className="font-medium text-gray-700">{r.rating ?? "New"}</span>
                     </span>
                     <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> {r.deliveryTime}
+                      <Clock className="w-3.5 h-3.5" /> 20-30 min
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">
-                    <span>{r.distance}</span>
-                    <span className={r.deliveryFee === "Free" ? "text-green-500 font-medium" : ""}>{r.deliveryFee} delivery</span>
+                    <span>{r.address}</span>
+                    <span className="text-green-500 font-medium">Free delivery</span>
                   </div>
                 </div>
               </div>

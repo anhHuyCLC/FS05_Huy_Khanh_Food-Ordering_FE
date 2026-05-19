@@ -1,5 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "../features/authSlice";
+import restaurantReducer from "../features/restaurantSlice";
 import {
   useDispatch,
   useSelector,
@@ -8,7 +9,9 @@ import {
 
 export const store = configureStore({
     reducer: {
-        auth: authReducer
+        auth: authReducer,
+        restaurants: restaurantReducer,
+
     }
 })
 
