@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, Star, Clock, MapPin, Heart, Brain} from "lucide-react";
+import { Search, SlidersHorizontal, Star, Clock, MapPin, Heart, Brain } from "lucide-react";
 import { Navbar } from "../../components/layout/Navbar";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
@@ -30,7 +30,6 @@ export default function Discovery() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [activeCategory, setActiveCategory] = useState("All");
-  const [cartCount] = useState(2);
   const { t } = useTranslation();
   const { restaurants, loading } = useAppSelector((state) => state.restaurants);
 
@@ -76,7 +75,7 @@ export default function Discovery() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar cartCount={cartCount} />
+      <Navbar />
       <div className="pt-16">
         {/* Top bar */}
         <div className="bg-white border-b border-gray-100 sticky top-16 z-40">
@@ -110,9 +109,8 @@ export default function Discovery() {
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 ${
-                    activeCategory === cat ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 ${activeCategory === cat ? "text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
                   style={activeCategory === cat ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
                 >
                   {categoryIcons[cat]} {cat}
@@ -154,9 +152,8 @@ export default function Discovery() {
                 <button
                   key={f}
                   onClick={() => setActiveFilter(f)}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 ${
-                    activeFilter === f ? "bg-gray-900 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"
-                  }`}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shrink-0 ${activeFilter === f ? "bg-gray-900 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300"
+                    }`}
                 >
                   {f === t('discovery.open_now') && "🟢 "}{f === t('discovery.free_delivery') && "🆓 "}{f === t('discovery.top_rated') && "⭐ "}{f}
                 </button>

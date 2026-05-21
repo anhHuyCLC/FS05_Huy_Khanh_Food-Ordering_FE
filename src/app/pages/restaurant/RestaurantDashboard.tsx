@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
+import { orderService } from "../../services/orderService";
+import type { Order } from "../../types/order";
+import { toast } from "sonner";
 import { revenueData, topDishes, menuCategories } from "../../data/mock";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, ShoppingBag, Star, Users, Plus, Edit, Eye,  CheckCircle, XCircle, Zap } from "lucide-react";
@@ -13,24 +16,38 @@ const kpis = [
   { label: "Rating", value: "4.8 ★", change: "+0.1", up: true, icon: Star, color: "#F59E0B" },
 ];
 
-const liveOrders = [
-  { id: "#7721", customer: "Emily P.", items: "2x Burger, Fries", total: "$34.90", status: "new", time: "1 min ago" },
-  { id: "#7720", customer: "James W.", items: "1x Pizza", total: "$18.99", status: "preparing", time: "8 min ago" },
-  { id: "#7719", customer: "Priya S.", items: "3x Sushi", total: "$52.00", status: "ready", time: "15 min ago" },
-  { id: "#7718", customer: "Lucas B.", items: "1x Salad", total: "$12.99", status: "preparing", time: "20 min ago" },
-  { id: "#7717", customer: "Sophie C.", items: "2x Coffee", total: "$9.98", status: "new", time: "22 min ago" },
-];
+// const liveOrders = [
+//   { id: "#7721", customer: "Emily P.", items: "2x Burger, Fries", total: "$34.90", status: "new", time: "1 min ago" },
+//   { id: "#7720", customer: "James W.", items: "1x Pizza", total: "$18.99", status: "preparing", time: "8 min ago" },
+//   { id: "#7719", customer: "Priya S.", items: "3x Sushi", total: "$52.00", status: "ready", time: "15 min ago" },
+//   { id: "#7718", customer: "Lucas B.", items: "1x Salad", total: "$12.99", status: "preparing", time: "20 min ago" },
+//   { id: "#7717", customer: "Sophie C.", items: "2x Coffee", total: "$9.98", status: "new", time: "22 min ago" },
+// ];
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  new: { label: "New Order", color: "#6366F1", bg: "#EEF2FF" },
+  pending: { label: "New Order", color: "#6366F1", bg: "#EEF2FF" },
+  accepted: { label: "Accepted", color: "#F59E0B", bg: "#FFFBEB" },
   preparing: { label: "Preparing", color: "#F59E0B", bg: "#FFFBEB" },
   ready: { label: "Ready", color: "#10B981", bg: "#F0FDF4" },
+  delivering: { label: "Delivering", color: "#10B981", bg: "#F0FDF4" },
+  completed: { label: "Completed", color: "#10B981", bg: "#F0FDF4" },
+  cancelled: { label: "Cancelled", color: "#EF4444", bg: "#FEF2F2" },
 };
 
 export default function RestaurantDashboard() {
-  const [orders, setOrders] = useState(liveOrders);
-  // const [activeSection, setActiveSection] = useState("dashboard");
+  const [orders, setOrders] = useState<Order[]>([]);
   const { t } = useTranslation();
+  const RESTAURANT_ID = "00000000-0000-0000-0000-000000000001"; // Dummy test ID
+
+  const fetchOrders = () => {
+    orderService.getRestaurantOrders(RESTAURANT_ID)
+      .then(data => setOrders(data))
+      .catch(err => console.error("Failed to fetch restaurant orders", err));
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
 
   const translatedKpis = [
     { ...kpis[0], label: t('restaurant_dashboard.today_revenue') },
@@ -64,8 +81,14 @@ export default function RestaurantDashboard() {
     permission: navPermissions[item.path],
   }));
 
-  const acceptOrder = (id: string) => {
-    setOrders((o) => o.map((ord) => ord.id === id && ord.status === "new" ? { ...ord, status: "preparing" } : ord));
+  const acceptOrder = async (id: string) => {
+    try {
+      await orderService.updateOrderStatus(id, { status: "preparing", note: "Accepted by restaurant" });
+      toast.success("Order accepted!");
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to accept order");
+    }
   };
 
   return (
@@ -161,28 +184,28 @@ export default function RestaurantDashboard() {
             <h2 className="font-bold text-gray-900">{t('restaurant_dashboard.live_orders')}</h2>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-xs font-semibold text-red-500">{orders.filter((o) => o.status === "new").length} {t('restaurant_dashboard.new_order')}</span>
+              <span className="text-xs font-semibold text-red-500">{orders.filter((o) => o.status === "pending").length} {t('restaurant_dashboard.new_order')}</span>
             </div>
           </div>
           <div className="divide-y divide-gray-50">
             {orders.map((order) => {
-              const cfg = statusConfig[order.status];
+              const cfg = statusConfig[order.status] || { label: "Unknown", color: "#9ca3af", bg: "#f3f4f6" };
               return (
                 <div key={order.id} className="flex items-center gap-4 p-4 hover:bg-gray-50/50 transition-colors">
                   <div className="text-center w-14">
-                    <p className="text-xs font-bold text-gray-700">{order.id}</p>
-                    <p className="text-xs text-gray-400">{order.time}</p>
+                    <p className="text-xs font-bold text-gray-700">#{order.id.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-xs text-gray-400">Just now</p>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{order.customer}</p>
-                    <p className="text-xs text-gray-400 truncate">{order.items}</p>
+                    <p className="text-sm font-semibold text-gray-800">{(order.customer as any)?.fullName || order.customer?.name || "Customer"}</p>
+                    <p className="text-xs text-gray-400 truncate">{order.items?.length || 0} items</p>
                   </div>
-                  <p className="text-sm font-bold text-gray-900 shrink-0">{order.total}</p>
+                  <p className="text-sm font-bold text-gray-900 shrink-0">${order.finalAmount}</p>
                   <span className="px-2.5 py-1 rounded-xl text-xs font-bold shrink-0" style={{ background: cfg.bg, color: cfg.color }}>
-                    {t(`restaurant_dashboard.status_${order.status}`)}
+                    {t(`restaurant_dashboard.status_${order.status}`) || cfg.label}
                   </span>
                   <div className="flex gap-2 shrink-0">
-                    {order.status === "new" && (
+                    {order.status === "pending" && (
                       <>
                         <Can permission="order:approve">
                           <button onClick={() => acceptOrder(order.id)} className="w-8 h-8 rounded-xl bg-green-50 text-green-500 flex items-center justify-center hover:bg-green-100 transition-colors">
@@ -196,12 +219,12 @@ export default function RestaurantDashboard() {
                         </Can>
                       </>
                     )}
-                    {order.status === "preparing" && (
+                    {(order.status === "accepted" || order.status === "preparing") && (
                       <button className="px-3 py-1 rounded-xl text-xs font-semibold text-white" style={{ background: "#F59E0B" }}>
                         {t('tracking.preparing')}
                       </button>
                     )}
-                    {order.status === "ready" && (
+                    {(order.status === "ready" || order.status === "completed" || order.status === "delivering") && (
                       <span className="flex items-center gap-1 text-xs text-green-500 font-medium">
                         <CheckCircle className="w-3 h-3" /> {t('common.done')}
                       </span>

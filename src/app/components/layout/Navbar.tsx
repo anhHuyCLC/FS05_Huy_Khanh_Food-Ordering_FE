@@ -5,6 +5,7 @@ import { Button } from "../ui/button";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../stores/authStore";
+import { useCartStore } from "../../stores/cartStore";
 
 const demoRoles = [
   { label: "🛍️ Customer View", path: "/explore" },
@@ -15,14 +16,14 @@ const demoRoles = [
 
 interface NavbarProps {
   transparent?: boolean;
-  cartCount?: number;
 }
 
-export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
+export function Navbar({ transparent = false }: NavbarProps) {
   const [demoOpen, setDemoOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  const cartCount = useCartStore((state) => state.getItemCount());
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const handleLogout = () => {
@@ -91,12 +92,14 @@ export function Navbar({ transparent = false, cartCount = 0 }: NavbarProps) {
             )}
           </div>
 
-          {cartCount > 0 && (
+          {user && (
             <Link to="/cart" className="relative p-2 hover:bg-gray-100 rounded-xl transition-colors">
               <ShoppingCart className={`w-5 h-5 ${transparent ? "text-white" : "text-gray-700"}`} />
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-xs flex items-center justify-center text-white font-bold" style={{ background: "#FF4500" }}>
-                {cartCount}
-              </span>
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-xs flex items-center justify-center text-white font-bold" style={{ background: "#FF4500" }}>
+                  {cartCount}
+                </span>
+              )}
             </Link>
           )}
           {user ? (

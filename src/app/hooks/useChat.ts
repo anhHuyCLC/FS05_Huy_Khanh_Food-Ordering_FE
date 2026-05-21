@@ -1,101 +1,73 @@
-import { useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import apiClient from '../services/apiClient';
+import { create } from "zustand";
+import { v4 as uuidv4 } from "uuid";
+import type { Message } from "../../types/chat.types";
+import { chatService } from "../../services/chat.service";
+import { toast } from "sonner";
 
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt?: string;
+interface ChatState {
+  messages: Message[];
+  isLoading: boolean;
+  isOpen: boolean;
+  toggleChat: () => void;
+  addMessage: (content: string, role: Message["role"]) => void;
+  sendMessage: (content: string) => Promise<void>;
+  clearHistory: () => void;
 }
 
-export const useChat = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('');
+export const useChatStore = create<ChatState>((set, get) => ({
+  messages: [],
+  isLoading: false,
+  isOpen: false,
 
-  useEffect(() => {
-    // Khởi tạo hoặc lấy sessionId từ localStorage
-    let currentSessionId = localStorage.getItem('chat_session_id');
-    if (!currentSessionId) {
-      currentSessionId = uuidv4();
-      localStorage.setItem('chat_session_id', currentSessionId);
-    }
-    setSessionId(currentSessionId);
+  toggleChat: () => set((state) => ({ isOpen: !state.isOpen })),
 
-    // Gọi API lấy lịch sử chat
-    const fetchHistory = async () => {
-      try {
-        const res = await apiClient.get(`/chat/history/${currentSessionId}`);
-
-        if (res.status == 200) {
-          const data = res.data;
-          // Tương thích với các định dạng trả về khác nhau của Backend (object chứa messages hoặc mảng trực tiếp)
-          if (data && data.messages) {
-            setMessages(data.messages);
-          } else if (Array.isArray(data)) {
-            setMessages(data);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch chat history', error);
-      }
-    };
-
-    fetchHistory();
-  }, []);
-
-  const sendMessage = async (content: string) => {
-    if (!content.trim() || !sessionId) return;
-
-    // 1. Thêm tin nhắn user vào state ngay lập tức để hiển thị
-    const userMessage: Message = {
+  addMessage: (content, role) => {
+    const newMessage: Message = {
       id: uuidv4(),
-      role: 'user',
+      role,
       content,
       createdAt: new Date().toISOString(),
     };
+    set((state) => ({ messages: [...state.messages, newMessage] }));
+  },
 
-    setMessages((prev) => [...prev, userMessage]);
-    setLoading(true);
+  sendMessage: async (content: string) => {
+    const { messages, addMessage } = get();
 
-    // 2. Gửi request tới Backend
+    // 1. Optimistic UI update (add user message instantly)
+    addMessage(content, "user");
+    set({ isLoading: true });
+
     try {
-      const res = await apiClient.post('/chat', {
-        sessionId,
+      // 2. Format history for API contract (excluding the one we just optimistically added)
+      // Filter out any messages with missing/empty content to avoid validation errors
+      const history = messages
+        .filter((m) => m.content && m.content.trim() !== "")
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+      // 3. Prevent duplicate requests by relying on isLoading lock, then fetch
+      const response = await chatService.sendMessage({
         message: content,
+        history,
       });
 
-      if (res.status == 200) {
-        const data = res.data;
-        const aiMessage: Message = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.reply || data.response || data.message || 'Xin lỗi, tôi không thể trả lời lúc này.',
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, aiMessage]);
+      console.log("[Chat] API Response:", response);
+
+      if (response.success && response.answer) {
+        addMessage(response.answer, "assistant");
       } else {
-        throw new Error('Lỗi phản hồi từ server');
+        throw new Error("API returned failure");
       }
     } catch (error) {
-      console.error('Failed to send message', error);
-      const errorMessage: Message = {
-        id: uuidv4(),
-        role: 'assistant',
-        content: 'Đã có lỗi xảy ra khi kết nối. Vui lòng thử lại sau.',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      toast.error("Failed to send message. Please try again.");
+      console.error("Chat Error:", error);
     } finally {
-      setLoading(false);
+      set({ isLoading: false });
     }
-  };
+  },
 
-  return {
-    messages,
-    loading,
-    sessionId,
-    sendMessage,
-  };
-};
+  clearHistory: () => set({ messages: [] }),
+}));

@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, MapPin, CreditCard, Wallet, DollarSign, Tag, Clock, CheckCircle, ChevronRight } from "lucide-react";
-import { menuCategories } from "../../data/mock";
 import { useTranslation } from "react-i18next";
-
-const sampleItems = [
-  { ...menuCategories[0].items[0], qty: 1 },
-  { ...menuCategories[0].items[1], qty: 2 },
-  { ...menuCategories[2].items[0], qty: 1 },
-];
+import { toast } from "sonner";
+import { orderService } from "../../services/orderService";
+import type { CreateOrderInput } from "../../types/order";
+import { useCartStore } from "../../stores/cartStore";
 
 const payMethods = [
   { id: "card", icon: <CreditCard className="w-5 h-5" />, label: "Credit / Debit Card", sub: "**** **** **** 4242" },
@@ -18,15 +15,53 @@ const payMethods = [
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const { items, getTotal, clearCart } = useCartStore();
+
+  // Get restaurantId from items (each item has its own restaurantId from backend)
+  const restaurantId = items.length > 0 ? items[0].restaurantId : null;
+
   const [payMethod, setPayMethod] = useState("card");
   const [promoCode, setPromoCode] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
   const [note, setNote] = useState("");
   const { t } = useTranslation();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const subtotal = sampleItems.reduce((s, i) => s + i.price * i.qty, 0);
+  const handlePlaceOrder = async () => {
+    try {
+      setIsLoading(true);
+      if (items.length === 0 || !restaurantId) {
+        toast.error("Cart is empty or restaurant is missing.");
+        setIsLoading(false);
+        return;
+      }
+
+      const payload: CreateOrderInput = {
+        restaurantId: restaurantId,
+        orderType: "standard_delivery",
+        deliveryAddress: "Home Address", // Mock
+        note: note,
+        promotionCode: promoApplied ? promoCode : undefined,
+        items: items.map((item) => ({
+          menuItemId: item.id,
+          quantity: item.qty,
+        })),
+      };
+      
+      const order = await orderService.createOrder(payload);
+      toast.success(t('checkout.place_order_success') || "Order placed successfully!");
+      await clearCart();
+      navigate(`/tracking?orderId=${order.id}`);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to place order. Note: dummy data is used.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const subtotal = getTotal();
   const discount = promoApplied ? subtotal * 0.2 : 0;
-  const delivery = 1.99;
+  const delivery = items.length > 0 ? 15000 : 0; // 15,000 VND
   const total = subtotal - discount + delivery;
 
   const translatedPayMethods = [
@@ -136,14 +171,14 @@ export default function Checkout() {
             <h2 className="font-bold text-gray-900 mb-5">{t('cart.order_summary')}</h2>
             {/* Items */}
             <div className="space-y-3 mb-5">
-              {sampleItems.map((item) => (
+              {items.map((item) => (
                 <div key={item.id} className="flex items-center gap-3">
                   <img src={item.image} alt={item.name} className="w-10 h-10 rounded-xl object-cover" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
                     <p className="text-xs text-gray-400">x{item.qty}</p>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900">${(item.price * item.qty).toFixed(2)}</p>
+                  <p className="text-sm font-semibold text-gray-900">{(item.price * item.qty).toLocaleString()}đ</p>
                 </div>
               ))}
             </div>
@@ -176,27 +211,28 @@ export default function Checkout() {
             {/* Price breakdown */}
             <div className="border-t border-gray-100 pt-4 space-y-2 mb-5">
               <div className="flex justify-between text-sm text-gray-500">
-                <span>{t('cart.subtotal')}</span><span>${subtotal.toFixed(2)}</span>
+                <span>{t('cart.subtotal')}</span><span>{subtotal.toLocaleString()}đ</span>
               </div>
               {promoApplied && (
                 <div className="flex justify-between text-sm text-green-500">
-                  <span>{t('cart.discount')}</span><span>-${discount.toFixed(2)}</span>
+                  <span>{t('cart.discount')}</span><span>-{discount.toLocaleString()}đ</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-gray-500">
-                <span>{t('cart.delivery_fee')}</span><span>${delivery.toFixed(2)}</span>
+                <span>{t('cart.delivery_fee')}</span><span>{delivery.toLocaleString()}đ</span>
               </div>
               <div className="flex justify-between font-black text-gray-900 text-lg pt-2 border-t border-gray-100">
-                <span>{t('cart.total')}</span><span>${total.toFixed(2)}</span>
+                <span>{t('cart.total')}</span><span>{total.toLocaleString()}đ</span>
               </div>
             </div>
 
             <button
-              onClick={() => navigate("/tracking")}
-              className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all hover:opacity-90 hover:scale-[1.01]"
+              onClick={handlePlaceOrder}
+              disabled={isLoading}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all hover:opacity-90 hover:scale-[1.01] disabled:opacity-70 disabled:cursor-not-allowed"
               style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }}
             >
-              {t('checkout.place_order')}
+              {isLoading ? "Processing..." : t('checkout.place_order')}
             </button>
           </div>
         </div>

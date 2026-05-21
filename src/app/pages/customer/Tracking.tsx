@@ -1,20 +1,50 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Phone, MessageCircle, Star, CheckCircle, Clock, MapPin, Navigation, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { orderService } from "../../services/orderService";
+import type { Order } from "../../types/order";
 
 export default function Tracking() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const orderId = searchParams.get("orderId");
+  
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
   const [rating, setRating] = useState(0);
   const [rated, setRated] = useState(false);
   const { t } = useTranslation();
 
+  useEffect(() => {
+    if (orderId) {
+      orderService.getOrder(orderId)
+        .then((data) => setOrder(data))
+        .catch((err) => console.error("Failed to load order", err))
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
+  }, [orderId]);
+
+  const statusRank: Record<string, number> = {
+    pending: 1, accepted: 1,
+    preparing: 2,
+    ready: 3,
+    delivering: 4,
+    completed: 5,
+    cancelled: 0
+  };
+
+  const currentRank = order ? statusRank[order.status] || 1 : 2;
+
   const steps = [
-    { id: 1, label: t('tracking.order_confirmed'), desc: `Burger Republic ${t('tracking.received_order')}`, icon: "✅", done: true },
-    { id: 2, label: t('tracking.preparing'), desc: t('tracking.kitchen_working'), icon: "👨‍🍳", done: true, active: true },
-    { id: 3, label: t('tracking.driver_picked_up'), desc: `Alex K. ${t('tracking.collected')}`, icon: "🛵", done: false },
-    { id: 4, label: t('tracking.on_the_way'), desc: `Alex ${t('tracking.heading_to')}`, icon: "🗺️", done: false },
-    { id: 5, label: t('tracking.delivered'), desc: t('tracking.enjoy_meal'), icon: "🎉", done: false },
+    { id: 1, label: t('tracking.order_confirmed'), desc: `${order?.restaurant?.name || "Restaurant"} ${t('tracking.received_order')}`, icon: "✅", done: currentRank > 1, active: currentRank === 1 },
+    { id: 2, label: t('tracking.preparing'), desc: t('tracking.kitchen_working'), icon: "👨‍🍳", done: currentRank > 2, active: currentRank === 2 },
+    { id: 3, label: t('tracking.driver_picked_up'), desc: `${order?.driver?.profile?.fullName || "Driver"} ${t('tracking.collected')}`, icon: "🛵", done: currentRank > 3, active: currentRank === 3 },
+    { id: 4, label: t('tracking.on_the_way'), desc: `${order?.driver?.profile?.fullName || "Driver"} ${t('tracking.heading_to')}`, icon: "🗺️", done: currentRank > 4, active: currentRank === 4 },
+    { id: 5, label: t('tracking.delivered'), desc: t('tracking.enjoy_meal'), icon: "🎉", done: currentRank === 5, active: currentRank === 5 },
   ];
 
   const currentStep = steps.findIndex((s) => s.active) + 1 || 2;
@@ -29,7 +59,13 @@ export default function Tracking() {
           </button>
           <div>
             <h1 className="font-bold text-gray-900">{t('tracking.tracking_order')}</h1>
-            <p className="text-xs text-gray-400">#ORD-7722 · Burger Republic</p>
+            {isLoading ? (
+              <p className="text-xs text-gray-400">Loading...</p>
+            ) : order ? (
+              <p className="text-xs text-gray-400">#{order.id.slice(0, 8).toUpperCase()} · {order.restaurant?.name}</p>
+            ) : (
+              <p className="text-xs text-gray-400">Order not found</p>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100">
             <div className="w-2 h-2 rounded-full bg-[#FF4500] animate-pulse" />
@@ -93,34 +129,36 @@ export default function Tracking() {
           </div>
 
           {/* Driver Card */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-            <h2 className="font-bold text-gray-900 mb-4">{t('tracking.your_driver')}</h2>
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-200">
-                  <div className="w-full h-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white text-xl font-bold">
-                    AK
+          {order?.driver && (
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+              <h2 className="font-bold text-gray-900 mb-4">{t('tracking.your_driver')}</h2>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-200">
+                    <div className="w-full h-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white text-xl font-bold">
+                      {order.driver.profile?.fullName?.substring(0, 2).toUpperCase() || "DR"}
+                    </div>
                   </div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-white" />
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-white" />
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-900">Alex Kowalski</p>
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" /> 4.97 · 1,342 {t('tracking.trips')}
+                <div className="flex-1">
+                  <p className="font-bold text-gray-900">{order.driver.profile?.fullName || "Assigned Driver"}</p>
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" /> 4.97 · 1,342 {t('tracking.trips')}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">🏍️ Honda PCX White</p>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">🏍️ Honda PCX White · ABC-1234</p>
-              </div>
-              <div className="flex gap-3">
-                <button className="w-11 h-11 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 hover:bg-green-100 transition-colors">
-                  <Phone className="w-5 h-5" />
-                </button>
-                <button className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-colors">
-                  <MessageCircle className="w-5 h-5" />
-                </button>
+                <div className="flex gap-3">
+                  <button className="w-11 h-11 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 hover:bg-green-100 transition-colors">
+                    <Phone className="w-5 h-5" />
+                  </button>
+                  <button className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-colors">
+                    <MessageCircle className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right: Map + Order Summary */}
@@ -165,18 +203,18 @@ export default function Tracking() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
             <h2 className="font-semibold text-gray-900 mb-4">{t('cart.order_summary')}</h2>
             <div className="space-y-2 text-sm text-gray-600 mb-4">
-              {[
-                ["Classic Smash Burger", "x1", "$12.99"],
-                ["BBQ Bacon Burger", "x2", "$29.98"],
-                ["Crispy Fries", "x1", "$4.99"],
-              ].map(([name, qty, price]) => (
-                <div key={name} className="flex justify-between">
-                  <span>{name} <span className="text-gray-400">{qty}</span></span>
-                  <span className="font-medium text-gray-800">{price}</span>
+              {order ? order.items?.map((item) => (
+                <div key={item.id} className="flex justify-between">
+                  <span>{item.menuItem?.name || "Item"} <span className="text-gray-400">x{item.quantity}</span></span>
+                  <span className="font-medium text-gray-800">${item.price * item.quantity}</span>
                 </div>
-              ))}
+              )) : (
+                <div className="flex justify-between">
+                  <span>Loading items...</span>
+                </div>
+              )}
               <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
-                <span>{t('cart.total')}</span><span>$47.96</span>
+                <span>{t('cart.total')}</span><span>${order?.finalAmount || "0.00"}</span>
               </div>
             </div>
           </div>
