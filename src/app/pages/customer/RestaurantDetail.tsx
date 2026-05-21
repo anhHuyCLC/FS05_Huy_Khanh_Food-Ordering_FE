@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Star, Clock, MapPin, Heart, Plus, Minus, ShoppingCart, Flame, LogIn, X } from "lucide-react";
+import { ArrowLeft, Star, Clock, MapPin, Heart, Plus, Minus, ShoppingCart, Flame, LogIn, X, Loader2 } from "lucide-react";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
 import { useAuthStore } from "../../stores/authStore";
+import { useCartStore } from "../../stores/cartStore";
 
 const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
 
@@ -14,7 +15,6 @@ export default function RestaurantDetail() {
   const { id } = useParams();
   const dispatch = useAppDispatch();
   const [activeTab, setActiveTab] = useState("All");
-  const [cart, setCart] = useState<Record<string, number>>({});
   const [showLoginModal, setShowLoginModal] = useState(false);
   const { t } = useTranslation();
   const { restaurants, loading } = useAppSelector((state) => state.restaurants);
@@ -32,27 +32,50 @@ export default function RestaurantDetail() {
   const restaurant = restaurantIndex >= 0 ? restaurants[restaurantIndex] : undefined;
   const restaurantImage = restaurantImages[Math.max(restaurantIndex, 0) % restaurantImages.length];
 
-  const total = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const item = restaurant?.menuItems?.find((i) => i.id === id);
-    return sum + (Number(item?.basePrice) || 0) * qty;
-  }, 0);
+  const { items, addItem: addToCart, removeItem: removeFromCart, getTotal, getItemCount } = useCartStore();
+  const total = getTotal();
+  const itemCount = getItemCount();
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
 
-  const itemCount = Object.values(cart).reduce((a, b) => a + b, 0);
+  const cart = useMemo(() => {
+    return items.reduce((acc, item) => {
+      acc[item.id] = (acc[item.id] || 0) + item.qty;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [items]);
 
-  const addItem = (id: string) => {
+  const addItem = useCallback(async (itemId: string) => {
     if (!isLoggedIn) {
       setShowLoginModal(true);
       return;
     }
-    setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
-  };
+    if (loadingItemId) return; // prevent double click
+    const item = restaurant?.menuItems?.find((i) => i.id === itemId);
+    if (item && restaurant) {
+      setLoadingItemId(itemId);
+      try {
+        await addToCart({
+          id: item.id,
+          name: item.name,
+          price: Number(item.basePrice),
+          image: item.imageUrl || "",
+          desc: item.description || ""
+        }, restaurant.id, restaurant.name);
+      } finally {
+        setLoadingItemId(null);
+      }
+    }
+  }, [isLoggedIn, loadingItemId, restaurant, addToCart]);
 
-  const removeItem = (id: string) => setCart((c) => {
-    const n = { ...c };
-    if (n[id] > 1) n[id]--;
-    else delete n[id];
-    return n;
-  });
+  const removeItem = useCallback(async (itemId: string) => {
+    if (loadingItemId) return;
+    setLoadingItemId(itemId);
+    try {
+      await removeFromCart(itemId, restaurant?.id);
+    } finally {
+      setLoadingItemId(null);
+    }
+  }, [loadingItemId, removeFromCart, restaurant?.id]);
 
   if (!restaurant) {
     return (
@@ -221,21 +244,22 @@ export default function RestaurantDetail() {
                       <div className="flex items-center justify-end mt-2">
                         {cart[item.id] ? (
                           <div className="flex items-center gap-3">
-                            <button onClick={() => removeItem(item.id)} className="w-8 h-8 rounded-full border-2 border-[#FF4500] flex items-center justify-center text-[#FF4500] hover:bg-orange-50 transition-colors">
-                              <Minus className="w-3 h-3" />
+                            <button onClick={() => removeItem(item.id)} disabled={loadingItemId === item.id} className="w-8 h-8 rounded-full border-2 border-[#FF4500] flex items-center justify-center text-[#FF4500] hover:bg-orange-50 transition-colors disabled:opacity-50">
+                              {loadingItemId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Minus className="w-3 h-3" />}
                             </button>
                             <span className="font-bold text-gray-900 w-5 text-center">{cart[item.id]}</span>
-                            <button onClick={() => addItem(item.id)} className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors" style={{ background: "#FF4500" }}>
-                              <Plus className="w-3 h-3" />
+                            <button onClick={() => addItem(item.id)} disabled={loadingItemId === item.id} className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-50" style={{ background: "#FF4500" }}>
+                              {loadingItemId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                             </button>
                           </div>
                         ) : (
                           <button
                             onClick={() => addItem(item.id)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90"
+                            disabled={loadingItemId === item.id}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
                             style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                           >
-                            <Plus className="w-4 h-4" /> {t('common.add')}
+                            {loadingItemId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {t('common.add')}
                           </button>
                         )}
                       </div>
@@ -269,14 +293,12 @@ export default function RestaurantDetail() {
               ) : (
                 <>
                   <div className="space-y-3 mb-4">
-                    {Object.entries(cart).map(([id, qty]) => {
-                      const item = restaurant.menuItems?.find((i) => i.id === id);
-                      if (!item) return null;
+                    {items.map((item) => {
                       return (
-                        <div key={id} className="flex items-center justify-between gap-2">
+                        <div key={item.id} className="flex items-center justify-between gap-2">
                           <span className="text-sm text-gray-700 flex-1 truncate">{item.name}</span>
-                          <span className="text-xs text-gray-400">x{qty}</span>
-                          <span className="text-sm font-semibold text-gray-900">{(Number(item.basePrice) * qty).toLocaleString()}đ</span>
+                          <span className="text-xs text-gray-400">x{item.qty}</span>
+                          <span className="text-sm font-semibold text-gray-900">{(item.price * item.qty).toLocaleString()}đ</span>
                         </div>
                       );
                     })}

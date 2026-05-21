@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuthActions } from "../../hooks/useAuth";
 import { useAuthStore } from "../../stores/authStore";
+import { useCartStore } from "../../stores/cartStore";
 
 interface AuthBootstrapProps {
   children: ReactNode;
@@ -9,8 +10,18 @@ interface AuthBootstrapProps {
 export function AuthBootstrap({ children }: AuthBootstrapProps) {
   const accessToken = useAuthStore((state) => state.accessToken);
   const clearAuth = useAuthStore((state) => state.clearAuth);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const syncUser = useCartStore((state) => state.syncUser);
   const { syncMe } = useAuthActions();
   const [ready, setReady] = useState(!accessToken);
+
+  // Đồng bộ giỏ hàng mỗi khi user thay đổi (đăng nhập / logout / đổi tài khoản)
+  useEffect(() => {
+    const sync = async () => {
+      await syncUser(userId);
+    };
+    sync();
+  }, [userId, syncUser]);
 
   useEffect(() => {
     let active = true;
