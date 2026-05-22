@@ -1,11 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, CreditCard, Wallet, DollarSign, Tag, Clock, CheckCircle, ChevronRight } from "lucide-react";
+import { ArrowLeft, MapPin, CreditCard, Wallet, DollarSign, Tag, Clock, CheckCircle, ChevronRight, Search, Navigation, Loader2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { orderService } from "../../services/orderService";
 import type { CreateOrderInput } from "../../types/order";
 import { useCartStore } from "../../stores/cartStore";
+import { addressService } from "../../services/addressService";
+import type { SavedAddress } from "../../types/address";
+import { mapService } from "../../services/mapService";
+import { useAppDispatch, useAppSelector } from "../../stores/store";
+import { fetchRouteInfo } from "../../features/mapThunk";
+import { selectRoute } from "../../features/mapSelectors";
+import MapView from "../../components/map/MapView";
+import UserMarker from "../../components/map/UserMarker";
+import RestaurantMarkers from "../../components/map/RestaurantMarkers";
+import DeliveryRoute from "../../components/map/DeliveryRoute";
+import { calculateDistance, getStableCoords } from "../../utils/geo";
+
+
+
+function calculateDeliveryFee(distance: number): number {
+  if (distance <= 2) {
+    return 15000;
+  }
+  const additionalKm = Math.ceil(distance - 2);
+  return 15000 + additionalKm * 5000;
+}
 
 const payMethods = [
   { id: "card", icon: <CreditCard className="w-5 h-5" />, label: "Credit / Debit Card", sub: "**** **** **** 4242" },
@@ -15,6 +36,7 @@ const payMethods = [
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { items, getTotal, clearCart } = useCartStore();
 
   // Get restaurantId from items (each item has its own restaurantId from backend)
@@ -23,9 +45,271 @@ export default function Checkout() {
   const [payMethod, setPayMethod] = useState("card");
   const [promoCode, setPromoCode] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [isCheckingPromo, setIsCheckingPromo] = useState(false);
   const [note, setNote] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+
+  // Address states
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+
+  // Modal inline state for quick adding address
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formLabel, setFormLabel] = useState("");
+  const [formAddress, setFormAddress] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formLatitude, setFormLatitude] = useState<number | null>(null);
+  const [formLongitude, setFormLongitude] = useState<number | null>(null);
+  const [formIsDefault, setFormIsDefault] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Modal map & autocomplete state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [modalSuggestions, setModalSuggestions] = useState<any[]>([]);
+  const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
+  const [isLocatingUser, setIsLocatingUser] = useState(false);
+  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  // Debounced search for suggestions inside the modal
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setModalSuggestions([]);
+      return;
+    }
+    if (searchQuery === formAddress) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingSuggestions(true);
+        const data = await mapService.autocomplete(searchQuery);
+        setModalSuggestions(data || []);
+      } catch (err) {
+        console.error("Autocomplete error:", err);
+      } finally {
+        setIsSearchingSuggestions(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, formAddress]);
+
+  const handleLocateInModal = () => {
+    if (!navigator.geolocation) {
+      toast.error("Trình duyệt không hỗ trợ định vị");
+      return;
+    }
+    setIsLocatingUser(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        try {
+          setIsReverseGeocoding(true);
+          const address = await mapService.reverseGeocode(lat, lng);
+          setFormAddress(address);
+          setSearchQuery(address);
+          setFormLatitude(lat);
+          setFormLongitude(lng);
+          toast.success("Định vị thành công!");
+        } catch (err) {
+          toast.error("Không thể xác định địa chỉ từ GPS");
+        } finally {
+          setIsReverseGeocoding(false);
+          setIsLocatingUser(false);
+        }
+      },
+      (err) => {
+        toast.error("Lỗi GPS: " + err.message);
+        setIsLocatingUser(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleModalMapClick = async (lat: number, lng: number) => {
+    try {
+      setIsReverseGeocoding(true);
+      const address = await mapService.reverseGeocode(lat, lng);
+      setFormAddress(address);
+      setSearchQuery(address);
+      setFormLatitude(lat);
+      setFormLongitude(lng);
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi xác định vị trí");
+    } finally {
+      setIsReverseGeocoding(false);
+    }
+  };
+
+  const routeState = useAppSelector(selectRoute);
+
+  // Resolve restaurant coords
+  const restaurantCoords = useMemo(() => {
+    if (items.length === 0 || !restaurantId) return null;
+    const item = items[0];
+    let lat = item.restaurantLatitude;
+    let lon = item.restaurantLongitude;
+    if (!lat || !lon) {
+      const coords = getStableCoords(restaurantId, item.restaurantName || "Restaurant");
+      lat = coords.latitude;
+      lon = coords.longitude;
+    }
+    return { latitude: lat, longitude: lon };
+  }, [items, restaurantId]);
+
+  // Resolve delivery coords
+  const selectedAddr = useMemo(() => {
+    return addresses.find((a) => a.id === selectedAddressId);
+  }, [addresses, selectedAddressId]);
+
+  const deliveryCoords = useMemo(() => {
+    if (!selectedAddr) return null;
+    if (selectedAddr.latitude !== null && selectedAddr.longitude !== null && selectedAddr.latitude !== undefined && selectedAddr.longitude !== undefined) {
+      return { latitude: Number(selectedAddr.latitude), longitude: Number(selectedAddr.longitude) };
+    }
+    const coords = getStableCoords("delivery", selectedAddr.address);
+    return { latitude: coords.latitude, longitude: coords.longitude };
+  }, [selectedAddr]);
+
+  // Trigger route fetch when coords change
+  useEffect(() => {
+    if (restaurantCoords && deliveryCoords) {
+      dispatch(
+        fetchRouteInfo({
+          startLat: restaurantCoords.latitude,
+          startLon: restaurantCoords.longitude,
+          endLat: deliveryCoords.latitude,
+          endLon: deliveryCoords.longitude,
+        })
+      );
+    }
+  }, [restaurantCoords, deliveryCoords, dispatch]);
+
+  const fetchAddresses = async () => {
+    try {
+      setIsLoadingAddresses(true);
+      const data = await addressService.getMyAddresses();
+      const dataArray = Array.isArray(data) ? data : [];
+      setAddresses(dataArray);
+      if (dataArray.length > 0) {
+        // Find default or use the first one
+        const defaultAddr = dataArray.find((a) => a.isDefault);
+        setSelectedAddressId(defaultAddr ? defaultAddr.id : dataArray[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to fetch addresses:", error);
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAddresses();
+  }, []);
+
+  const handleQuickAddAddress = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!formLabel.trim() || !formAddress.trim()) {
+      toast.error("Vui lòng điền đầy đủ thông tin");
+      return;
+    }
+    try {
+      setIsSaving(true);
+      const newAddr = await addressService.createAddress({
+        label: formLabel,
+        address: formAddress,
+        phone: formPhone,
+        latitude: formLatitude,
+        longitude: formLongitude,
+        isDefault: formIsDefault,
+      });
+      toast.success("Thêm địa chỉ thành công");
+      setIsModalOpen(false);
+
+      // Refresh list and select the new address
+      const data = await addressService.getMyAddresses();
+      const dataArray = Array.isArray(data) ? data : [];
+      setAddresses(dataArray);
+      setSelectedAddressId(newAddr.id);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Không thể lưu địa chỉ");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openAddModal = () => {
+    setFormLabel("");
+    setFormAddress("");
+    setFormPhone("");
+    setSearchQuery("");
+    setFormLatitude(null);
+    setFormLongitude(null);
+    setModalSuggestions([]);
+    setIsDropdownOpen(false);
+    setFormIsDefault(false);
+    setIsModalOpen(true);
+  };
+
+  const deliveryFee = useMemo(() => {
+    if (items.length === 0) return 0;
+
+    const itemsByRestaurant = items.reduce((acc, item) => {
+      const rId = item.restaurantId || restaurantId || 'unknown';
+      const rName = item.restaurantName || 'Restaurant';
+      if (!acc[rId]) {
+        acc[rId] = {
+          restaurantName: rName,
+          restaurantLatitude: item.restaurantLatitude,
+          restaurantLongitude: item.restaurantLongitude
+        };
+      }
+      return acc;
+    }, {} as Record<string, { restaurantName: string, restaurantLatitude?: number, restaurantLongitude?: number }>);
+
+    const defaultFee = 15000;
+    let calculatedTotalFee = 0;
+    const selectedAddr = addresses.find((a) => a.id === selectedAddressId);
+
+    Object.entries(itemsByRestaurant).forEach(([rId, group]) => {
+      let restLat = group.restaurantLatitude;
+      let restLon = group.restaurantLongitude;
+
+      if (!restLat || !restLon) {
+        const rCoords = getStableCoords(rId, group.restaurantName);
+        restLat = rCoords.latitude;
+        restLon = rCoords.longitude;
+      }
+
+      let delivLat = selectedAddr?.latitude ? Number(selectedAddr.latitude) : undefined;
+      let delivLon = selectedAddr?.longitude ? Number(selectedAddr.longitude) : undefined;
+
+      if (!delivLat || !delivLon) {
+        if (selectedAddr) {
+          const dCoords = getStableCoords("delivery", selectedAddr.address);
+          delivLat = dCoords.latitude;
+          delivLon = dCoords.longitude;
+        } else {
+          calculatedTotalFee += defaultFee;
+          return;
+        }
+      }
+
+      const distance = calculateDistance(restLat, restLon, delivLat, delivLon);
+      calculatedTotalFee += calculateDeliveryFee(distance);
+    });
+
+    return calculatedTotalFee;
+  }, [items, addresses, selectedAddressId, restaurantId]);
 
   const handlePlaceOrder = async () => {
     try {
@@ -36,32 +320,53 @@ export default function Checkout() {
         return;
       }
 
+      const selectedAddr = addresses.find((a) => a.id === selectedAddressId);
+      if (!selectedAddr) {
+        toast.error("Vui lòng chọn địa chỉ giao hàng.");
+        setIsLoading(false);
+        return;
+      }
+
+      let delivLat = selectedAddr.latitude ? Number(selectedAddr.latitude) : undefined;
+      let delivLon = selectedAddr.longitude ? Number(selectedAddr.longitude) : undefined;
+      if (!delivLat || !delivLon) {
+        const dCoords = getStableCoords("delivery", selectedAddr.address);
+        delivLat = dCoords.latitude;
+        delivLon = dCoords.longitude;
+      }
+
       const payload: CreateOrderInput = {
         restaurantId: restaurantId,
         orderType: "standard_delivery",
-        deliveryAddress: "Home Address", // Mock
+        deliveryAddress: `${selectedAddr.label}: ${selectedAddr.address}`,
+        deliveryLatitude: delivLat,
+        deliveryLongitude: delivLon,
+        customerPhone: selectedAddr.phone || customerPhone || undefined,
         note: note,
         promotionCode: promoApplied ? promoCode : undefined,
         items: items.map((item) => ({
           menuItemId: item.id,
           quantity: item.qty,
+          selectedOptions: item.selectedOptions,
+          note: item.desc || undefined,
         })),
       };
-      
+
       const order = await orderService.createOrder(payload);
       toast.success(t('checkout.place_order_success') || "Order placed successfully!");
       await clearCart();
       navigate(`/tracking?orderId=${order.id}`);
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to place order. Note: dummy data is used.");
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Failed to place order. Note: dummy data is used.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const subtotal = getTotal();
-  const discount = promoApplied ? subtotal * 0.2 : 0;
-  const delivery = items.length > 0 ? 15000 : 0; // 15,000 VND
+  const discount = promoApplied ? discountAmount : 0;
+  const delivery = routeState ? routeState.shippingFee : deliveryFee;
   const total = subtotal - discount + delivery;
 
   const translatedPayMethods = [
@@ -100,43 +405,141 @@ export default function Checkout() {
               <MapPin className="w-5 h-5 text-[#FF4500]" /> {t('checkout.delivery_address')}
             </h2>
             <div className="space-y-3">
-              {[t('checkout.home_address'), t('checkout.office_address')].map((addr, i) => (
-                <label key={i} className="flex items-center gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all hover:border-orange-200" style={i === 0 ? { borderColor: "#FF4500", background: "#FFF5F0" } : { borderColor: "#E5E7EB" }}>
-                  <input type="radio" name="address" defaultChecked={i === 0} className="text-[#FF4500]" />
-                  <span className="text-sm text-gray-700">{addr}</span>
-                </label>
-              ))}
-              <button className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm text-[#FF4500] font-medium hover:border-orange-300 hover:bg-orange-50 transition-all">
+              {isLoadingAddresses ? (
+                <div className="text-sm text-gray-400 py-2">Đang tải danh sách địa chỉ...</div>
+              ) : !Array.isArray(addresses) || addresses.length === 0 ? (
+                <div className="text-sm text-gray-400 py-2">
+                  Bạn chưa lưu địa chỉ nào. Vui lòng thêm địa chỉ mới để tiếp tục.
+                </div>
+              ) : (
+                addresses.map((a) => {
+                  const isSelected = selectedAddressId === a.id;
+                  return (
+                    <label
+                      key={a.id}
+                      className="flex items-start gap-3 p-4 rounded-2xl border-2 cursor-pointer transition-all hover:border-orange-200"
+                      style={isSelected ? { borderColor: "#FF4500", background: "#FFF5F0" } : { borderColor: "#E5E7EB" }}
+                    >
+                      <input
+                        type="radio"
+                        name="address"
+                        checked={isSelected}
+                        onChange={() => setSelectedAddressId(a.id)}
+                        className="text-[#FF4500] mt-1 cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-semibold text-sm text-gray-800">{a.label}</span>
+                          {a.isDefault && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-[#FF4500]">
+                              Mặc định
+                            </span>
+                          )}
+                        </div>
+                        {a.phone && <div className="text-xs text-gray-600 mb-0.5 font-medium">{a.phone}</div>}
+                        <span className="text-xs text-gray-500 break-words">{a.address}</span>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+              <button
+                onClick={openAddModal}
+                className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm text-[#FF4500] font-medium hover:border-orange-300 hover:bg-orange-50 transition-all cursor-pointer"
+              >
                 {t('checkout.add_new_address')}
               </button>
             </div>
           </div>
 
+          {/* Map Route */}
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm z-10 relative">
+            <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+              📍 {t('checkout.route_map', 'Bản đồ giao hàng')}
+            </h2>
+            {restaurantCoords && deliveryCoords ? (
+              <div className="h-64 rounded-2xl overflow-hidden relative">
+                <MapView
+                  center={[
+                    (restaurantCoords.latitude + deliveryCoords.latitude) / 2,
+                    (restaurantCoords.longitude + deliveryCoords.longitude) / 2,
+                  ]}
+                  zoom={13}
+                  className="h-full w-full"
+                >
+                  <UserMarker
+                    position={{
+                      lat: deliveryCoords.latitude,
+                      lng: deliveryCoords.longitude,
+                    }}
+                    addressName={selectedAddr?.address}
+                  />
+                  <RestaurantMarkers
+                    restaurants={[
+                      {
+                        id: restaurantId || "restaurant",
+                        name: items[0]?.restaurantName || "Restaurant",
+                        address: items[0]?.restaurantAddress || "Restaurant Address",
+                        latitude: restaurantCoords.latitude.toString(),
+                        longitude: restaurantCoords.longitude.toString(),
+                        description: "Điểm lấy hàng",
+                      },
+                    ]}
+                  />
+                  <DeliveryRoute coordinates={routeState?.coordinates || null} />
+                </MapView>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400 py-6 text-center">
+                Chọn địa chỉ giao hàng để xem bản đồ lộ trình.
+              </div>
+            )}
+          </div>
+
           {/* Estimated time */}
-          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center">
-              <Clock className="w-6 h-6 text-[#FF4500]" />
+          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center shrink-0">
+                <Clock className="w-6 h-6 text-[#FF4500]" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">{t('checkout.estimated_arrival')}</p>
+                <p className="text-xl font-black" style={{ color: "#FF4500" }}>
+                  {routeState ? `${routeState.eta} ${t('checkout.minutes', 'phút')}` : `25–35 ${t('checkout.minutes')}`}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-gray-900">{t('checkout.estimated_arrival')}</p>
-              <p className="text-2xl font-black" style={{ color: "#FF4500" }}>25–35 {t('checkout.minutes')}</p>
-            </div>
-            <div className="ml-auto text-right">
-              <p className="text-xs text-gray-400">{t('checkout.driver_assigned')}</p>
-              <p className="text-sm font-medium text-green-500">Alex K. 🚴</p>
+            {routeState && (
+              <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
+                <div>
+                  <p className="text-xs text-gray-400 font-medium">Khoảng cách</p>
+                  <p className="text-sm font-bold text-gray-800">{(routeState.distance / 1000).toFixed(1)} km</p>
+                </div>
+              </div>
+            )}
+            <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
+              <div>
+                <p className="text-xs text-gray-400">{t('checkout.driver_assigned')}</p>
+                <p className="text-sm font-semibold text-green-500">Alex K. 🚴</p>
+              </div>
             </div>
           </div>
 
           {/* Order Note */}
           <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-            <h2 className="font-bold text-gray-900 mb-3">{t('checkout.order_note')}</h2>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={t('checkout.order_note_placeholder')}
-              rows={3}
-              className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none"
-            />
+            <h2 className="font-bold text-gray-900 mb-3">{t('checkout.order_note', 'Ghi chú đơn hàng')}</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Ghi chú cho nhà hàng</label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={t('checkout.order_note_placeholder', 'Ví dụ: Ít cay, nhiều tương...')}
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Payment Method */}
@@ -172,7 +575,7 @@ export default function Checkout() {
             {/* Items */}
             <div className="space-y-3 mb-5">
               {items.map((item) => (
-                <div key={item.id} className="flex items-center gap-3">
+                <div key={item.cartItemId || item.id} className="flex items-center gap-3">
                   <img src={item.image} alt={item.name} className="w-10 h-10 rounded-xl object-cover" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
@@ -195,11 +598,33 @@ export default function Checkout() {
                 />
               </div>
               <button
-                onClick={() => { if (promoCode) setPromoApplied(true); }}
-                className="px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90"
+                onClick={async () => {
+                  if (!promoCode || !restaurantId) return;
+                  setIsCheckingPromo(true);
+                  try {
+                    const res = await orderService.checkPromotion({
+                      promotionCode: promoCode,
+                      restaurantId: restaurantId,
+                      totalAmount: subtotal
+                    });
+                    if (res.success) {
+                      setPromoApplied(true);
+                      setDiscountAmount(res.data.discountAmount);
+                      toast.success("Áp dụng mã giảm giá thành công!");
+                    }
+                  } catch (error: any) {
+                    toast.error(error.response?.data?.message || "Mã không hợp lệ");
+                    setPromoApplied(false);
+                    setDiscountAmount(0);
+                  } finally {
+                    setIsCheckingPromo(false);
+                  }
+                }}
+                disabled={isCheckingPromo}
+                className="px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
                 style={{ background: "#FF4500" }}
               >
-                {t('cart.apply')}
+                {isCheckingPromo ? "..." : t('cart.apply')}
               </button>
             </div>
             {promoApplied && (
@@ -237,6 +662,224 @@ export default function Checkout() {
           </div>
         </div>
       </div>
+
+      {/* Quick Add Address Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-4xl w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200 flex flex-col md:flex-row max-h-[90vh]">
+
+            {/* Form Column */}
+            <div className="w-full md:w-1/2 p-6 overflow-y-auto flex flex-col justify-between">
+              <div>
+                <div className="border-b border-gray-100 pb-4 mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">Thêm địa chỉ giao hàng mới</h3>
+                  <p className="text-xs text-gray-400 mt-1">Tìm kiếm hoặc chọn vị trí trên bản đồ để lưu địa chỉ</p>
+                </div>
+
+                <form onSubmit={(e) => { e.preventDefault(); handleQuickAddAddress(); }} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nhãn địa chỉ</label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {["Nhà riêng", "Văn phòng", "Trường học"].map((suggested) => (
+                        <button
+                          key={suggested}
+                          type="button"
+                          onClick={() => setFormLabel(suggested)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${formLabel === suggested
+                              ? "bg-orange-50 text-[#FF4500] border-orange-200 font-bold"
+                              : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                            }`}
+                        >
+                          {suggested}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={formLabel}
+                      onChange={(e) => setFormLabel(e.target.value)}
+                      placeholder="Ví dụ: Nhà riêng, Công ty..."
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                      required
+                    />
+                  </div>
+
+                  {/* Autocomplete Search input */}
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                      Tìm kiếm địa chỉ
+                    </label>
+                    <div className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-200 p-2 focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
+                      <Search className="w-4 h-4 text-gray-400 ml-1 shrink-0" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setIsDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        placeholder="Nhập tên đường, toà nhà, khu vực..."
+                        className="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-400 py-1"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery("");
+                            setModalSuggestions([]);
+                          }}
+                          className="p-1 rounded-full hover:bg-gray-200 text-gray-400"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      <div className="w-px h-5 bg-gray-200 shrink-0" />
+
+                      <button
+                        type="button"
+                        onClick={handleLocateInModal}
+                        disabled={isLocatingUser}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-orange-50 text-[#FF4500] hover:bg-orange-100 disabled:bg-gray-100 disabled:text-gray-400 text-xs font-bold transition-all shrink-0 cursor-pointer"
+                      >
+                        {isLocatingUser ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Navigation className="w-3 h-3" />
+                        )}
+                        <span>Định vị</span>
+                      </button>
+                    </div>
+
+                    {/* Suggestions dropdown in modal */}
+                    {isDropdownOpen && (modalSuggestions.length > 0 || isSearchingSuggestions) && (
+                      <div className="absolute left-0 right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-[2000] max-h-48 overflow-y-auto divide-y divide-gray-50">
+                        {isSearchingSuggestions ? (
+                          <div className="flex items-center justify-center py-4 gap-2 text-xs text-gray-400">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FF4500]" />
+                            <span>Đang tìm địa chỉ...</span>
+                          </div>
+                        ) : (
+                          modalSuggestions.map((item, idx) => (
+                            <button
+                              key={`${item.address}-${idx}`}
+                              type="button"
+                              onClick={() => {
+                                setFormAddress(item.address);
+                                setSearchQuery(item.address);
+                                setFormLatitude(item.latitude);
+                                setFormLongitude(item.longitude);
+                                setModalSuggestions([]);
+                                setIsDropdownOpen(false);
+                              }}
+                              className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-orange-50/50 text-xs text-gray-700 hover:text-gray-900 transition-colors cursor-pointer"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                              <span className="truncate">{item.address}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Địa chỉ chi tiết</label>
+                    <textarea
+                      value={formAddress}
+                      onChange={(e) => {
+                        setFormAddress(e.target.value);
+                      }}
+                      placeholder="Số nhà, ngõ/ngách, phường/xã..."
+                      rows={2}
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Số điện thoại</label>
+                    <input
+                      type="tel"
+                      value={formPhone}
+                      onChange={(e) => setFormPhone(e.target.value)}
+                      placeholder="Nhập số điện thoại (tuỳ chọn)"
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 py-1">
+                    <input
+                      type="checkbox"
+                      id="isDefaultCheckout"
+                      checked={formIsDefault}
+                      onChange={(e) => setFormIsDefault(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#FF4500] focus:ring-orange-500"
+                    />
+                    <label htmlFor="isDefaultCheckout" className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
+                      Đặt làm địa chỉ mặc định cho lần sau
+                    </label>
+                  </div>
+                </form>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-gray-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving || !formAddress.trim()}
+                  onClick={() => handleQuickAddAddress()}
+                  className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+                  style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
+                >
+                  {isSaving ? "Đang lưu..." : "Thêm địa chỉ"}
+                </button>
+              </div>
+            </div>
+
+            {/* Map Column */}
+            <div className="w-full md:w-1/2 h-64 md:h-auto min-h-[300px] bg-gray-100 relative">
+              <MapView
+                center={
+                  formLatitude && formLongitude
+                    ? [formLatitude, formLongitude]
+                    : [16.054404, 108.202167]
+                }
+                zoom={formLatitude && formLongitude ? 16 : 13}
+                onMapClick={handleModalMapClick}
+                className="h-full w-full"
+              >
+                {formLatitude && formLongitude && (
+                  <UserMarker
+                    position={{ lat: formLatitude, lng: formLongitude }}
+                    addressName={formAddress || "Vị trí được chọn"}
+                  />
+                )}
+              </MapView>
+              <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full z-[1000] pointer-events-none">
+                📍 Click trên bản đồ để ghim vị trí chính xác
+              </div>
+              {isReverseGeocoding && (
+                <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-[1001] pointer-events-none">
+                  <div className="bg-white/90 shadow-lg px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-semibold text-gray-700">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#FF4500]" />
+                    <span>Đang xác định địa chỉ...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

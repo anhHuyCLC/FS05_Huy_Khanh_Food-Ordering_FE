@@ -6,6 +6,8 @@ import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
+import { calculateDistance } from "../../utils/geo";
+import { Loader2 } from "lucide-react";
 
 const categoryIcons: Record<string, string> = {
   Burger: "🍔",
@@ -30,6 +32,12 @@ export default function Discovery() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [activeCategory, setActiveCategory] = useState("All");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [maxDistance, setMaxDistance] = useState<number>(Infinity);
+  const [minRating, setMinRating] = useState<number>(0);
+  const [sortBy, setSortBy] = useState<string>("Relevance");
+
   const { t } = useTranslation();
   const { restaurants, loading } = useAppSelector((state) => state.restaurants);
 
@@ -42,20 +50,66 @@ export default function Discovery() {
     return Array.from(new Set(categoryNames));
   }, [restaurants]);
 
-  const filtered = useMemo(() => {
-    const keyword = search.toLowerCase();
-    return restaurants.filter((restaurant) => {
-      const matchesSearch =
-        restaurant.name.toLowerCase().includes(keyword) ||
-        restaurant.categories.some((category) => category.name.toLowerCase().includes(keyword));
-      const matchesCategory =
-        activeCategory === "All" ||
-        activeCategory === t('common.all') ||
-        restaurant.categories.some((category) => category.name === activeCategory);
+  const handleLocate = () => {
+    if (!navigator.geolocation) {
+      alert("Trình duyệt không hỗ trợ định vị");
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setIsLocating(false);
+      },
+      () => {
+        alert("Không thể lấy vị trí");
+        setIsLocating(false);
+      }
+    );
+  };
 
-      return matchesSearch && matchesCategory;
+  const filtered = useMemo(() => {
+    let baseResult = restaurants;
+
+    if (search.trim()) {
+      const keyword = search.toLowerCase();
+      baseResult = baseResult.filter(r =>
+        r.name.toLowerCase().includes(keyword) ||
+        r.categories.some(c => c.name.toLowerCase().includes(keyword)) ||
+        r.menuItems?.some(m => m.name.toLowerCase().includes(keyword))
+      );
+    }
+
+    if (activeCategory !== "All" && activeCategory !== t('common.all')) {
+      baseResult = baseResult.filter(r => r.categories.some(c => c.name === activeCategory));
+    }
+
+    if (minRating > 0) {
+      baseResult = baseResult.filter(r => Number(r.rating || 0) >= minRating);
+    }
+
+    if (activeFilter === t('discovery.top_rated')) {
+      baseResult = baseResult.filter(r => Number(r.rating || 0) >= 4.5);
+    }
+
+    const withDistance = baseResult.map(r => {
+      let dist = Infinity;
+      if (userLocation && r.latitude && r.longitude) {
+        dist = calculateDistance(userLocation.lat, userLocation.lng, Number(r.latitude), Number(r.longitude));
+      }
+      return { ...r, distance: dist };
     });
-  }, [activeCategory, restaurants, search, t]);
+
+    let result = withDistance.filter(r => r.distance <= maxDistance);
+
+    if (sortBy === "Distance") {
+      result.sort((a, b) => a.distance - b.distance);
+    } else if (sortBy === "Rating") {
+      result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+    }
+
+    return result;
+  }, [activeCategory, restaurants, search, t, minRating, activeFilter, userLocation, maxDistance, sortBy]);
 
   const translatedFilters = [
     "All",
@@ -66,11 +120,10 @@ export default function Discovery() {
     t('discovery.new'),
   ];
 
-  const translatedSortOptions = [
-    t('discovery.relevance'),
-    t('home.rating'),
-    t('discovery.distance'),
-    t('discovery.delivery_time'),
+  const sortOptions = [
+    { label: t('discovery.relevance'), value: "Relevance" },
+    { label: t('home.rating'), value: "Rating" },
+    { label: t('discovery.distance'), value: "Distance" },
   ];
 
   return (
@@ -92,14 +145,25 @@ export default function Discovery() {
                 />
               </div>
               {/* Location */}
-              <div className="hidden md:flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100 text-sm text-gray-600">
-                <MapPin className="w-4 h-4 text-[#FF4500]" />
-                <span>123 Main St</span>
-              </div>
-              {/* Filter button */}
-              <button className="flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
-                <SlidersHorizontal className="w-4 h-4" /> {t('discovery.filters')}
+              <button onClick={handleLocate} className="hidden md:flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100 text-sm text-gray-600 hover:bg-gray-100 transition-colors">
+                {isLocating ? <Loader2 className="w-4 h-4 text-[#FF4500] animate-spin" /> : <MapPin className="w-4 h-4 text-[#FF4500]" />}
+                <span>{userLocation ? "Đã định vị" : "Định vị của tôi"}</span>
               </button>
+              
+              {/* Distance Filter */}
+              <select value={maxDistance} onChange={(e) => setMaxDistance(Number(e.target.value))} className="hidden md:block px-4 py-3 rounded-2xl bg-gray-50 border border-gray-100 text-sm font-medium text-gray-700 outline-none cursor-pointer">
+                <option value={Infinity}>Khoảng cách</option>
+                <option value={2}>&lt; 2 km</option>
+                <option value={5}>&lt; 5 km</option>
+                <option value={10}>&lt; 10 km</option>
+              </select>
+
+              {/* Rating Filter */}
+              <select value={minRating} onChange={(e) => setMinRating(Number(e.target.value))} className="hidden md:block px-4 py-3 rounded-2xl bg-gray-50 border border-gray-100 text-sm font-medium text-gray-700 outline-none cursor-pointer">
+                <option value={0}>Đánh giá</option>
+                <option value={4}>Từ 4.0 ⭐</option>
+                <option value={4.5}>Từ 4.5 ⭐</option>
+              </select>
             </div>
           </div>
           {/* Categories */}
@@ -159,8 +223,8 @@ export default function Discovery() {
                 </button>
               ))}
             </div>
-            <select className="hidden md:block px-4 py-2 rounded-xl text-sm bg-white border border-gray-200 text-gray-600 outline-none cursor-pointer">
-              {translatedSortOptions.map((s) => <option key={s}>{s}</option>)}
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="hidden md:block px-4 py-2 rounded-xl text-sm bg-white border border-gray-200 text-gray-600 outline-none cursor-pointer">
+              {sortOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
 
@@ -177,7 +241,7 @@ export default function Discovery() {
                 className="group bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
               >
                 <div className="relative h-44 overflow-hidden">
-                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={r.imageUrl || IMGS.restaurant} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   {r.isActive && (
                     <span className="absolute top-3 left-3 px-2.5 py-1 rounded-xl text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
                       Open
@@ -204,7 +268,10 @@ export default function Discovery() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">
-                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{r.address}</span>
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {r.distance !== Infinity ? `${r.distance.toFixed(1)} km` : r.address}
+                    </span>
                     <span className="text-green-500 font-semibold">{t('restaurant.free_delivery_promo')}</span>
                   </div>
                 </div>

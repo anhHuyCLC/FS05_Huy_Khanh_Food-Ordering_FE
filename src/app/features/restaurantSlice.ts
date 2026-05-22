@@ -13,18 +13,37 @@ export interface RestaurantOwner {
     avatarUrl: string | null;
 }
 
+export interface OptionChoice {
+    id: string;
+    optionGroupId: string;
+    name: string;
+    additionalPrice: string;
+}
+
+export interface OptionGroup {
+    id: string;
+    menuItemId: string;
+    name: string;
+    isRequired: boolean;
+    maxChoices: number;
+    choices: OptionChoice[];
+}
+
 export interface MenuItem {
     id: string;
+    categoryId?: string;
     name: string;
     description: string;
     basePrice: string;
     imageUrl: string;
+    optionGroups?: OptionGroup[];
 }
 
 export interface Restaurant {
     id: string;
     name: string;
     description: string | null;
+    imageUrl: string | null;
     address: string | null;
     latitude: string | null;
     longitude: string | null;

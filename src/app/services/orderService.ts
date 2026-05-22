@@ -7,9 +7,14 @@ export const orderService = {
     return response.data.data;
   },
 
+  checkPromotion: async (data: { promotionCode: string; restaurantId: string; totalAmount: number }) => {
+    const response = await apiClient.post('/v1/orders/check-promotion', data);
+    return response.data;
+  },
+
   getMyOrders: async (): Promise<Order[]> => {
     const response = await apiClient.get('/v1/orders');
-    return response.data.data;
+    return response.data.data.items || [];
   },
 
   getOrder: async (orderId: string): Promise<Order> => {
@@ -34,6 +39,6 @@ export const orderService = {
 
   getRestaurantOrders: async (restaurantId: string): Promise<Order[]> => {
     const response = await apiClient.get(`/v1/restaurants/${restaurantId}/orders`);
-    return response.data.data;
+    return response.data.data.items || [];
   }
 };

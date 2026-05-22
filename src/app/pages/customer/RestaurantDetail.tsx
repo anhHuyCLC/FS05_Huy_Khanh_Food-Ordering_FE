@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Star, Clock, MapPin, Heart, Plus, Minus, ShoppingCart, Flame, LogIn, X, Loader2 } from "lucide-react";
+import { ArrowLeft, Star, Clock, MapPin, Heart, Plus, Minus, ShoppingCart, Flame, LogIn, X, Loader2, ChevronRight } from "lucide-react";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
+import type { MenuItem, OptionGroup, OptionChoice } from "../../features/restaurantSlice";
 import { useAuthStore } from "../../stores/authStore";
 import { useCartStore } from "../../stores/cartStore";
 
@@ -20,6 +21,11 @@ export default function RestaurantDetail() {
   const { restaurants, loading } = useAppSelector((state) => state.restaurants);
   const accessToken = useAuthStore((state) => state.accessToken);
   const isLoggedIn = !!accessToken;
+
+  // Customize modal state
+  const [customizeItem, setCustomizeItem] = useState<MenuItem | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, any>>({});
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   useEffect(() => {
     dispatch(fetchRestaurants());
@@ -44,28 +50,69 @@ export default function RestaurantDetail() {
     }, {} as Record<string, number>);
   }, [items]);
 
-  const addItem = useCallback(async (itemId: string) => {
+  // Open customize modal or add directly if no options
+  const handleAddClick = useCallback((itemId: string) => {
     if (!isLoggedIn) {
       setShowLoginModal(true);
       return;
     }
-    if (loadingItemId) return; // prevent double click
     const item = restaurant?.menuItems?.find((i) => i.id === itemId);
-    if (item && restaurant) {
-      setLoadingItemId(itemId);
-      try {
-        await addToCart({
-          id: item.id,
-          name: item.name,
-          price: Number(item.basePrice),
-          image: item.imageUrl || "",
-          desc: item.description || ""
-        }, restaurant.id, restaurant.name);
-      } finally {
-        setLoadingItemId(null);
+    if (!item) return;
+
+    if (item.optionGroups && item.optionGroups.length > 0) {
+      // Pre-select first choice of required single-select groups
+      const preSelected: Record<string, any> = {};
+      item.optionGroups.forEach((group) => {
+        if (group.isRequired && group.maxChoices === 1 && group.choices?.length > 0) {
+          preSelected[group.name] = group.choices[0];
+        }
+      });
+      setSelectedOptions(preSelected);
+      setCustomizeItem(item);
+    } else {
+      // No options, add directly
+      addItemToCart(item, {});
+    }
+  }, [isLoggedIn, restaurant]);
+
+  const addItemToCart = useCallback(async (item: MenuItem, opts: Record<string, any>) => {
+    if (!restaurant) return;
+    setLoadingItemId(item.id);
+    try {
+      await addToCart({
+        id: item.id,
+        name: item.name,
+        price: Number(item.basePrice),
+        image: item.imageUrl || "",
+        desc: item.description || "",
+        optionGroups: item.optionGroups,
+      }, restaurant.id, restaurant.name, Object.keys(opts).length > 0 ? opts : undefined);
+    } finally {
+      setLoadingItemId(null);
+    }
+  }, [restaurant, addToCart]);
+
+  const handleConfirmCustomize = useCallback(async () => {
+    if (!customizeItem) return;
+    // Validate required groups
+    for (const group of customizeItem.optionGroups || []) {
+      if (group.isRequired) {
+        const val = selectedOptions[group.name];
+        if (!val || (Array.isArray(val) && val.length === 0)) {
+          alert(`Vui lòng chọn ${group.name}`);
+          return;
+        }
       }
     }
-  }, [isLoggedIn, loadingItemId, restaurant, addToCart]);
+    setIsAddingToCart(true);
+    try {
+      await addItemToCart(customizeItem, selectedOptions);
+      setCustomizeItem(null);
+      setSelectedOptions({});
+    } finally {
+      setIsAddingToCart(false);
+    }
+  }, [customizeItem, selectedOptions, addItemToCart]);
 
   const removeItem = useCallback(async (itemId: string) => {
     if (loadingItemId) return;
@@ -98,31 +145,22 @@ export default function RestaurantDetail() {
             className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl relative"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close button */}
             <button
               onClick={() => setShowLoginModal(false)}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors"
             >
               <X className="w-4 h-4 text-gray-500" />
             </button>
-
-            {/* Icon */}
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
               style={{ background: "linear-gradient(135deg, #FFF5F0, #FFE8DC)" }}
             >
               <LogIn className="w-8 h-8 text-[#FF4500]" />
             </div>
-
-            {/* Text */}
-            <h2 className="text-xl font-black text-gray-900 text-center mb-2">
-              Đăng nhập để tiếp tục
-            </h2>
+            <h2 className="text-xl font-black text-gray-900 text-center mb-2">Đăng nhập để tiếp tục</h2>
             <p className="text-sm text-gray-500 text-center mb-7 leading-relaxed">
               Bạn cần đăng nhập để thêm món vào giỏ hàng và tiến hành đặt đơn.
             </p>
-
-            {/* Buttons */}
             <button
               onClick={() => navigate("/login")}
               className="w-full py-3.5 rounded-2xl text-white font-bold text-sm mb-3 transition-all hover:opacity-90"
@@ -139,6 +177,143 @@ export default function RestaurantDetail() {
             <p className="text-xs text-gray-400 text-center mt-4">
               Bạn có thể tiếp tục xem thực đơn mà không cần đăng nhập
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Customize Options Modal */}
+      {customizeItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+          onClick={() => { setCustomizeItem(null); setSelectedOptions({}); }}
+        >
+          <div
+            className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl flex flex-col shadow-2xl overflow-hidden"
+            style={{ maxHeight: "90vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center gap-4 p-5 border-b border-gray-100">
+              <img
+                src={customizeItem.imageUrl}
+                alt={customizeItem.name}
+                className="w-14 h-14 rounded-2xl object-cover shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-900 text-base truncate">{customizeItem.name}</h3>
+                <p className="text-sm text-[#FF4500] font-semibold">{Number(customizeItem.basePrice).toLocaleString()}đ</p>
+              </div>
+              <button
+                onClick={() => { setCustomizeItem(null); setSelectedOptions({}); }}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Options */}
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+              {customizeItem.optionGroups?.map((group: OptionGroup) => {
+                const isSingle = group.maxChoices === 1;
+                const currentVal = selectedOptions[group.name];
+
+                return (
+                  <div key={group.id}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-bold text-gray-800 text-sm">{group.name}</p>
+                      {group.isRequired ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: "#FF4500" }}>
+                          Bắt buộc
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400 font-medium">Tuỳ chọn</span>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {group.choices?.map((choice: OptionChoice) => {
+                        const priceExtra = Number(choice.additionalPrice);
+                        const isChecked = isSingle
+                          ? currentVal?.id === choice.id
+                          : (Array.isArray(currentVal) ? currentVal : []).some((c: any) => c.id === choice.id);
+
+                        return (
+                          <label
+                            key={choice.id}
+                            className={`flex items-center justify-between p-3 rounded-2xl border-2 cursor-pointer transition-all ${
+                              isChecked
+                                ? "border-[#FF4500] bg-orange-50"
+                                : "border-gray-100 hover:border-orange-200 hover:bg-orange-50/30"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                isChecked ? "border-[#FF4500] bg-[#FF4500]" : "border-gray-300"
+                              }`}>
+                                {isChecked && (
+                                  <div className={isSingle ? "w-2 h-2 rounded-full bg-white" : ""}>
+                                    {!isSingle && (
+                                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                                        <path d="M10 3L5 8.5 2 5.5l-1 1L5 10.5l6-7-1-0.5z"/>
+                                      </svg>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <input
+                                type={isSingle ? "radio" : "checkbox"}
+                                name={group.name}
+                                checked={isChecked}
+                                onChange={() => {
+                                  if (isSingle) {
+                                    setSelectedOptions(prev => ({ ...prev, [group.name]: choice }));
+                                  } else {
+                                    const currentList = Array.isArray(currentVal) ? currentVal : [];
+                                    const exists = currentList.some((c: any) => c.id === choice.id);
+                                    const canAdd = !exists && currentList.length < group.maxChoices;
+                                    const newList = exists
+                                      ? currentList.filter((c: any) => c.id !== choice.id)
+                                      : canAdd ? [...currentList, choice] : currentList;
+                                    setSelectedOptions(prev => ({ ...prev, [group.name]: newList }));
+                                  }
+                                }}
+                                className="sr-only"
+                              />
+                              <span className="text-sm font-medium text-gray-700">{choice.name}</span>
+                            </div>
+                            {priceExtra > 0 && (
+                              <span className="text-sm font-semibold text-gray-500">+{priceExtra.toLocaleString()}đ</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {!isSingle && (
+                      <p className="text-xs text-gray-400 mt-2">Chọn tối đa {group.maxChoices} lựa chọn</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add to Cart Button */}
+            <div className="p-5 border-t border-gray-100">
+              <button
+                onClick={handleConfirmCustomize}
+                disabled={isAddingToCart}
+                className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }}
+              >
+                {isAddingToCart ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <ShoppingCart className="w-5 h-5" />
+                    Thêm vào giỏ hàng
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -207,8 +382,7 @@ export default function RestaurantDetail() {
             <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-6">
               <button
                 onClick={() => setActiveTab("All")}
-                className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === "All" ? "text-white" : "bg-white text-gray-600 border border-gray-200"
-                  }`}
+                className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === "All" ? "text-white" : "bg-white text-gray-600 border border-gray-200"}`}
                 style={activeTab === "All" ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
               >
                 {t('common.all')}
@@ -217,8 +391,7 @@ export default function RestaurantDetail() {
                 <button
                   key={cat.id}
                   onClick={() => setActiveTab(cat.name)}
-                  className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === cat.name ? "text-white" : "bg-white text-gray-600 border border-gray-200"
-                    }`}
+                  className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === cat.name ? "text-white" : "bg-white text-gray-600 border border-gray-200"}`}
                   style={activeTab === cat.name ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
                 >
                   {cat.name}
@@ -229,37 +402,56 @@ export default function RestaurantDetail() {
             {/* Menu items */}
             <div className="space-y-3">
               {restaurant.menuItems
-                ?.filter((item) => activeTab === "All" || item.name.toLowerCase().includes(activeTab.toLowerCase()))
+                ?.filter((item) => {
+                  if (activeTab === "All") return true;
+                  const activeCat = restaurant.categories.find((c) => c.name === activeTab);
+                  return activeCat ? item.categoryId === activeCat.id : false;
+                })
                 .map((item) => (
                   <div key={item.id} className="bg-white rounded-2xl p-4 flex gap-4 border border-gray-100 hover:border-orange-200 transition-all group">
                     <img src={item.imageUrl} alt={item.name} className="w-24 h-24 rounded-2xl object-cover shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
+                        <div className="flex-1">
                           <h3 className="font-bold text-gray-900 mb-1">{item.name}</h3>
-                          <p className="text-sm text-gray-500 mb-2 line-clamp-2">{item.description}</p>
+                          <p className="text-sm text-gray-500 mb-1 line-clamp-2">{item.description}</p>
+                          {item.optionGroups && item.optionGroups.length > 0 && (
+                            <p className="text-xs text-[#FF4500] font-medium flex items-center gap-0.5">
+                              <ChevronRight className="w-3 h-3" /> {item.optionGroups.length} tuỳ chọn
+                            </p>
+                          )}
                         </div>
                         <p className="text-lg font-bold text-gray-900 shrink-0">{Number(item.basePrice).toLocaleString()}đ</p>
                       </div>
                       <div className="flex items-center justify-end mt-2">
                         {cart[item.id] ? (
                           <div className="flex items-center gap-3">
-                            <button onClick={() => removeItem(item.id)} disabled={loadingItemId === item.id} className="w-8 h-8 rounded-full border-2 border-[#FF4500] flex items-center justify-center text-[#FF4500] hover:bg-orange-50 transition-colors disabled:opacity-50">
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              disabled={loadingItemId === item.id}
+                              className="w-8 h-8 rounded-full border-2 border-[#FF4500] flex items-center justify-center text-[#FF4500] hover:bg-orange-50 transition-colors disabled:opacity-50"
+                            >
                               {loadingItemId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Minus className="w-3 h-3" />}
                             </button>
                             <span className="font-bold text-gray-900 w-5 text-center">{cart[item.id]}</span>
-                            <button onClick={() => addItem(item.id)} disabled={loadingItemId === item.id} className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-50" style={{ background: "#FF4500" }}>
+                            <button
+                              onClick={() => handleAddClick(item.id)}
+                              disabled={loadingItemId === item.id}
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-50"
+                              style={{ background: "#FF4500" }}
+                            >
                               {loadingItemId === item.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                             </button>
                           </div>
                         ) : (
                           <button
-                            onClick={() => addItem(item.id)}
+                            onClick={() => handleAddClick(item.id)}
                             disabled={loadingItemId === item.id}
                             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
                             style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                           >
-                            {loadingItemId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {t('common.add')}
+                            {loadingItemId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {item.optionGroups && item.optionGroups.length > 0 ? "Chọn" : t('common.add')}
                           </button>
                         )}
                       </div>
@@ -293,15 +485,23 @@ export default function RestaurantDetail() {
               ) : (
                 <>
                   <div className="space-y-3 mb-4">
-                    {items.map((item) => {
-                      return (
-                        <div key={item.id} className="flex items-center justify-between gap-2">
-                          <span className="text-sm text-gray-700 flex-1 truncate">{item.name}</span>
-                          <span className="text-xs text-gray-400">x{item.qty}</span>
-                          <span className="text-sm font-semibold text-gray-900">{(item.price * item.qty).toLocaleString()}đ</span>
+                    {items.map((item) => (
+                      <div key={item.id} className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-gray-700 font-medium block truncate">{item.name}</span>
+                          {item.selectedOptions && Object.keys(item.selectedOptions).length > 0 && (
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {Object.entries(item.selectedOptions).map(([k, v]: [string, any]) => {
+                                const val = Array.isArray(v) ? v.map((c: any) => c.name).join(", ") : v?.name;
+                                return val ? <span key={k} className="block">{k}: {val}</span> : null;
+                              })}
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
+                        <span className="text-xs text-gray-400 shrink-0">x{item.qty}</span>
+                        <span className="text-sm font-semibold text-gray-900 shrink-0">{(item.price * item.qty).toLocaleString()}đ</span>
+                      </div>
+                    ))}
                   </div>
                   <div className="border-t border-gray-100 pt-4 space-y-2 mb-4">
                     <div className="flex justify-between text-sm text-gray-500">

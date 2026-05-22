@@ -1,6 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "../features/authSlice";
 import restaurantReducer from "../features/restaurantSlice";
+import mapReducer from "../features/mapSlice";
 import {
   useDispatch,
   useSelector,
@@ -11,7 +12,7 @@ export const store = configureStore({
     reducer: {
         auth: authReducer,
         restaurants: restaurantReducer,
-
+        map: mapReducer,
     }
 })
 
