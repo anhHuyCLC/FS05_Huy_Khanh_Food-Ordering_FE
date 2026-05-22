@@ -14,6 +14,11 @@ export interface CartItem {
   qty: number;
   restaurantId?: string;
   restaurantName?: string;
+  restaurantAddress?: string;
+  selectedOptions?: Record<string, any>;
+  optionGroups?: any[];
+  restaurantLatitude?: number;
+  restaurantLongitude?: number;
 }
 
 interface CartStoreState {
@@ -24,7 +29,8 @@ interface CartStoreState {
   addItem: (
     item: Omit<CartItem, "qty" | "restaurantId" | "restaurantName" | "cartItemId" | "cartId">,
     restaurantId: string,
-    restaurantName: string
+    restaurantName: string,
+    selectedOptions?: Record<string, any>
   ) => Promise<void>;
   removeItem: (id: string, restaurantId?: string) => Promise<void>;
   updateQty: (id: string, delta: number, restaurantId?: string) => Promise<void>;
@@ -57,17 +63,39 @@ export const useCartStore = create<CartStoreState>()(
 
           res.data.forEach((cart) => {
             cart.items.forEach((item) => {
+              const basePrice = Number(item.menuItem.basePrice);
+              let optionTotal = 0;
+              if (item.selectedOptions && typeof item.selectedOptions === "object") {
+                const options = item.selectedOptions as Record<string, any>;
+                for (const key of Object.keys(options)) {
+                  const optionValue = options[key];
+                  if (Array.isArray(optionValue)) {
+                    for (const choice of optionValue) {
+                      if (choice && typeof choice === "object" && choice.additionalPrice) {
+                        optionTotal += Number(choice.additionalPrice);
+                      }
+                    }
+                  } else if (optionValue && typeof optionValue === "object" && optionValue.additionalPrice) {
+                    optionTotal += Number(optionValue.additionalPrice);
+                  }
+                }
+              }
               items.push({
                 id: item.menuItem.id,
                 cartItemId: item.id,
                 cartId: cart.id,
                 name: item.menuItem.name,
-                price: Number(item.menuItem.basePrice),
+                price: basePrice + optionTotal,
                 image: item.menuItem.imageUrl || "",
                 desc: "", // MenuItem description
                 qty: item.quantity,
                 restaurantId: cart.restaurantId,
                 restaurantName: cart.restaurant.name,
+                restaurantAddress: cart.restaurant.address,
+                selectedOptions: item.selectedOptions || {},
+                optionGroups: item.menuItem.optionGroups || [],
+                restaurantLatitude: cart.restaurant.latitude ? Number(cart.restaurant.latitude) : undefined,
+                restaurantLongitude: cart.restaurant.longitude ? Number(cart.restaurant.longitude) : undefined,
               });
             });
           });
@@ -100,7 +128,7 @@ export const useCartStore = create<CartStoreState>()(
         }
       },
 
-      addItem: async (item, restaurantId, _restaurantName) => {
+      addItem: async (item, restaurantId, _restaurantName, selectedOptions) => {
         const currentUser = useAuthStore.getState().user;
         if (!currentUser) return;
 
@@ -121,8 +149,8 @@ export const useCartStore = create<CartStoreState>()(
             return;
           }
 
-          // 2. Add the item to this cart
-          await cartService.addItemToCart(cart.id, item.id, 1);
+          // 2. Add the item to this cart (with selectedOptions)
+          await cartService.addItemToCart(cart.id, item.id, 1, selectedOptions);
 
           // 3. Fetch/sync updated carts
           await get().fetchCarts();
@@ -137,7 +165,11 @@ export const useCartStore = create<CartStoreState>()(
 
         try {
           const targetItem = get().items.find(
-            (item) => restaurantId ? (item.id === id && item.restaurantId === restaurantId) : (item.id === id)
+            (item) =>
+              item.cartItemId === id ||
+              (restaurantId
+                ? item.id === id && item.restaurantId === restaurantId
+                : item.id === id)
           );
 
           if (targetItem && targetItem.cartItemId && targetItem.cartId) {
@@ -160,7 +192,11 @@ export const useCartStore = create<CartStoreState>()(
 
         try {
           const targetItem = get().items.find(
-            (item) => restaurantId ? (item.id === id && item.restaurantId === restaurantId) : (item.id === id)
+            (item) =>
+              item.cartItemId === id ||
+              (restaurantId
+                ? item.id === id && item.restaurantId === restaurantId
+                : item.id === id)
           );
 
           if (targetItem && targetItem.cartItemId && targetItem.cartId) {

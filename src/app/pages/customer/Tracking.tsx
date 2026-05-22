@@ -203,10 +203,10 @@ export default function Tracking() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
             <h2 className="font-semibold text-gray-900 mb-4">{t('cart.order_summary')}</h2>
             <div className="space-y-2 text-sm text-gray-600 mb-4">
-              {order ? order.items?.map((item) => (
+              {order ? order.orderItems?.map((item) => (
                 <div key={item.id} className="flex justify-between">
                   <span>{item.menuItem?.name || "Item"} <span className="text-gray-400">x{item.quantity}</span></span>
-                  <span className="font-medium text-gray-800">${item.price * item.quantity}</span>
+                  <span className="font-medium text-gray-800">{Number(item.unitPrice * item.quantity).toLocaleString("vi-VN")}đ</span>
                 </div>
               )) : (
                 <div className="flex justify-between">
@@ -214,7 +214,7 @@ export default function Tracking() {
                 </div>
               )}
               <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
-                <span>{t('cart.total')}</span><span>${order?.finalAmount || "0.00"}</span>
+                <span>{t('cart.total')}</span><span>{Number(order?.finalAmount || 0).toLocaleString("vi-VN")}đ</span>
               </div>
             </div>
           </div>
