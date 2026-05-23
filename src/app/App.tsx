@@ -42,7 +42,7 @@ function App() {
         <Route path="/community" element={<Community />} />
         <Route path="/restaurant-dashboard" element={<ProtectedRoute permission="restaurant:dashboard:view"><RestaurantDashboard /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGEMENT.READ}><AdminDashboard /></ProtectedRoute>} />
-        <Route path="/driver-dashboard" element={<ProtectedRoute permission="driver:dashboard:view"><DriverDashboard /></ProtectedRoute>} />
+        <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
 
       </Routes>
       <ChatBox />

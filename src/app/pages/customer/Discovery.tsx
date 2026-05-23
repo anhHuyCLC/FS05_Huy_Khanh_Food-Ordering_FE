@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, Star, Clock, MapPin, Heart, Brain } from "lucide-react";
+import { Search, Star, Clock, MapPin, Heart, Brain } from "lucide-react";
 import { Navbar } from "../../components/layout/Navbar";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
@@ -22,9 +22,9 @@ const categoryIcons: Record<string, string> = {
   "Fast Food": "🍟",
 };
 
-const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
+// const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
 
-const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
+// const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
 
 export default function Discovery() {
   const navigate = useNavigate();
@@ -46,11 +46,11 @@ export default function Discovery() {
   }, [dispatch]);
 
   const apiCategories = useMemo(() => {
-    const categoryNames = restaurants.flatMap((restaurant) => restaurant.categories.map((category) => category.name));
+    const categoryNames = (restaurants ?? []).flatMap((restaurant) => restaurant.categories.map((category) => category.name));
     return Array.from(new Set(categoryNames));
   }, [restaurants]);
 
-  const handleLocate = () => {
+   const handleLocate = () => {
     if (!navigator.geolocation) {
       alert("Trình duyệt không hỗ trợ định vị");
       return;
@@ -67,6 +67,10 @@ export default function Discovery() {
       }
     );
   };
+
+
+
+
 
   const filtered = useMemo(() => {
     let baseResult = restaurants;
@@ -100,7 +104,7 @@ export default function Discovery() {
       return { ...r, distance: dist };
     });
 
-    let result = withDistance.filter(r => r.distance <= maxDistance);
+    const result = withDistance.filter(r => r.distance <= maxDistance);
 
     if (sortBy === "Distance") {
       result.sort((a, b) => a.distance - b.distance);
@@ -110,7 +114,7 @@ export default function Discovery() {
 
     return result;
   }, [activeCategory, restaurants, search, t, minRating, activeFilter, userLocation, maxDistance, sortBy]);
-
+    
   const translatedFilters = [
     "All",
     t('discovery.open_now'),
@@ -234,7 +238,7 @@ export default function Discovery() {
 
           {/* Restaurant grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filtered.map((r, index) => (
+            {filtered.map((r) => (
               <div
                 key={r.id}
                 onClick={() => navigate(`/restaurant/${r.id}`)}
@@ -283,3 +287,4 @@ export default function Discovery() {
     </div>
   );
 }
+
