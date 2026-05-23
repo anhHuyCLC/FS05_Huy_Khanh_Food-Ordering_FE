@@ -22,3 +22,26 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+export function calculateDeliveryFee(distance: number): number {
+  if (distance <= 2) {
+    return 15000;
+  }
+  const additionalKm = Math.ceil(distance - 2);
+  return 15000 + additionalKm * 5000;
+}
+
+export function getDeliveryTimeRange(distance: number | null): { min: number; max: number } {
+  if (distance === null || distance === Infinity) {
+    return { min: 20, max: 30 };
+  }
+  const minTime = Math.max(15, Math.round(15 + distance * 2));
+  const maxTime = Math.max(20, Math.round(20 + distance * 3));
+  return { min: minTime, max: maxTime };
+}
+
+export function getDeliveryTimeText(distance: number | null): string {
+  const { min, max } = getDeliveryTimeRange(distance);
+  return `${min}-${max} min`;
+}
+

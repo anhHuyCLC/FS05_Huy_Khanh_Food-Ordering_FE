@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { orderService } from "../../services/orderService";
 import type { Order } from "../../types/order";
 import dayjs from "dayjs";
+import { selectSelectedAddress } from "../../features/mapSelectors";
+import { calculateDistance, getStableCoords, getDeliveryTimeText } from "../../utils/geo";
 
 const badges = [
   { icon: "🔥", name: "Food Fiend", desc: "Ordered 50+ times", earned: true },
@@ -34,6 +36,7 @@ export default function Profile() {
   const { t } = useTranslation();
   const { restaurants } = useAppSelector((state) => state.restaurants);
   const user = useAuthStore((state) => state.user);
+  const selectedAddress = useAppSelector(selectSelectedAddress);
 
   // Order states
   const [orders, setOrders] = useState<Order[]>([]);
@@ -355,18 +358,31 @@ export default function Profile() {
 
         {activeTab === t('profile.favorites') && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {restaurants.slice(0, 4).map((r, index) => (
-              <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
-                <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
-                <div className="p-4">
-                  <p className="font-bold text-gray-900">{r.name}</p>
-                  <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
-                    <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
-                    <span><Clock className="w-3.5 h-3.5 inline mr-1" />20-30 min</span>
+            {restaurants.slice(0, 4).map((r, index) => {
+              let restLat = r.latitude ? parseFloat(r.latitude) : null;
+              let restLon = r.longitude ? parseFloat(r.longitude) : null;
+              if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
+                const stable = getStableCoords(r.id, r.name);
+                restLat = stable.latitude;
+                restLon = stable.longitude;
+              }
+              const dist = selectedAddress
+                ? calculateDistance(selectedAddress.lat, selectedAddress.lng, restLat, restLon)
+                : null;
+
+              return (
+                <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
+                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
+                  <div className="p-4">
+                    <p className="font-bold text-gray-900">{r.name}</p>
+                    <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
+                      <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
+                      <span><Clock className="w-3.5 h-3.5 inline mr-1" />{getDeliveryTimeText(dist)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

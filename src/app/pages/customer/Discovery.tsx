@@ -6,7 +6,7 @@ import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
-import { calculateDistance } from "../../utils/geo";
+import { calculateDistance, getDeliveryTimeText } from "../../utils/geo";
 import { Loader2 } from "lucide-react";
 
 const categoryIcons: Record<string, string> = {
@@ -264,7 +264,7 @@ export default function Discovery() {
                       <span className="font-semibold text-gray-800">{r.rating ?? "New"}</span>
                     </span>
                     <span className="flex items-center gap-1 text-gray-500 text-xs">
-                      <Clock className="w-3.5 h-3.5" /> 20-30 min
+                      <Clock className="w-3.5 h-3.5" /> {getDeliveryTimeText(r.distance)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">

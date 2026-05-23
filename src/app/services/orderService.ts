@@ -27,6 +27,19 @@ export const orderService = {
     return response.data.data;
   },
 
+  submitReview: async (
+    orderId: string,
+    data: {
+      restaurantRating: number;
+      restaurantComment?: string;
+      driverRating?: number;
+      driverComment?: string;
+    }
+  ): Promise<any> => {
+    const response = await apiClient.post(`/v1/orders/${orderId}/review`, data);
+    return response.data;
+  },
+
   getOrderHistory: async (orderId: string): Promise<OrderStatusHistory[]> => {
     const response = await apiClient.get(`/v1/orders/${orderId}/history`);
     return response.data.data;
