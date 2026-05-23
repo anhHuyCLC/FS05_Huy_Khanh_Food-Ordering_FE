@@ -55,6 +55,8 @@ export interface Order {
   discountAmount: number;
   finalAmount: number;
   deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
   note?: string;
   cancelReason?: string;
   createdAt: string;
@@ -65,6 +67,8 @@ export interface Order {
     id: string;
     name: string;
     logo?: string;
+    latitude?: number;
+    longitude?: number;
   };
   customer?: {
     id: string;

@@ -16,6 +16,8 @@ import RestaurantMarkers from "../components/map/RestaurantMarkers";
 import UserMarker from "../components/map/UserMarker";
 import { reverseGeocodeCoords } from "../features/mapThunk";
 import { selectSelectedAddress } from "../features/mapSelectors";
+import { getDeliveryTimeText } from "../utils/geo";
+
 
 const features = [
   { icon: <MapPin className="w-6 h-6" />, title: "Real-Time Tracking", desc: "Watch your order move from kitchen to doorstep on a live map.", large: true, color: "#FF4500" },
@@ -392,7 +394,7 @@ export default function Home() {
                         <span className="font-medium text-gray-700">{r.rating ?? "New"}</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" /> 20-30 min
+                        <Clock className="w-3.5 h-3.5" /> {getDeliveryTimeText(distance)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400 font-medium">

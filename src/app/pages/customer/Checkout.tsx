@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, CreditCard, Wallet, DollarSign, Tag, Clock, CheckCircle, ChevronRight, Search, Navigation, Loader2, X } from "lucide-react";
+import { ArrowLeft, MapPin, CreditCard, Wallet, DollarSign, Tag, Clock, CheckCircle, ChevronRight, Search, Navigation, Loader2, X, Edit } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { orderService } from "../../services/orderService";
@@ -16,17 +16,7 @@ import MapView from "../../components/map/MapView";
 import UserMarker from "../../components/map/UserMarker";
 import RestaurantMarkers from "../../components/map/RestaurantMarkers";
 import DeliveryRoute from "../../components/map/DeliveryRoute";
-import { calculateDistance, getStableCoords } from "../../utils/geo";
-
-
-
-function calculateDeliveryFee(distance: number): number {
-  if (distance <= 2) {
-    return 15000;
-  }
-  const additionalKm = Math.ceil(distance - 2);
-  return 15000 + additionalKm * 5000;
-}
+import { calculateDistance, getStableCoords, calculateDeliveryFee, getDeliveryTimeText } from "../../utils/geo";
 
 const payMethods = [
   { id: "card", icon: <CreditCard className="w-5 h-5" />, label: "Credit / Debit Card", sub: "**** **** **** 4242" },
@@ -59,6 +49,7 @@ export default function Checkout() {
 
   // Modal inline state for quick adding address
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<SavedAddress | null>(null);
   const [formLabel, setFormLabel] = useState("");
   const [formAddress, setFormAddress] = useState("");
   const [formPhone, setFormPhone] = useState("");
@@ -193,6 +184,16 @@ export default function Checkout() {
     }
   }, [restaurantCoords, deliveryCoords, dispatch]);
 
+  const fallbackDistance = useMemo(() => {
+    if (!restaurantCoords || !deliveryCoords) return null;
+    return calculateDistance(
+      restaurantCoords.latitude,
+      restaurantCoords.longitude,
+      deliveryCoords.latitude,
+      deliveryCoords.longitude
+    );
+  }, [restaurantCoords, deliveryCoords]);
+
   const fetchAddresses = async () => {
     try {
       setIsLoadingAddresses(true);
@@ -223,22 +224,41 @@ export default function Checkout() {
     }
     try {
       setIsSaving(true);
-      const newAddr = await addressService.createAddress({
-        label: formLabel,
-        address: formAddress,
-        phone: formPhone,
-        latitude: formLatitude,
-        longitude: formLongitude,
-        isDefault: formIsDefault,
-      });
-      toast.success("Thêm địa chỉ thành công");
+      if (editingAddress) {
+        await addressService.updateAddress(editingAddress.id, {
+          label: formLabel,
+          address: formAddress,
+          phone: formPhone,
+          latitude: formLatitude,
+          longitude: formLongitude,
+          isDefault: formIsDefault,
+        });
+        toast.success("Cập nhật địa chỉ thành công");
+      } else {
+        const newAddr = await addressService.createAddress({
+          label: formLabel,
+          address: formAddress,
+          phone: formPhone,
+          latitude: formLatitude,
+          longitude: formLongitude,
+          isDefault: formIsDefault,
+        });
+        toast.success("Thêm địa chỉ thành công");
+      }
       setIsModalOpen(false);
 
-      // Refresh list and select the new address
+      // Refresh list and select the address
       const data = await addressService.getMyAddresses();
       const dataArray = Array.isArray(data) ? data : [];
       setAddresses(dataArray);
-      setSelectedAddressId(newAddr.id);
+      if (editingAddress) {
+        setSelectedAddressId(editingAddress.id);
+      } else if (dataArray.length > 0) {
+        const matched = dataArray.find((a) => a.address === formAddress && a.label === formLabel);
+        if (matched) {
+          setSelectedAddressId(matched.id);
+        }
+      }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       toast.error(err.response?.data?.message || "Không thể lưu địa chỉ");
@@ -248,6 +268,7 @@ export default function Checkout() {
   };
 
   const openAddModal = () => {
+    setEditingAddress(null);
     setFormLabel("");
     setFormAddress("");
     setFormPhone("");
@@ -257,6 +278,20 @@ export default function Checkout() {
     setModalSuggestions([]);
     setIsDropdownOpen(false);
     setFormIsDefault(false);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (addr: SavedAddress) => {
+    setEditingAddress(addr);
+    setFormLabel(addr.label);
+    setFormAddress(addr.address);
+    setFormPhone(addr.phone || "");
+    setSearchQuery(addr.address);
+    setFormLatitude(addr.latitude);
+    setFormLongitude(addr.longitude);
+    setModalSuggestions([]);
+    setIsDropdownOpen(false);
+    setFormIsDefault(addr.isDefault);
     setIsModalOpen(true);
   };
 
@@ -366,7 +401,7 @@ export default function Checkout() {
 
   const subtotal = getTotal();
   const discount = promoApplied ? discountAmount : 0;
-  const delivery = routeState ? routeState.shippingFee : deliveryFee;
+  const delivery = routeState ? calculateDeliveryFee(routeState.distance / 1000) : deliveryFee;
   const total = subtotal - discount + delivery;
 
   const translatedPayMethods = [
@@ -439,6 +474,18 @@ export default function Checkout() {
                         {a.phone && <div className="text-xs text-gray-600 mb-0.5 font-medium">{a.phone}</div>}
                         <span className="text-xs text-gray-500 break-words">{a.address}</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openEditModal(a);
+                        }}
+                        className="p-2 rounded-xl text-gray-400 hover:text-[#FF4500] hover:bg-orange-50 transition-colors cursor-pointer shrink-0"
+                        title="Chỉnh sửa"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
                     </label>
                   );
                 })
@@ -505,18 +552,29 @@ export default function Checkout() {
               <div>
                 <p className="font-semibold text-gray-900 text-sm">{t('checkout.estimated_arrival')}</p>
                 <p className="text-xl font-black" style={{ color: "#FF4500" }}>
-                  {routeState ? `${routeState.eta} ${t('checkout.minutes', 'phút')}` : `25–35 ${t('checkout.minutes')}`}
+                  {routeState
+                    ? `${routeState.eta} ${t('checkout.minutes', 'phút')}`
+                    : fallbackDistance !== null
+                      ? getDeliveryTimeText(fallbackDistance)
+                      : `25–35 ${t('checkout.minutes')}`}
                 </p>
               </div>
             </div>
-            {routeState && (
+            {routeState ? (
               <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
                 <div>
                   <p className="text-xs text-gray-400 font-medium">Khoảng cách</p>
                   <p className="text-sm font-bold text-gray-800">{(routeState.distance / 1000).toFixed(1)} km</p>
                 </div>
               </div>
-            )}
+            ) : fallbackDistance !== null ? (
+              <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
+                <div>
+                  <p className="text-xs text-gray-400 font-medium">Khoảng cách</p>
+                  <p className="text-sm font-bold text-gray-800">{fallbackDistance.toFixed(1)} km</p>
+                </div>
+              </div>
+            ) : null}
             <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
               <div>
                 <p className="text-xs text-gray-400">{t('checkout.driver_assigned')}</p>
@@ -607,9 +665,12 @@ export default function Checkout() {
                       restaurantId: restaurantId,
                       totalAmount: subtotal
                     });
-                    if (res.success) {
+                    // Hỗ trợ cả định dạng bọc { success, data } và định dạng phẳng { discountAmount }
+                    const hasDiscount = res.success ? (res.data?.discountAmount !== undefined) : (res.discountAmount !== undefined);
+                    const discountVal = res.success ? res.data.discountAmount : res.discountAmount;
+                    if (hasDiscount) {
                       setPromoApplied(true);
-                      setDiscountAmount(res.data.discountAmount);
+                      setDiscountAmount(discountVal);
                       toast.success("Áp dụng mã giảm giá thành công!");
                     }
                   } catch (error: any) {
@@ -672,7 +733,9 @@ export default function Checkout() {
             <div className="w-full md:w-1/2 p-6 overflow-y-auto flex flex-col justify-between">
               <div>
                 <div className="border-b border-gray-100 pb-4 mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">Thêm địa chỉ giao hàng mới</h3>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {editingAddress ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ giao hàng mới"}
+                  </h3>
                   <p className="text-xs text-gray-400 mt-1">Tìm kiếm hoặc chọn vị trí trên bản đồ để lưu địa chỉ</p>
                 </div>
 
@@ -840,7 +903,7 @@ export default function Checkout() {
                   className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
                   style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                 >
-                  {isSaving ? "Đang lưu..." : "Thêm địa chỉ"}
+                  {isSaving ? "Đang lưu..." : editingAddress ? "Lưu thay đổi" : "Thêm địa chỉ"}
                 </button>
               </div>
             </div>

@@ -8,6 +8,9 @@ import { fetchRestaurants } from "../../features/restaurantSlice";
 import type { MenuItem, OptionGroup, OptionChoice } from "../../features/restaurantSlice";
 import { useAuthStore } from "../../stores/authStore";
 import { useCartStore } from "../../stores/cartStore";
+import { selectSelectedAddress } from "../../features/mapSelectors";
+import { calculateDistance, getStableCoords, calculateDeliveryFee, getDeliveryTimeText } from "../../utils/geo";
+
 
 const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
 
@@ -38,9 +41,27 @@ export default function RestaurantDetail() {
   const restaurant = restaurantIndex >= 0 ? restaurants[restaurantIndex] : undefined;
   const restaurantImage = restaurantImages[Math.max(restaurantIndex, 0) % restaurantImages.length];
 
+  const selectedAddress = useAppSelector(selectSelectedAddress);
+
+  const distance = useMemo(() => {
+    if (!restaurant) return null;
+    let restLat = restaurant.latitude ? parseFloat(restaurant.latitude) : null;
+    let restLon = restaurant.longitude ? parseFloat(restaurant.longitude) : null;
+    if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
+      const stable = getStableCoords(restaurant.id, restaurant.name);
+      restLat = stable.latitude;
+      restLon = stable.longitude;
+    }
+    if (!selectedAddress) return null;
+    return calculateDistance(selectedAddress.lat, selectedAddress.lng, restLat, restLon);
+  }, [restaurant, selectedAddress]);
+
   const { items, addItem: addToCart, removeItem: removeFromCart, getTotal, getItemCount } = useCartStore();
   const total = getTotal();
   const itemCount = getItemCount();
+
+  const deliveryFee = distance !== null ? calculateDeliveryFee(distance) : 15000;
+  const grandTotal = total + deliveryFee;
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
 
   const cart = useMemo(() => {
@@ -352,7 +373,7 @@ export default function RestaurantDetail() {
                       <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                       <strong className="text-gray-800">{restaurant.rating ?? "New"}</strong> {t('restaurant.rating_count')}
                     </span>
-                    <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" />20-30 min</span>
+                    <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" />{getDeliveryTimeText(distance)}</span>
                     <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4" />{restaurant.address}</span>
                   </div>
                 </div>
@@ -362,8 +383,8 @@ export default function RestaurantDetail() {
                       Open
                     </span>
                   )}
-                  <span className="text-sm text-green-500 font-semibold mt-1">
-                    {t('restaurant.free_delivery_promo')}
+                  <span className="text-sm text-orange-500 font-semibold mt-1">
+                    Phí giao hàng: {deliveryFee.toLocaleString()}đ
                   </span>
                 </div>
               </div>
@@ -508,10 +529,10 @@ export default function RestaurantDetail() {
                       <span>{t('cart.subtotal')}</span><span>{total.toLocaleString()}đ</span>
                     </div>
                     <div className="flex justify-between text-sm text-gray-500">
-                      <span>{t('cart.delivery_fee')}</span><span className="text-green-500">{t('discovery.free_delivery')}</span>
+                      <span>{t('cart.delivery_fee')}</span><span>{deliveryFee.toLocaleString()}đ</span>
                     </div>
                     <div className="flex justify-between font-bold text-gray-900">
-                      <span>{t('cart.total')}</span><span>{total.toLocaleString()}đ</span>
+                      <span>{t('cart.total')}</span><span>{grandTotal.toLocaleString()}đ</span>
                     </div>
                   </div>
                   <button
@@ -538,7 +559,7 @@ export default function RestaurantDetail() {
           >
             <span className="bg-white/20 rounded-xl px-2 py-0.5 text-sm">{itemCount}</span>
             <span>{t('cart.your_cart')}</span>
-            <span>{total.toLocaleString()}đ</span>
+            <span>{grandTotal.toLocaleString()}đ</span>
           </button>
         </div>
       )}
