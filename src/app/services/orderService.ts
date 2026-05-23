@@ -7,9 +7,14 @@ export const orderService = {
     return response.data.data;
   },
 
+  checkPromotion: async (data: { promotionCode: string; restaurantId: string; totalAmount: number }) => {
+    const response = await apiClient.post('/v1/orders/check-promotion', data);
+    return response.data;
+  },
+
   getMyOrders: async (): Promise<Order[]> => {
     const response = await apiClient.get('/v1/orders');
-    return response.data.data;
+    return response.data.data.items || [];
   },
 
   getOrder: async (orderId: string): Promise<Order> => {
@@ -20,6 +25,19 @@ export const orderService = {
   cancelOrder: async (orderId: string, data: CancelOrderInput): Promise<Order> => {
     const response = await apiClient.patch(`/v1/orders/${orderId}/cancel`, data);
     return response.data.data;
+  },
+
+  submitReview: async (
+    orderId: string,
+    data: {
+      restaurantRating: number;
+      restaurantComment?: string;
+      driverRating?: number;
+      driverComment?: string;
+    }
+  ): Promise<any> => {
+    const response = await apiClient.post(`/v1/orders/${orderId}/review`, data);
+    return response.data;
   },
 
   getOrderHistory: async (orderId: string): Promise<OrderStatusHistory[]> => {
@@ -34,6 +52,6 @@ export const orderService = {
 
   getRestaurantOrders: async (restaurantId: string): Promise<Order[]> => {
     const response = await apiClient.get(`/v1/restaurants/${restaurantId}/orders`);
-    return response.data.data;
+    return response.data.data.items || [];
   }
 };

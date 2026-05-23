@@ -1,7 +1,10 @@
 import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "../features/authSlice";
 import restaurantReducer from "../features/restaurantSlice";
+
 import driverReducer from "../features/driverSlice";
+
+import mapReducer from "../features/mapSlice";
 import {
   useDispatch,
   useSelector,
@@ -9,12 +12,19 @@ import {
 } from "react-redux";
 
 export const store = configureStore({
+
   reducer: {
     auth: authReducer,
     restaurants: restaurantReducer,
     driver: driverReducer,
+    map: mapReducer,
   },
+
+
+
 });
+
+
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

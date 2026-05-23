@@ -10,6 +10,14 @@ import { Footer } from "../components/layout/Footer";
 import { testimonials, faqItems, IMGS } from "../data/mock";
 import { useAppDispatch, useAppSelector } from "../stores/store";
 import { fetchRestaurants } from "../features/restaurantSlice";
+import AddressAutocomplete from "../components/map/AddressAutocomplete";
+import MapView from "../components/map/MapView";
+import RestaurantMarkers from "../components/map/RestaurantMarkers";
+import UserMarker from "../components/map/UserMarker";
+import { reverseGeocodeCoords } from "../features/mapThunk";
+import { selectSelectedAddress } from "../features/mapSelectors";
+import { getDeliveryTimeText } from "../utils/geo";
+
 
 const features = [
   { icon: <MapPin className="w-6 h-6" />, title: "Real-Time Tracking", desc: "Watch your order move from kitchen to doorstep on a live map.", large: true, color: "#FF4500" },
@@ -50,10 +58,12 @@ export default function Home() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { t } = useTranslation();
-  const [address, setAddress] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { restaurants } = useAppSelector((state) => state.restaurants);
+
+  const selectedAddress = useAppSelector(selectSelectedAddress);
+  const [distanceFilter, setDistanceFilter] = useState<number>(999); // in km (999 = All)
 
   useEffect(() => {
     dispatch(fetchRestaurants());
@@ -64,12 +74,63 @@ export default function Home() {
     return Array.from(new Set(categoryNames));
   }, [restaurants]);
 
+  // Proximity calculation utilities
+  const getRestaurantCoords = (r: any): [number, number] => {
+    const lat = r.latitude ? parseFloat(r.latitude) : null;
+    const lng = r.longitude ? parseFloat(r.longitude) : null;
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+      return [lat, lng];
+    }
+    const input = `${r.id}-${r.name || ""}`;
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      hash = input.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const stableLat = 16.054404 + ((hash % 100) / 1000);
+    const stableLng = 108.202167 + (((hash >> 2) % 100) / 1000);
+    return [stableLat, stableLng];
+  };
+
+  const calculateHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // distance in km
+  };
+
   const visibleRestaurants = useMemo(() => {
-    if (activeCategory === "All" || activeCategory === t('common.all')) return restaurants;
-    return restaurants.filter((restaurant) =>
-      restaurant.categories.some((category) => category.name === activeCategory)
-    );
-  }, [activeCategory, restaurants, t]);
+    let filtered = restaurants;
+    
+    // Category Filter
+    if (activeCategory !== "All" && activeCategory !== t('common.all')) {
+      filtered = filtered.filter((restaurant) =>
+        restaurant.categories.some((category) => category.name === activeCategory)
+      );
+    }
+    
+    // Distance Filter
+    if (selectedAddress && distanceFilter !== 999) {
+      filtered = filtered.filter((r) => {
+        const coords = getRestaurantCoords(r);
+        const dist = calculateHaversineDistance(
+          selectedAddress.lat,
+          selectedAddress.lng,
+          coords[0],
+          coords[1]
+        );
+        return dist <= distanceFilter;
+      });
+    }
+    
+    return filtered;
+  }, [activeCategory, restaurants, t, selectedAddress, distanceFilter]);
 
   const featureKeys = ["tracking", "ai", "payments", "promos", "group", "fast", "community", "rewards"];
   const featuresWithTranslations = features.map((f, i) => ({
@@ -107,24 +168,11 @@ export default function Home() {
               {t('home.hero_subtitle')}
             </p>
 
-            {/* Search bar */}
-            <div className="flex gap-2 bg-white/10 backdrop-blur-md rounded-2xl p-2 border border-white/20 mb-6 max-w-lg">
-              <div className="flex items-center gap-2 flex-1 px-3">
-                <MapPin className="w-5 h-5 text-orange-400 shrink-0" />
-                <input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder={t('home.search_placeholder')}
-                  className="bg-transparent text-white text-sm outline-none flex-1 placeholder-gray-500"
-                />
-              </div>
-              <button
-                onClick={() => navigate("/explore")}
-                className="px-5 py-3 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90 shrink-0"
-                style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
-              >
-                {t('home.find_food')}
-              </button>
+            {/* Search bar with Autocomplete */}
+            <div className="mb-6 max-w-lg">
+              <AddressAutocomplete
+                placeholder={t('home.search_placeholder')}
+              />
             </div>
 
             {/* CTAs */}
@@ -230,6 +278,64 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ===== MAP CONTAINER ===== */}
+      <section className="py-10 bg-gray-50 border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black text-gray-900 mb-1">
+                {t('home.restaurant_map_title', 'Bản đồ nhà hàng')}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {selectedAddress 
+                  ? `${t('home.showing_restaurants_near', 'Đang hiển thị nhà hàng gần:')} ${selectedAddress.address}`
+                  : t('home.select_location_map', 'Chọn vị trí giao hàng để xem khoảng cách')}
+              </p>
+            </div>
+            
+            {/* Distance Filter Selector */}
+            {selectedAddress && (
+              <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-gray-200 shadow-sm self-start">
+                <span className="text-xs font-semibold text-gray-500 px-3">
+                  {t('home.radius', 'Bán kính:')}
+                </span>
+                {[
+                  { label: t('home.radius_all', 'Tất cả'), value: 999 },
+                  { label: '2 km', value: 2 },
+                  { label: '5 km', value: 5 },
+                  { label: '10 km', value: 10 }
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setDistanceFilter(opt.value)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      distanceFilter === opt.value
+                        ? "text-white bg-[#FF4500]"
+                        : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <MapView
+            center={selectedAddress ? [selectedAddress.lat, selectedAddress.lng] : [16.054404, 108.202167]}
+            zoom={selectedAddress ? 15 : 13}
+            onMapClick={(lat, lng) => dispatch(reverseGeocodeCoords({ lat, lng }))}
+            className="h-96 w-full rounded-3xl overflow-hidden shadow-md border border-gray-200"
+          >
+            <UserMarker position={selectedAddress} addressName={selectedAddress?.address} />
+            <RestaurantMarkers 
+              restaurants={restaurants} 
+              onSelectRestaurant={(rest) => navigate(`/restaurant/${rest.id}`)} 
+            />
+          </MapView>
+        </div>
+      </section>
+
       {/* ===== POPULAR RESTAURANTS ===== */}
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
@@ -247,46 +353,62 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {visibleRestaurants.slice(0, 8).map((r, index) => (
-              <div
-                key={r.id}
-                onClick={() => navigate(`/restaurant/${r.id}`)}
-                className="group bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
-              >
-                <div className="relative h-44 overflow-hidden">
-                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  {r.isActive && (
-                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded-xl text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      Open
+            {visibleRestaurants.slice(0, 8).map((r, index) => {
+              const coords = getRestaurantCoords(r);
+              const distance = selectedAddress
+                ? calculateHaversineDistance(
+                    selectedAddress.lat,
+                    selectedAddress.lng,
+                    coords[0],
+                    coords[1]
+                  )
+                : null;
+
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => navigate(`/restaurant/${r.id}`)}
+                  className="group bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+                >
+                  <div className="relative h-44 overflow-hidden">
+                    <img src={r.imageUrl || IMGS.restaurant} alt={r.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    {r.isActive && (
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-xl text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+                        Open
+                      </div>
+                    )}
+                    <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center hover:scale-110 transition-transform">
+                      <Heart className="w-4 h-4 text-gray-400 hover:text-red-500 transition-colors" />
+                    </button>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-bold text-gray-900 mb-1">{r.name}</h3>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {r.categories.slice(0, 3).map((category) => (
+                        <span key={category.id} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{category.name}</span>
+                      ))}
                     </div>
-                  )}
-                  <button className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center hover:scale-110 transition-transform">
-                    <Heart className="w-4 h-4 text-gray-400 hover:text-red-500 transition-colors" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-bold text-gray-900 mb-1">{r.name}</h3>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {r.categories.slice(0, 3).map((category) => (
-                      <span key={category.id} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{category.name}</span>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="font-medium text-gray-700">{r.rating ?? "New"}</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> 20-30 min
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">
-                    <span>{r.address}</span>
-                    <span className="text-green-500 font-medium">Free delivery</span>
+                    <div className="flex items-center justify-between text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                        <span className="font-medium text-gray-700">{r.rating ?? "New"}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" /> {getDeliveryTimeText(distance)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400 font-medium">
+                      <span className="truncate max-w-[130px]">{r.address}</span>
+                      {distance !== null ? (
+                        <span className="text-orange-500 font-bold">{distance.toFixed(1)} km</span>
+                      ) : (
+                        <span className="text-green-500 font-medium">Free delivery</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

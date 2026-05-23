@@ -14,6 +14,7 @@ export interface CartItemResponse {
     basePrice: number | string;
     imageUrl: string | null;
     isAvailable: boolean;
+    optionGroups?: any[];
   };
 }
 
@@ -27,6 +28,8 @@ export interface CartResponse {
     id: string;
     name: string;
     address: string;
+    latitude?: string | number | null;
+    longitude?: string | number | null;
   };
   items: CartItemResponse[];
 }

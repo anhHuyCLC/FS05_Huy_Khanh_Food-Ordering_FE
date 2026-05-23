@@ -1,17 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Trophy, Star, Clock, CheckCircle} from "lucide-react";
+import { ArrowLeft, Trophy, Star, Clock, CheckCircle, Edit, Trash2 } from "lucide-react";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
+import { addressService } from "../../services/addressService";
+import type { SavedAddress } from "../../types/address";
+import { useAuthStore } from "../../stores/authStore";
+import { toast } from "sonner";
 
-const orderHistory = [
-  { id: "#ORD-7710", restaurant: "Burger Republic", date: "May 10, 2026", total: "$34.90", status: "delivered", img: IMGS.burger },
-  { id: "#ORD-7695", restaurant: "Sushi Zen", date: "May 7, 2026", total: "$52.00", status: "delivered", img: IMGS.sushi },
-  { id: "#ORD-7680", restaurant: "Pizza Palazzo", date: "May 4, 2026", total: "$28.50", status: "delivered", img: IMGS.pizza },
-  { id: "#ORD-7654", restaurant: "Pho House", date: "Apr 30, 2026", total: "$22.75", status: "delivered", img: IMGS.pho },
-];
+import { orderService } from "../../services/orderService";
+import type { Order } from "../../types/order";
+import dayjs from "dayjs";
+import { selectSelectedAddress } from "../../features/mapSelectors";
+import { calculateDistance, getStableCoords, getDeliveryTimeText } from "../../utils/geo";
 
 const badges = [
   { icon: "🔥", name: "Food Fiend", desc: "Ordered 50+ times", earned: true },
@@ -32,10 +35,153 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState("Orders");
   const { t } = useTranslation();
   const { restaurants } = useAppSelector((state) => state.restaurants);
+  const user = useAuthStore((state) => state.user);
+  const selectedAddress = useAppSelector(selectSelectedAddress);
+
+  // Order states
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  // Address states
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<SavedAddress | null>(null);
+  const [formLabel, setFormLabel] = useState("");
+  const [formAddress, setFormAddress] = useState("");
+  const [formIsDefault, setFormIsDefault] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     dispatch(fetchRestaurants());
   }, [dispatch]);
+
+  const fetchAddresses = useCallback(async () => {
+    try {
+      setIsLoadingAddresses(true);
+      const data = await addressService.getMyAddresses();
+      setAddresses(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch addresses:", error);
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === t('profile.addresses')) {
+      fetchAddresses();
+    }
+  }, [activeTab, t, fetchAddresses]);
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      setIsLoadingOrders(true);
+      const data = await orderService.getMyOrders();
+      setOrders(data);
+    } catch (error) {
+      console.error("Failed to fetch orders:", error);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === t('profile.orders')) {
+      fetchOrders();
+    }
+  }, [activeTab, t, fetchOrders]);
+
+  const getAddressIcon = (label: string) => {
+    const normalized = label.toLowerCase();
+    if (normalized.includes("nhà") || normalized.includes("home")) return "🏠";
+    if (normalized.includes("văn phòng") || normalized.includes("công ty") || normalized.includes("office") || normalized.includes("work")) return "🏢";
+    if (normalized.includes("trường") || normalized.includes("school") || normalized.includes("university")) return "🏫";
+    return "📍";
+  };
+
+  const openAddModal = () => {
+    setEditingAddress(null);
+    setFormLabel("");
+    setFormAddress("");
+    setFormIsDefault(false);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (addr: SavedAddress) => {
+    setEditingAddress(addr);
+    setFormLabel(addr.label);
+    setFormAddress(addr.address);
+    setFormIsDefault(addr.isDefault);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formLabel.trim() || !formAddress.trim()) {
+      toast.error("Vui lòng điền đầy đủ nhãn và địa chỉ");
+      return;
+    }
+    try {
+      setIsSaving(true);
+      if (editingAddress) {
+        await addressService.updateAddress(editingAddress.id, {
+          label: formLabel,
+          address: formAddress,
+          isDefault: formIsDefault,
+        });
+        toast.success("Cập nhật địa chỉ thành công");
+      } else {
+        await addressService.createAddress({
+          label: formLabel,
+          address: formAddress,
+          isDefault: formIsDefault,
+        });
+        toast.success("Thêm địa chỉ thành công");
+      }
+      setIsModalOpen(false);
+      fetchAddresses();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Không thể lưu địa chỉ");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa địa chỉ này?")) return;
+    try {
+      await addressService.deleteAddress(id);
+      toast.success("Xóa địa chỉ thành công");
+      fetchAddresses();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Không thể xóa địa chỉ");
+    }
+  };
+
+  const handleSetDefault = async (addr: SavedAddress) => {
+    if (addr.isDefault) return;
+    try {
+      await addressService.updateAddress(addr.id, { isDefault: true });
+      toast.success("Đặt địa chỉ mặc định thành công");
+      fetchAddresses();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Không thể đặt mặc định");
+    }
+  };
+
+  const userInitials = user?.fullName
+    ? user.fullName
+        .split(" ")
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "SC";
 
   const translatedTabs = [
     t('profile.orders'),
@@ -67,15 +213,15 @@ export default function Profile() {
           <div className="flex items-center gap-5">
             <div className="relative">
               <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-white text-2xl font-black" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                SC
+                {userInitials}
               </div>
               <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-gray-900 flex items-center justify-center">
                 <CheckCircle className="w-3 h-3 text-white" />
               </div>
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Sarah Chen</h2>
-              <p className="text-gray-400 text-sm">sarah.chen@email.com</p>
+              <h2 className="text-xl font-bold text-white">{user?.fullName || "Sarah Chen"}</h2>
+              <p className="text-gray-400 text-sm">{user?.email || "sarah.chen@email.com"}</p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-400/20 text-yellow-300 border border-yellow-400/30">
                   {t('profile.gold_member')}
@@ -118,44 +264,93 @@ export default function Profile() {
         {/* Tab Content */}
         {activeTab === t('profile.orders') && (
           <div className="space-y-3">
-            {orderHistory.map((order) => (
-              <div key={order.id} className="bg-white rounded-2xl p-4 flex items-center gap-4 border border-gray-100 hover:border-orange-200 transition-all cursor-pointer">
-                <img src={order.img} alt={order.restaurant} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">{order.restaurant}</p>
-                  <p className="text-sm text-gray-400">{order.id} · {order.date}</p>
+            {isLoadingOrders ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Đang tải lịch sử đơn hàng...</div>
+            ) : orders.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Chưa có đơn hàng nào.</div>
+            ) : (
+              orders.map((order) => (
+                <div 
+                  key={order.id} 
+                  className="bg-white rounded-2xl p-4 flex items-center gap-4 border border-gray-100 hover:border-orange-200 transition-all cursor-pointer"
+                  onClick={() => navigate(`/tracking?orderId=${order.id}`)}
+                >
+                  <img src={order.restaurant?.logo || IMGS.burger} alt={order.restaurant?.name || "Restaurant"} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">{order.restaurant?.name || "Restaurant"}</p>
+                    <p className="text-sm text-gray-400">#{order.id.slice(0, 8).toUpperCase()} · {dayjs(order.createdAt).format("MMM D, YYYY")}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900">{order.finalAmount.toLocaleString("vi-VN")}đ</p>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${order.status === "completed" ? "bg-green-100 text-green-600" : order.status === "cancelled" ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-600"}`}>
+                      {order.status === "completed" ? "✓ " : ""}{order.status}
+                    </span>
+                  </div>
+                  <button 
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-[#FF4500] bg-orange-50 hover:bg-orange-100 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/restaurant/${order.restaurantId}`); }}
+                  >
+                    {t('profile.reorder')}
+                  </button>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-gray-900">{order.total}</p>
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-600">✓ {order.status}</span>
-                </div>
-                <button className="px-3 py-1.5 rounded-xl text-xs font-semibold text-[#FF4500] bg-orange-50 hover:bg-orange-100 transition-colors">
-                  {t('profile.reorder')}
-                </button>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
         {activeTab === t('profile.addresses') && (
           <div className="space-y-3">
-            {[
-              { icon: "🏠", label: t('checkout.home'), addr: "123 Main Street, Apt 4B, New York, NY 10001", default: true },
-              { icon: "🏢", label: t('checkout.office'), addr: "456 Business Ave, Suite 201, New York, NY 10002", default: false },
-            ].map((a, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 flex items-start gap-4 border border-gray-100">
-                <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-lg shrink-0">{a.icon}</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-gray-900">{a.label}</p>
-                    {a.default && <span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-[#FF4500] font-medium">{t('profile.default')}</span>}
+            {isLoadingAddresses ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Đang tải danh sách địa chỉ...</div>
+            ) : !Array.isArray(addresses) || addresses.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Chưa có địa chỉ nào được lưu.</div>
+            ) : (
+              addresses.map((a) => (
+                <div key={a.id} className="bg-white rounded-2xl p-5 flex items-start gap-4 border border-gray-100 hover:border-orange-100 transition-all">
+                  <div className="w-10 h-10 rounded-2xl bg-orange-100 flex items-center justify-center text-lg shrink-0">
+                    {getAddressIcon(a.label)}
                   </div>
-                  <p className="text-sm text-gray-400">{a.addr}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold text-gray-900 truncate">{a.label}</p>
+                      {a.isDefault ? (
+                        <span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-[#FF4500] font-medium shrink-0">
+                          {t('profile.default')}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleSetDefault(a)}
+                          className="text-xs text-gray-400 hover:text-[#FF4500] transition-colors shrink-0"
+                        >
+                          Thiết lập mặc định
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-400 break-words">{a.address}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => openEditModal(a)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-[#FF4500] hover:bg-orange-50 transition-colors cursor-pointer"
+                      title="Sửa"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAddress(a.id)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                      title="Xóa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <button className="text-sm text-[#FF4500] font-medium hover:underline">{t('profile.edit')}</button>
-              </div>
-            ))}
-            <button className="w-full py-4 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-medium text-[#FF4500] hover:border-orange-300 hover:bg-orange-50 transition-all">
+              ))
+            )}
+            <button
+              onClick={openAddModal}
+              className="w-full py-4 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-medium text-[#FF4500] hover:border-orange-300 hover:bg-orange-50 transition-all cursor-pointer"
+            >
               {t('profile.add_address')}
             </button>
           </div>
@@ -163,18 +358,31 @@ export default function Profile() {
 
         {activeTab === t('profile.favorites') && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {restaurants.slice(0, 4).map((r, index) => (
-              <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
-                <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
-                <div className="p-4">
-                  <p className="font-bold text-gray-900">{r.name}</p>
-                  <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
-                    <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
-                    <span><Clock className="w-3.5 h-3.5 inline mr-1" />20-30 min</span>
+            {restaurants.slice(0, 4).map((r, index) => {
+              let restLat = r.latitude ? parseFloat(r.latitude) : null;
+              let restLon = r.longitude ? parseFloat(r.longitude) : null;
+              if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
+                const stable = getStableCoords(r.id, r.name);
+                restLat = stable.latitude;
+                restLon = stable.longitude;
+              }
+              const dist = selectedAddress
+                ? calculateDistance(selectedAddress.lat, selectedAddress.lng, restLat, restLon)
+                : null;
+
+              return (
+                <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
+                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
+                  <div className="p-4">
+                    <p className="font-bold text-gray-900">{r.name}</p>
+                    <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
+                      <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
+                      <span><Clock className="w-3.5 h-3.5 inline mr-1" />{getDeliveryTimeText(dist)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -217,7 +425,7 @@ export default function Profile() {
               { icon: "💳", label: t('profile.settings_tabs.payments'), sub: t('profile.settings_desc.payments') },
               { icon: "🎁", label: t('profile.settings_tabs.referral'), sub: t('profile.settings_desc.referral') },
               { icon: "⚠️", label: t('profile.settings_tabs.delete_account'), sub: t('profile.settings_desc.delete_account'), danger: true },
-            ].map((item: any) => (
+            ].map((item: { icon: string; label: string; sub: string; danger?: boolean }) => (
               <button key={item.label} className="w-full bg-white rounded-2xl p-5 flex items-center gap-4 border border-gray-100 hover:border-gray-200 transition-all text-left">
                 <span className="text-xl">{item.icon}</span>
                 <div className="flex-1">
@@ -230,6 +438,92 @@ export default function Profile() {
           </div>
         )}
       </div>
+
+      {/* Address Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">
+                {editingAddress ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ mới"}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">Lưu địa chỉ để đặt món nhanh chóng hơn</p>
+            </div>
+            <form onSubmit={handleSaveAddress} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nhãn địa chỉ</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {["Nhà riêng", "Văn phòng", "Trường học"].map((suggested) => (
+                    <button
+                      key={suggested}
+                      type="button"
+                      onClick={() => setFormLabel(suggested)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+                        formLabel === suggested
+                          ? "bg-orange-50 text-[#FF4500] border-orange-200"
+                          : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      {suggested}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={formLabel}
+                  onChange={(e) => setFormLabel(e.target.value)}
+                  placeholder="Ví dụ: Nhà riêng, Công ty, Người yêu..."
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Địa chỉ chi tiết</label>
+                <textarea
+                  value={formAddress}
+                  onChange={(e) => setFormAddress(e.target.value)}
+                  placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center gap-3 py-2">
+                <input
+                  type="checkbox"
+                  id="isDefault"
+                  checked={formIsDefault}
+                  onChange={(e) => setFormIsDefault(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-[#FF4500] focus:ring-orange-500"
+                />
+                <label htmlFor="isDefault" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                  Đặt làm địa chỉ mặc định
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+                  style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
+                >
+                  {isSaving ? "Đang lưu..." : "Lưu địa chỉ"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

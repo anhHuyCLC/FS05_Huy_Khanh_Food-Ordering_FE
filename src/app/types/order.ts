@@ -10,6 +10,9 @@ export interface CreateOrderInput {
   orderType?: 'standard_delivery' | 'dine_in' | 'group_order' | 'blind_box';
   items: OrderItemInput[];
   deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  customerPhone?: string;
   promotionCode?: string;
   note?: string;
   tableNumber?: string;
@@ -21,14 +24,14 @@ export interface OrderItem {
   orderId: string;
   menuItemId: string;
   quantity: number;
-  price: number;
+  unitPrice: number;
   selectedOptions?: Record<string, unknown>;
   note?: string;
   menuItem?: {
     id: string;
     name: string;
-    image?: string;
-    price: number;
+    imageUrl?: string;
+    basePrice: number;
   };
 }
 
@@ -52,16 +55,20 @@ export interface Order {
   discountAmount: number;
   finalAmount: number;
   deliveryAddress?: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
   note?: string;
   cancelReason?: string;
   createdAt: string;
   updatedAt: string;
-  items?: OrderItem[];
-  statusHistory?: OrderStatusHistory[];
+  orderItems?: OrderItem[];
+  orderStatusHistories?: OrderStatusHistory[];
   restaurant?: {
     id: string;
     name: string;
     logo?: string;
+    latitude?: number;
+    longitude?: number;
   };
   customer?: {
     id: string;
