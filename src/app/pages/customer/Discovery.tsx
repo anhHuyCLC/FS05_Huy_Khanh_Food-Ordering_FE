@@ -38,13 +38,13 @@ export default function Discovery() {
   }, [dispatch]);
 
   const apiCategories = useMemo(() => {
-    const categoryNames = restaurants.flatMap((restaurant) => restaurant.categories.map((category) => category.name));
+    const categoryNames = (restaurants ?? []).flatMap((restaurant) => restaurant.categories.map((category) => category.name));
     return Array.from(new Set(categoryNames));
   }, [restaurants]);
 
   const filtered = useMemo(() => {
     const keyword = search.toLowerCase();
-    return restaurants.filter((restaurant) => {
+    return (restaurants ?? []).filter((restaurant) => {
       const matchesSearch =
         restaurant.name.toLowerCase().includes(keyword) ||
         restaurant.categories.some((category) => category.name.toLowerCase().includes(keyword));
