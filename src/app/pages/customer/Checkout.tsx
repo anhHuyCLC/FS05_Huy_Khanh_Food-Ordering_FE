@@ -665,9 +665,12 @@ export default function Checkout() {
                       restaurantId: restaurantId,
                       totalAmount: subtotal
                     });
-                    if (res.success) {
+                    // Hỗ trợ cả định dạng bọc { success, data } và định dạng phẳng { discountAmount }
+                    const hasDiscount = res.success ? (res.data?.discountAmount !== undefined) : (res.discountAmount !== undefined);
+                    const discountVal = res.success ? res.data.discountAmount : res.discountAmount;
+                    if (hasDiscount) {
                       setPromoApplied(true);
-                      setDiscountAmount(res.data.discountAmount);
+                      setDiscountAmount(discountVal);
                       toast.success("Áp dụng mã giảm giá thành công!");
                     }
                   } catch (error: any) {
