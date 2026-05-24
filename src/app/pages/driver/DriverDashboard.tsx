@@ -362,14 +362,14 @@ export default function DriverDashboard() {
   const totalActive   = activeOrders.length;
   const statusCfg     = STATUS_CFG[status as keyof typeof STATUS_CFG] ?? STATUS_CFG.offline;
   const sectionTitle  = t(SECTION_LABELS[currentSection] ?? "driver_dashboard.driver_dashboard");
-  const firstName     = profile?.profile.fullName?.split(" ").at(-1) ?? "";
+  const firstName     = profile?.profile?.fullName?.split(" ").at(-1) ?? "";
 
   return (
     <DashboardLayout
       navItems={navItems}
       role="driver"
-      userName={profile?.profile.fullName ?? "Tài xế"}
-      userAvatar={profile?.profile.fullName?.slice(0, 2).toUpperCase() ?? "TX"}
+      userName={profile?.profile?.fullName ?? "Tài xế"}
+      userAvatar={profile?.profile?.fullName?.slice(0, 2).toUpperCase() ?? "TX"}
     >
       <div className="flex flex-col gap-5 pb-6">
 
@@ -399,7 +399,7 @@ export default function DriverDashboard() {
                   <>Xin chào, <span className="text-orange-400">{firstName}</span> 👋</>
                 ) : t("driver_dashboard.welcome_driver")}
               </h1>
-              {profile?.profile.phone && (
+              {profile?.profile?.phone && (
                 <p className="text-xs text-neutral-500 mt-0.5">{profile.profile.phone}</p>
               )}
             </div>
@@ -440,14 +440,14 @@ export default function DriverDashboard() {
           />
           <StatCard
             label={t("driver_dashboard.current_location")}
-            value={locationCoords ? `${locationCoords.latitude.toFixed(3)}°` : "—"}
-            sub={locationCoords ? `${locationCoords.longitude.toFixed(3)}°` : t("driver_dashboard.live_tracking")}
+            value={locationCoords?.latitude != null  ? `${locationCoords.latitude.toFixed(3)}°` : "—"}
+            sub={locationCoords?.longitude != null ? `${locationCoords.longitude.toFixed(3)}°` : t("driver_dashboard.live_tracking")}
             accent="violet"
             icon={MapPin}
           />
           <StatCard
             label={t("driver_dashboard.weekly_earnings")}
-            value={earnings ? `${earnings.totalEarned.toLocaleString("vi-VN")}đ` : "—"}
+            value={earnings ? `${(earnings.totalEarned ?? 0).toLocaleString("vi-VN")}đ` : "—"}
             sub={`${earnings?.completedOrders ?? 0} ${t("driver_dashboard.completed_orders")}`}
             accent="emerald"
             icon={DollarSign}
@@ -843,7 +843,7 @@ export default function DriverDashboard() {
                   <p className="text-[8px] uppercase tracking-widest text-neutral-400 font-bold">Coordinates</p>
                   <p className="text-[10px] font-mono text-neutral-700 mt-0.5">
                     {locationCoords
-                      ? `${locationCoords.latitude.toFixed(4)}, ${locationCoords.longitude.toFixed(4)}`
+                      ? `${Number(locationCoords.latitude ?? 0).toFixed(4)}, ${Number(locationCoords.longitude ?? 0).toFixed(4)}`
                       : t("driver_dashboard.no_location_record")}
                   </p>
                 </div>
