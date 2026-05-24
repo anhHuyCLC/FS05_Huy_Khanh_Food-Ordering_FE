@@ -1,68 +1,129 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
-import { adminOrders, revenueData } from "../../data/mock";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Store, Bike, ShoppingBag, TrendingUp, AlertTriangle, CheckCircle, XCircle, Eye, Search, Filter, Shield, Activity } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Can } from "../../components/auth/Can";
 import { PERMISSIONS } from "../../constants/permissions";
-
-const kpis = [
-  { label: "Total Revenue", value: "$124,840", change: "+18.2%", up: true, icon: TrendingUp, color: "#FF4500", sub: "This month" },
-  { label: "Active Orders", value: "284", change: "+24", up: true, icon: ShoppingBag, color: "#10B981", sub: "Right now" },
-  { label: "Restaurants", value: "512", change: "+12", up: true, icon: Store, color: "#6366F1", sub: "3 pending approval" },
-  { label: "Drivers Online", value: "148", change: "-8%", up: false, icon: Bike, color: "#F59E0B", sub: "of 380 total" },
-];
-
-const pendingRestaurants = [
-  { name: "The Spice Garden", cuisine: "Indian", owner: "Raj Patel", city: "New York", applied: "2h ago" },
-  { name: "Le Petit Bistro", cuisine: "French", owner: "Claire Dupont", city: "Boston", applied: "5h ago" },
-  { name: "Dragon Palace", cuisine: "Chinese", owner: "Wei Zhang", city: "NYC", applied: "1d ago" },
-];
-
-const fraudAlerts = [
-  { id: "#F-142", type: "Fake Order", detail: "10 orders from same IP in 5 min", risk: "High", time: "12 min ago" },
-  { id: "#F-141", type: "Rating Abuse", detail: "Restaurant mass-rating manipulation", risk: "Medium", time: "3h ago" },
-];
-
-const pieData = [
-  { name: "Burgers", value: 28, color: "#FF4500" },
-  { name: "Pizza", value: 22, color: "#6366F1" },
-  { name: "Asian", value: 18, color: "#F59E0B" },
-  { name: "Healthy", value: 14, color: "#10B981" },
-  { name: "Other", value: 18, color: "#E5E7EB" },
-];
+import { adminService, type PendingRestaurant, type FraudAlert, type CategoryPieItem, type AdminUser, type AdminOrderItem, type SystemKPIs } from "../../services/adminService";
+import { toast } from "sonner";
+import { useAuthStore } from "../../stores/authStore";
 
 const statusColors: Record<string, { color: string; bg: string }> = {
   delivered: { color: "#10B981", bg: "#F0FDF4" },
   on_way: { color: "#6366F1", bg: "#EEF2FF" },
   preparing: { color: "#F59E0B", bg: "#FFFBEB" },
   cancelled: { color: "#EF4444", bg: "#FEF2F2" },
+  completed: { color: "#10B981", bg: "#F0FDF4" },
+  pending: { color: "#6366F1", bg: "#EEF2FF" },
+  accepted: { color: "#F59E0B", bg: "#FFFBEB" },
+  ready: { color: "#10B981", bg: "#F0FDF4" },
+  delivering: { color: "#10B981", bg: "#F0FDF4" },
 };
 
 export default function AdminDashboard() {
-  const [tab, setTab] = useState("All");
   const { t } = useTranslation();
+  const currentUser = useAuthStore((state) => state.user);
 
-  const translatedKpis = [
-    { ...kpis[0], label: t('admin.total_revenue'), sub: t('admin.this_month') },
-    { ...kpis[1], label: t('admin.active_orders'), sub: t('admin.right_now') },
-    { ...kpis[2], label: t('admin.restaurants'), sub: `3 ${t('admin.pending_approval')}` },
-    { ...kpis[3], label: t('admin.drivers_online'), sub: t('admin.of_total') },
-  ];
+  // States
+  const [kpis, setKpis] = useState<SystemKPIs | null>(null);
+  const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [pieData, setPieData] = useState<CategoryPieItem[]>([]);
+  const [orders, setOrders] = useState<AdminOrderItem[]>([]);
+  const [pendingRestaurants, setPendingRestaurants] = useState<PendingRestaurant[]>([]);
+  const [fraudAlerts, setFraudAlerts] = useState<FraudAlert[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // Filter and search states
+  const [tab, setTab] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
+  // Fetch all admin data from BE APIs
+  const fetchData = useCallback(async () => {
+    try {
+      const [kpiRes, revRes, pieRes, orderRes, restRes, fraudRes, userRes] = await Promise.all([
+        adminService.getKPIs(),
+        adminService.getRevenueData(),
+        adminService.getCategoryPieData(),
+        adminService.getOrders(),
+        adminService.getPendingRestaurants(),
+        adminService.getFraudAlerts(),
+        adminService.getUsers(),
+      ]);
+
+      setKpis(kpiRes);
+      setRevenueData(revRes);
+      setPieData(pieRes);
+      setOrders(orderRes);
+      setPendingRestaurants(restRes);
+      setFraudAlerts(fraudRes);
+      setUsers(userRes);
+    } catch (e) {
+      console.error("Failed to load admin dashboard data", e);
+      toast.error("Không thể kết nối đến API hệ thống quản trị.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Actions
+  const handleApproveRestaurant = async (id: string) => {
+    try {
+      await adminService.approveRestaurant(id);
+      toast.success("Phê duyệt nhà hàng thành công!");
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Không thể duyệt nhà hàng.");
+    }
+  };
+
+  const handleRejectRestaurant = async (id: string) => {
+    try {
+      await adminService.rejectRestaurant(id);
+      toast.success("Đã từ chối đơn ứng tuyển của nhà hàng.");
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Không thể từ chối nhà hàng.");
+    }
+  };
+
+  const handleToggleUserStatus = async (email: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "active" ? "suspended" : "active";
+    try {
+      await adminService.updateUserStatus(email, nextStatus);
+      toast.success(`Đã ${nextStatus === "suspended" ? "tạm khóa" : "mở khóa"} người dùng thành công!`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Không thể cập nhật trạng thái người dùng.");
+    }
+  };
+
+  // Format Helper
+  const formatMoney = (amount: number) => {
+    if (amount >= 1000) {
+      return `${amount.toLocaleString("vi-VN")}đ`;
+    }
+    return `$${amount.toFixed(2)}`;
+  };
+
+  // Nav Items
   const translatedNavItems = [
     { icon: "📊", label: t('admin.nav.dashboard'), path: "/admin" },
     { icon: "👥", label: t('admin.nav.users'), path: "/admin/users" },
-    { icon: "🍴", label: t('admin.nav.restaurants'), path: "/admin/restaurants", badge: 3 },
+    { icon: "🍴", label: t('admin.nav.restaurants'), path: "/admin/restaurants", badge: pendingRestaurants.length || undefined },
     { icon: "🚴", label: t('admin.nav.drivers'), path: "/admin/drivers" },
     { icon: "🛒", label: t('admin.nav.orders'), path: "/admin/orders" },
     { icon: "💰", label: t('admin.nav.revenue'), path: "/admin/revenue" },
-    { icon: "🔍", label: t('admin.nav.fraud_detection'), path: "/admin/fraud", badge: 2 },
+    { icon: "🔍", label: t('admin.nav.fraud_detection'), path: "/admin/fraud", badge: fraudAlerts.length || undefined },
     { icon: "📢", label: t('admin.nav.community'), path: "/admin/community" },
     { icon: "⚙️", label: t('admin.nav.settings'), path: "/admin/settings" },
   ];
+
   const navPermissions: Record<string, string> = {
     "/admin": PERMISSIONS.ADMIN_MANAGEMENT.READ,
     "/admin/users": PERMISSIONS.USER_MANAGEMENT.READ,
@@ -74,35 +135,85 @@ export default function AdminDashboard() {
     "/admin/community": PERMISSIONS.CHAT.READ,
     "/admin/settings": PERMISSIONS.ADMIN_MANAGEMENT.UPDATE,
   };
+
   const authorizedNavItems = translatedNavItems.map((item) => ({
     ...item,
     permission: navPermissions[item.path],
   }));
 
+  // KPI Items mapping
+  const kpiItems = kpis ? [
+    { label: t('admin.total_revenue'), value: formatMoney(kpis.totalRevenue), icon: TrendingUp, color: "#6366F1", sub: t('admin.this_month'), change: "+18.2%", up: true },
+    { label: t('admin.active_orders'), value: String(kpis.activeOrders), icon: ShoppingBag, color: "#10B981", sub: t('admin.right_now'), change: "+24", up: true },
+    { label: t('admin.restaurants'), value: String(kpis.totalRestaurants), icon: Store, color: "#FF4500", sub: `${kpis.pendingRestaurants} ${t('admin.pending_approval')}`, change: `+${kpis.pendingRestaurants} mới`, up: kpis.pendingRestaurants > 0 },
+    { label: t('admin.drivers_online'), value: String(kpis.driversOnline), icon: Bike, color: "#F59E0B", sub: `của ${kpis.totalDrivers} tài xế`, change: "Hoạt động", up: true },
+  ] : [];
+
+  // Filter orders
+  const filteredOrders = orders.filter((order) => {
+    if (tab === t('admin.tabs.active') || tab === "Active") {
+      return order.status === "on_way" || order.status === "preparing" || order.status === "pending" || order.status === "accepted" || order.status === "ready" || order.status === "delivering";
+    }
+    if (tab === t('admin.tabs.completed') || tab === "Completed") {
+      return order.status === "delivered" || order.status === "completed";
+    }
+    return true;
+  });
+
+  // Search users
+  const filteredUsers = users.filter((user) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      user.name.toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower) ||
+      user.role.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Full Initial Screen Loader
+  if (loading && !kpis) {
+    return (
+      <DashboardLayout navItems={authorizedNavItems} role="admin" userName={currentUser?.fullName || "Admin"} userAvatar="AU">
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-[#6366F1] border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-500 text-sm">Đang tải dữ liệu Dashboard Admin...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
-    <DashboardLayout navItems={authorizedNavItems} role="admin" userName="Admin User" userAvatar="AU">
+    <DashboardLayout navItems={authorizedNavItems} role="admin" userName={currentUser?.fullName || "Admin"} userAvatar="AU">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-gray-900">{t('admin.admin_panel')}</h1>
-          <p className="text-gray-500 text-sm mt-0.5">May 11, 2026 · {t('admin.platform_overview')}</p>
+          <p className="text-gray-500 text-sm mt-0.5">
+            {new Date().toLocaleDateString("vi-VN", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} · {t('admin.platform_overview')}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-50 border border-purple-200">
-            <Activity className="w-4 h-4 text-purple-500" />
+            <Activity className="w-4 h-4 text-purple-500 animate-pulse" />
             <span className="text-sm font-semibold text-purple-600">{t('admin.system_normal')}</span>
           </div>
-          <button className="p-2.5 rounded-xl bg-red-50 border border-red-200 relative">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-bold">2</span>
-          </button>
+          {fraudAlerts.length > 0 && (
+            <button className="p-2.5 rounded-xl bg-red-50 border border-red-200 relative animate-pulse">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-bold">
+                {fraudAlerts.length}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {translatedKpis.map((k) => (
-          <div key={k.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all">
+        {kpiItems.map((k) => (
+          <div key={k.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm text-gray-500">{k.label}</p>
@@ -131,7 +242,7 @@ export default function AdminDashboard() {
             </div>
             <div className="flex gap-2">
               {["7M", "12M", "1Y"].map((p) => (
-                <button key={p} className={`px-3 py-1 rounded-lg text-xs font-medium ${p === "7M" ? "text-white" : "text-gray-400 hover:bg-gray-50"}`} style={p === "7M" ? { background: "#6366F1" } : {}}>
+                <button key={p} className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${p === "7M" ? "text-white" : "text-gray-400 hover:bg-gray-50"}`} style={p === "7M" ? { background: "#6366F1" } : {}}>
                   {p}
                 </button>
               ))}
@@ -160,7 +271,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-center mb-4">
             <PieChart width={160} height={160}>
               <Pie data={pieData} cx={75} cy={75} innerRadius={50} outerRadius={75} dataKey="value" strokeWidth={0}>
-                {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                {pieData.map((entry, i) => <Cell key={i} fill={entry.color || "#6366F1"} />)}
               </Pie>
             </PieChart>
           </div>
@@ -189,7 +300,7 @@ export default function AdminDashboard() {
                 <button
                   key={tItem}
                   onClick={() => setTab(tItem)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${tab === tItem ? "text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${tab === tItem ? "text-white" : "text-gray-500 hover:bg-gray-50"}`}
                   style={tab === tItem ? { background: "#6366F1" } : {}}
                 >
                   {tItem}
@@ -207,23 +318,31 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {adminOrders.map((order) => {
-                  const sc = statusColors[order.status];
-                  return (
-                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-3 text-sm font-bold text-gray-700">{order.id}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{order.customer}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{order.restaurant}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{order.driver}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-800">{order.amount}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2.5 py-1 rounded-xl text-xs font-semibold" style={{ background: sc.bg, color: sc.color }}>
-                          {t(`admin.status_${order.status}`)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredOrders.length > 0 ? (
+                  filteredOrders.map((order) => {
+                    const sc = statusColors[order.status] || { color: "#9ca3af", bg: "#f3f4f6" };
+                    return (
+                      <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-4 py-3 text-sm font-bold text-gray-700">{order.id}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.customer}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.restaurant}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.driver || "Chưa nhận"}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-800">{order.amount}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2.5 py-1 rounded-xl text-xs font-semibold" style={{ background: sc.bg, color: sc.color }}>
+                            {t(`admin.status_${order.status}`) || order.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="text-center py-6 text-sm text-gray-400">
+                      Không tìm thấy đơn hàng nào.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -235,34 +354,44 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-50">
               <h2 className="font-bold text-gray-900 text-sm">{t('admin.pending_restaurants')}</h2>
-              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-[#FF4500]">3</span>
+              {pendingRestaurants.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-[#FF4500]">
+                  {pendingRestaurants.length}
+                </span>
+              )}
             </div>
             <div className="divide-y divide-gray-50">
-              {pendingRestaurants.map((r) => (
-                <div key={r.name} className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{r.name}</p>
-                      <p className="text-xs text-gray-400">{r.cuisine} · {r.city} · {r.applied}</p>
+              {pendingRestaurants.length > 0 ? (
+                pendingRestaurants.map((r) => (
+                  <div key={r.id} className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{r.name}</p>
+                        <p className="text-xs text-gray-400">{r.cuisine} · {r.city} · {r.applied}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
+                        <button onClick={() => handleApproveRestaurant(r.id)} className="flex-1 py-1.5 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-1 hover:opacity-95 transition-opacity" style={{ background: "#10B981" }}>
+                          <CheckCircle className="w-3 h-3" /> {t('admin.approve')}
+                        </button>
+                      </Can>
+                      <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.DELETE}>
+                        <button onClick={() => handleRejectRestaurant(r.id)} className="flex-1 py-1.5 rounded-xl text-xs font-semibold text-red-500 border border-red-200 flex items-center justify-center gap-1 hover:bg-red-50 transition-colors">
+                          <XCircle className="w-3 h-3" /> {t('admin.reject')}
+                        </button>
+                      </Can>
+                      <button className="py-1.5 px-2.5 rounded-xl text-xs text-gray-400 border border-gray-200 hover:bg-gray-50 transition-colors">
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
-                      <button className="flex-1 py-1.5 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-1" style={{ background: "#10B981" }}>
-                        <CheckCircle className="w-3 h-3" /> {t('admin.approve')}
-                      </button>
-                    </Can>
-                    <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.DELETE}>
-                      <button className="flex-1 py-1.5 rounded-xl text-xs font-semibold text-red-500 border border-red-200 flex items-center justify-center gap-1 hover:bg-red-50">
-                        <XCircle className="w-3 h-3" /> {t('admin.reject')}
-                      </button>
-                    </Can>
-                    <button className="py-1.5 px-2.5 rounded-xl text-xs text-gray-400 border border-gray-200 hover:bg-gray-50">
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                ))
+              ) : (
+                <div className="p-6 text-center text-sm text-gray-400">
+                  Không có hồ sơ quán ăn cần phê duyệt.
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -273,26 +402,36 @@ export default function AdminDashboard() {
                 <Shield className="w-4 h-4 text-red-500" />
                 <h2 className="font-bold text-gray-900 text-sm">{t('admin.fraud_alerts')}</h2>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-500">2 {t('admin.alerts')}</span>
+              {fraudAlerts.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-500">
+                  {fraudAlerts.length} {t('admin.alerts')}
+                </span>
+              )}
             </div>
             <div className="divide-y divide-gray-50">
-              {fraudAlerts.map((alert) => (
-                <div key={alert.id} className="p-4">
-                  <div className="flex items-start justify-between mb-1">
-                    <p className="text-sm font-semibold text-gray-800">{alert.type}</p>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${alert.risk === "High" ? "bg-red-100 text-red-500" : "bg-yellow-100 text-yellow-600"}`}>
-                      {alert.risk}
-                    </span>
+              {fraudAlerts.length > 0 ? (
+                fraudAlerts.map((alert) => (
+                  <div key={alert.id} className="p-4">
+                    <div className="flex items-start justify-between mb-1">
+                      <p className="text-sm font-semibold text-gray-800">{alert.type}</p>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${alert.risk === "High" ? "bg-red-100 text-red-500" : "bg-yellow-100 text-yellow-600"}`}>
+                        {alert.risk}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-2">{alert.detail}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">{alert.id} · {alert.time}</span>
+                      <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
+                        <button className="text-xs font-semibold text-red-500 hover:underline">{t('admin.investigate')}</button>
+                      </Can>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-400 mb-2">{alert.detail}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">{alert.id} · {alert.time}</span>
-                    <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
-                      <button className="text-xs font-semibold text-red-500 hover:underline">{t('admin.investigate')}</button>
-                    </Can>
-                  </div>
+                ))
+              ) : (
+                <div className="p-6 text-center text-sm text-gray-400">
+                  Hệ thống bảo mật an toàn. Không có cảnh báo.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -303,11 +442,16 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between p-5 border-b border-gray-50">
           <h2 className="font-bold text-gray-900">{t('admin.users')}</h2>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-gray-100 focus-within:border-indigo-200 transition-colors">
               <Search className="w-4 h-4 text-gray-400" />
-              <input placeholder={t('admin.search_users')} className="bg-transparent text-sm outline-none text-gray-600 w-36" />
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={t('admin.search_users')}
+                className="bg-transparent text-sm outline-none text-gray-600 w-36"
+              />
             </div>
-            <button className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-600 border border-gray-200 hover:bg-gray-50">
+            <button className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors">
               <Filter className="w-4 h-4" /> {t('admin.filter')}
             </button>
           </div>
@@ -322,49 +466,51 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {[
-                { name: "Sarah Chen", email: "sarah@email.com", role: "Customer", orders: 84, joined: "Mar 2024", status: "active" },
-                { name: "Raj Patel", email: "raj@food.com", role: "Restaurant", orders: 0, joined: "Jan 2025", status: "active" },
-                { name: "Alex Kowalski", email: "alex@ride.com", role: "Driver", orders: 1342, joined: "Jun 2024", status: "active" },
-                { name: "Marcus Lee", email: "marcus@email.com", role: "Customer", orders: 12, joined: "Feb 2026", status: "suspended" },
-                { name: "Emily Park", email: "emily@email.com", role: "Customer", orders: 47, joined: "Nov 2024", status: "active" },
-              ].map((user) => (
-                <tr key={user.email} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: "linear-gradient(135deg, #6366F1, #818CF8)" }}>
-                        {user.name[0]}
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((user) => (
+                  <tr key={user.email} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: "linear-gradient(135deg, #6366F1, #818CF8)" }}>
+                          {user.name[0]}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-800">{user.name}</span>
                       </div>
-                      <span className="text-sm font-semibold text-gray-800">{user.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-500">{user.email}</td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2.5 py-1 rounded-xl text-xs font-semibold ${user.role === "Driver" ? "bg-green-100 text-green-600" : user.role === "Restaurant" ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"}`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-600">{user.orders.toLocaleString()}</td>
-                  <td className="px-5 py-3 text-sm text-gray-400">{user.joined}</td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${user.status === "active" ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500"}`}>
-                      {user.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-2">
-                      <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      <Can permission={PERMISSIONS.USER_MANAGEMENT.UPDATE}>
-                        <button className="px-2.5 py-1 rounded-lg text-xs font-medium text-red-400 border border-red-100 hover:bg-red-50 transition-colors">
-                          {user.status === "active" ? t('admin.suspend') : t('admin.restore')}
+                    </td>
+                    <td className="px-5 py-3 text-sm text-gray-500">{user.email}</td>
+                    <td className="px-5 py-3">
+                      <span className={`px-2.5 py-1 rounded-xl text-xs font-semibold ${user.role === "Driver" ? "bg-green-100 text-green-600" : user.role === "Restaurant" ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"}`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-sm text-gray-600">{user.orders.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-sm text-gray-400">{user.joined}</td>
+                    <td className="px-5 py-3">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${user.status === "active" ? "bg-green-100 text-green-600" : "bg-red-100 text-red-500"}`}>
+                        {user.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2">
+                        <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
+                          <Eye className="w-3.5 h-3.5" />
                         </button>
-                      </Can>
-                    </div>
+                        <Can permission={PERMISSIONS.USER_MANAGEMENT.UPDATE}>
+                          <button onClick={() => handleToggleUserStatus(user.email, user.status)} className="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-400 border border-red-100 hover:bg-red-50 transition-colors">
+                            {user.status === "active" ? t('admin.suspend') : t('admin.restore')}
+                          </button>
+                        </Can>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="text-center py-6 text-sm text-gray-400">
+                    Không tìm thấy tài khoản người dùng.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

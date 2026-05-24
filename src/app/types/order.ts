@@ -59,6 +59,7 @@ export interface Order {
   deliveryLongitude?: number;
   note?: string;
   cancelReason?: string;
+  customerPhone?: string | null;
   createdAt: string;
   updatedAt: string;
   orderItems?: OrderItem[];
@@ -75,6 +76,7 @@ export interface Order {
     name: string;
     avatar?: string;
     fullName?: string;
+    phoneNumber?: string | null;
   };
   driver?: {
     id: string;

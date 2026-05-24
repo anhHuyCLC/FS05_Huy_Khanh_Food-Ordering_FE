@@ -104,7 +104,11 @@ apiClient.interceptors.response.use(
     }
 
     if (status === 403 && window.location.pathname !== "/403") {
-      window.location.assign("/403");
+      // Chỉ redirect khi request không tự xử lý lỗi 403
+      const skipRedirect = (originalRequest as any)?._skipForbiddenRedirect;
+      if (!skipRedirect) {
+        window.location.assign("/403");
+      }
     }
 
     return Promise.reject(error);
