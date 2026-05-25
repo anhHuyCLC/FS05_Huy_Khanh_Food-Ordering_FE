@@ -1,61 +1,185 @@
-import apiClient from './apiClient';
-import type { Order } from '../types/order';
+// import apiClient from "./apiClient";
 
-export interface DriverProfile {
-  id: string;
-  currentStatus: 'online' | 'busy' | 'offline';
-  walletBalance: number;
-  rating: number;
+import type {
+  ApiResponse,
+  DriverProfile,
+  DriverStatus,
+  Order,
+  OrderAction,
+  DeliveryStatus,
+  HeatmapItem,
+  RouteItem,
+  Earnings,
+  EarningsPeriod,
+} from "../types/driver";
+
+
+
+/* ───────────────── REQUEST ───────────────── */
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+
+  const token = localStorage.getItem("token");
+  // console.log("TOKEN =", token);
+const BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api/v1/driver";
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+
+    headers: {
+      "Content-Type": "application/json",
+
+      ...(token
+        ? { Authorization: `Bearer ${token}` }
+        : {}),
+
+      ...options.headers,
+    },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+
+    throw new Error(
+      err.message ?? `HTTP ${res.status}`
+    );
+  }
+
+  return res.json();
 }
 
-export const driverService = {
-  getProfile: async (): Promise<DriverProfile> => {
-    const response = await apiClient.get('/v1/driver/profile');
-    return response.data?.data || response.data;
-  },
+/* ───────────────── PROFILE ───────────────── */
 
-  updateStatus: async (status: 'online' | 'offline' | 'busy'): Promise<any> => {
-    const response = await apiClient.patch('/v1/driver/status', { status });
-    return response.data?.data || response.data;
-  },
+export const getDriverProfile =
+  () => request<DriverProfile>("/profile");
 
-  getAvailableOrders: async (): Promise<Order[]> => {
-    const response = await apiClient.get('/v1/driver/orders/available');
-    return response.data?.data || response.data || [];
-  },
+/* ───────────────── STATUS ───────────────── */
 
-  getActiveOrders: async (): Promise<Order[]> => {
-    const response = await apiClient.get('/v1/driver/orders/active');
-    return response.data?.data || response.data || [];
-  },
+export const updateDriverStatus = (
+  status: DriverStatus
+) =>
+  request<null>("/status", {
+    method: "PATCH",
 
-  getOrderHistory: async (skip = 0, take = 20): Promise<Order[]> => {
-    const response = await apiClient.get('/v1/driver/orders/history', {
-      params: { skip, take }
-    });
-    return response.data?.data || response.data || [];
-  },
+    body: JSON.stringify({ status }),
+  });
 
-  respondToOrder: async (orderId: string, action: 'accepted' | 'rejected', reason?: string): Promise<any> => {
-    const response = await apiClient.post(`/v1/driver/orders/${orderId}/respond`, {
-      action,
-      reason
-    });
-    return response.data?.data || response.data;
-  },
+/* ───────────────── ORDERS ───────────────── */
 
-  updateDeliveryStatus: async (orderId: string, status: 'picked_up' | 'delivering' | 'completed'): Promise<any> => {
-    const response = await apiClient.patch(`/v1/driver/orders/${orderId}/delivery-status`, {
-      status
-    });
-    return response.data?.data || response.data;
-  },
+export const getAvailableOrders =
+  () => request<Order[]>("/orders/available");
 
-  updateLocation: async (latitude: number, longitude: number): Promise<any> => {
-    const response = await apiClient.patch('/v1/driver/location', {
+export const getActiveOrders =
+  () => request<Order[]>("/orders/active");
+
+export const getOrderHistory = (
+  skip = 0,
+  take = 20
+) =>
+  request<Order[]>(
+    `/orders/history?skip=${skip}&take=${take}`
+  );
+
+export const respondOrder = (
+  orderId: string,
+  action: OrderAction,
+  reason?: string
+) =>
+  request<Order>(
+    `/orders/${orderId}/respond`,
+    {
+      method: "POST",
+
+      body: JSON.stringify({
+        action,
+        reason,
+      }),
+    }
+  );
+
+export const updateDeliveryStatus = (
+  orderId: string,
+  status: DeliveryStatus
+) =>
+  request<null>(
+    `/orders/${orderId}/delivery-status`,
+    {
+      method: "PATCH",
+
+      body: JSON.stringify({ status }),
+    }
+  );
+
+/* ───────────────── LOCATION ───────────────── */
+
+export const updateLocation = (
+  latitude: number,
+  longitude: number
+) =>
+  request<null>("/location", {
+    method: "PATCH",
+
+    body: JSON.stringify({
       latitude,
-      longitude
-    });
-    return response.data?.data || response.data;
-  }
+      longitude,
+    }),
+  });
+
+export const getMyLocation =
+  () => request<{ latitude: number; longitude: number }>(
+    "/location"
+  );
+
+export const getDriverLocation = (
+  driverId: string
+) =>
+  request<{ latitude: number; longitude: number }>(
+    `/location/${driverId}`
+  );
+
+/* ───────────────── MAP ───────────────── */
+
+export const getDemandHeatmap =
+  () => request<HeatmapItem[]>("/heatmap");
+
+export const optimizeRoute = (
+  orderIds?: string[]
+) =>
+  request<{ route: RouteItem[] }>(
+    "/route-optimize",
+    {
+      method: "POST",
+
+      body: JSON.stringify({
+        orderIds,
+      }),
+    }
+  );
+
+/* ───────────────── EARNINGS ───────────────── */
+
+export const getEarnings = (
+  period?: EarningsPeriod,
+  from?: string,
+  to?: string
+) => {
+
+  const params = new URLSearchParams();
+
+  if (period)
+    params.set("period", period);
+
+  if (from)
+    params.set("from", from);
+
+  if (to)
+    params.set("to", to);
+
+  const qs = params.toString();
+
+  return request<Earnings>(
+    `/earnings${qs ? `?${qs}` : ""}`
+  );
 };
