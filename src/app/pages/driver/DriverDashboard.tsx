@@ -289,6 +289,18 @@ export default function DriverDashboard() {
     status: "completed" as const,
   }));
 
+function StatCard({
+  label, value, sub, accent = "orange", icon: Icon,
+}: {
+  label: string; value: React.ReactNode; sub?: string;
+  accent?: "orange" | "sky" | "violet" | "emerald"; icon?: React.ElementType;
+}) {
+  const styles = {
+    orange:  { border: "border-l-orange-500",  bg: "bg-orange-50",  ic: "text-orange-600"  },
+    sky:     { border: "border-l-sky-500",     bg: "bg-sky-50",     ic: "text-sky-600"     },
+    violet:  { border: "border-l-violet-500",  bg: "bg-violet-50",  ic: "text-violet-600"  },
+    emerald: { border: "border-l-emerald-500", bg: "bg-emerald-50", ic: "text-emerald-600" },
+  }[accent];
   return (
     <DashboardLayout navItems={authorizedNavItems} role="driver" userName={currentUser?.fullName || t('driver_dashboard.driver_fallback')} userAvatar="DR">
       {/* Header */}
@@ -311,6 +323,14 @@ export default function DriverDashboard() {
           </span>
         </div>
       </div>
+      {Icon && (
+        <div className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${styles.bg} ${styles.ic}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+      )}
+    </div>
+  );
+}
 
       {/* Pending delivery request */}
       {pendingOrder && online && !activeDelivery && (
@@ -337,6 +357,17 @@ export default function DriverDashboard() {
               <p className="text-3xl font-black text-white">{formatMoney(pendingOrder.deliveryFee || 0)}</p>
               <p className="text-gray-400 text-sm">{t('driver_dashboard.est_earnings')}</p>
             </div>
+            {order.deliveryAddress && (
+              <p className="text-[10px] text-neutral-500 flex items-center gap-1 truncate">
+                <MapPin className="w-2.5 h-2.5 shrink-0" />{order.deliveryAddress}
+              </p>
+            )}
+            {order.customer?.fullName && (
+              <p className="text-[10px] text-neutral-400 mt-0.5 truncate">{order.customer.fullName}</p>
+            )}
+            {itemCount > 0 && (
+              <p className="text-[10px] text-neutral-400 mt-0.5">{itemCount} {t("driver_dashboard.items")}</p>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-4 mb-6">
             {[
@@ -379,7 +410,169 @@ export default function DriverDashboard() {
             </button>
           </div>
         </div>
-      )}
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={onAccept}
+            className="flex-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:scale-95 py-1.5 text-[10px] font-bold text-white transition-all"
+          >
+            {t("driver_dashboard.accept")}
+          </button>
+          <button
+            onClick={onReject}
+            className="flex-1 rounded-lg border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 active:scale-95 py-1.5 text-[10px] font-bold text-neutral-600 transition-all"
+          >
+            {t("driver_dashboard.skip")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActiveOrderCard({
+  order, onUpdate, t,
+}: {
+  order: any; onUpdate: (s: string) => void; t: (k: string) => string;
+}) {
+  const steps = [
+    { key: "picked_up",  emoji: "📦", label: t("driver_dashboard.mark_picked_up"),  activeCls: "bg-sky-500 text-white border-sky-500",       inactiveCls: "border-sky-100 text-sky-700 bg-sky-50 hover:bg-sky-100"         },
+    { key: "delivering", emoji: "🚗", label: t("driver_dashboard.mark_delivering"),  activeCls: "bg-amber-500 text-white border-amber-500",    inactiveCls: "border-amber-100 text-amber-700 bg-amber-50 hover:bg-amber-100" },
+    { key: "completed",  emoji: "✅", label: t("driver_dashboard.mark_completed"),   activeCls: "bg-emerald-600 text-white border-emerald-600", inactiveCls: "border-emerald-100 text-emerald-700 bg-emerald-50 hover:bg-emerald-100" },
+  ];
+  const badgeMap: Record<string, string> = {
+    picked_up:  "bg-sky-100 text-sky-700",
+    delivering: "bg-amber-100 text-amber-700",
+    completed:  "bg-emerald-100 text-emerald-700",
+  };
+  return (
+    <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+      <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-xs font-bold text-neutral-900 truncate">{order.restaurant?.name ?? "—"}</h3>
+          {order.deliveryAddress && (
+            <p className="text-[10px] text-neutral-500 flex items-center gap-1 mt-0.5">
+              <MapPin className="w-2.5 h-2.5 shrink-0" />{order.deliveryAddress}
+            </p>
+          )}
+          {order.customer?.fullName && (
+            <p className="text-[10px] text-neutral-400 truncate">{order.customer.fullName} · {order.customer.phone}</p>
+          )}
+        </div>
+        <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${badgeMap[order.status] ?? "bg-neutral-100 text-neutral-600"}`}>
+          {steps.find((s) => s.key === order.status)?.emoji} {order.status}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-px bg-neutral-100 border-t border-neutral-100">
+        {steps.map(({ key, emoji, label, activeCls, inactiveCls }) => (
+          <button
+            key={key}
+            onClick={() => onUpdate(key)}
+            className={`py-1.5 text-[9px] font-bold border transition-all ${order.status === key ? activeCls : `bg-white ${inactiveCls}`}`}
+          >
+            {emoji} {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-neutral-100 py-8 text-center">
+      <Icon className="w-7 h-7 text-neutral-200 mb-2" />
+      <p className="text-[10px] text-neutral-400">{text}</p>
+    </div>
+  );
+}
+
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-700">
+      <div className="flex items-center gap-2">
+        <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+        {message}
+      </div>
+      <button onClick={onClose} className="text-emerald-400 hover:text-emerald-600 text-base leading-none ml-2">×</button>
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
+
+export default function DriverDashboard() {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const dispatch = useAppDispatch();
+
+  const currentSection = useMemo(() => {
+    const path = location.pathname.replace("/driver-dashboard", "").replace(/^\//, "");
+    return path || "overview";
+  }, [location.pathname]);
+
+  const {
+    profile, status, availableOrders, activeOrders,
+    heatmap, route, earnings, locationCoords, loading, error,
+  } = useAppSelector((s) => s.driver);
+  const token = useAppSelector((s) => s.auth.token ?? localStorage.getItem("token") ?? "");
+
+  const [message, setMessage] = useState<string | null>(null);
+  const showMsg = (msg: string) => { setMessage(msg); setTimeout(() => setMessage(null), 4000); };
+
+  // ── Nav ──────────────────────────────────────────────────────────────────────
+  const navItems = [
+    { icon: "🏠", label: t("driver_dashboard.nav.home"),        path: "/driver-dashboard",             permission: "driver:dashboard:view"    },
+    { icon: "📦", label: t("driver_dashboard.nav.deliveries"),  path: "/driver-dashboard/deliveries",  permission: "delivery:view"             },
+    { icon: "💰", label: t("driver_dashboard.nav.earnings"),    path: "/driver-dashboard/earnings",    permission: "earning:view"              },
+    { icon: "🗺️", label: t("driver_dashboard.nav.heatmap"),    path: "/driver-dashboard/heatmap",     permission: "delivery:heatmap:view"     },
+    { icon: "📊", label: t("driver_dashboard.nav.performance"), path: "/driver-dashboard/performance", permission: "driver:performance:view"   },
+    { icon: "⚙️", label: t("driver_dashboard.nav.settings"),   path: "/driver-dashboard/settings",    permission: "driver:settings:view"      },
+  ];
+
+  // ── Socket callbacks ─────────────────────────────────────────────────────────
+  const handleNewOrder = useCallback(() => {
+    showMsg(t("driver_dashboard.new_order_received"));
+    dispatch(fetchAvailableOrdersThunk());
+  }, [dispatch, t]);
+
+  const handleOrderCancelled = useCallback(() => {
+    showMsg(t("driver_dashboard.order_cancelled"));
+    dispatch(fetchAvailableOrdersThunk());
+    dispatch(fetchActiveOrdersThunk());
+  }, [dispatch, t]);
+
+  const handleEarning = useCallback((data: { amount: number; message: string }) => {
+    showMsg(data.message || t("driver_dashboard.new_earning"));
+    dispatch(fetchEarningsThunk("week"));
+  }, [dispatch, t]);
+
+  const handleStatusAck = useCallback((data: { status: string }) => {
+    dispatch(setDriverStatus(data.status as "online" | "offline" | "busy"));
+  }, [dispatch]);
+
+  const handleError = useCallback((data: { message: string }) => {
+    showMsg(data.message);
+  }, []);
+
+  const {
+    updateDriverStatus, updateOrderStatus,
+    joinOrderRoom, startLocationTracking, stopLocationTracking,
+  } = useDriverSocket({
+    token,
+    onNewOrder: handleNewOrder,
+    onOrderCancelled: handleOrderCancelled,
+    onEarning: handleEarning,
+    onStatusAck: handleStatusAck,
+    onError: handleError,
+  });
+
+  // ── Effects ──────────────────────────────────────────────────────────────────
+  useEffect(() => { dispatch(loadDriverDashboard()); }, [dispatch]);
+
+  useEffect(() => {
+    if (status === "online") startLocationTracking();
+    else stopLocationTracking();
+  }, [status, startLocationTracking, stopLocationTracking]);
 
       {/* Active delivery */}
       {activeDelivery && (
@@ -388,7 +581,19 @@ export default function DriverDashboard() {
             <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
             <span className="text-green-600 text-sm font-bold">{t('driver_dashboard.active_delivery')}</span>
           </div>
-          <div className="flex items-center justify-between">
+        )}
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700">
+            <AlertCircle className="w-3.5 h-3.5" />{error}
+          </div>
+        )}
+        {message && <Toast message={message} onClose={() => setMessage(null)} />}
+
+        {/* ── Hero header ────────────────────────────────────────────────────── */}
+        <div className="relative rounded-2xl bg-neutral-950 overflow-hidden">
+          <div className="absolute -top-10 -right-10 w-52 h-52 rounded-full bg-orange-500 opacity-[0.15] blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-8 left-1/4 w-36 h-36 rounded-full bg-amber-400 opacity-10 blur-2xl pointer-events-none" />
+          <div className="relative z-10 px-6 py-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="font-bold text-gray-900">
                 {activeDelivery.restaurant?.name || t('driver_dashboard.restaurant_fallback')} → {activeDelivery.deliveryAddress || t('driver_dashboard.customer_address_fallback')}
@@ -445,11 +650,8 @@ export default function DriverDashboard() {
                 <k.icon className="w-4 h-4" style={{ color: k.color }} />
               </div>
             </div>
-            <p className="text-2xl font-black text-gray-900 mb-1">{k.value}</p>
-            <p className="text-xs text-gray-400">{k.change}</p>
           </div>
-        ))}
-      </div>
+        </div>
 
       <div className="grid lg:grid-cols-3 gap-5">
         {/* Earnings Chart */}
@@ -509,9 +711,7 @@ export default function DriverDashboard() {
                   {t(`driver_dashboard.demand_levels.${z.demandKey}`) || z.demandKey}
                 </span>
               </div>
-            ))}
-          </div>
-        </div>
+            )}
 
         {/* Delivery History */}
         <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -556,6 +756,84 @@ export default function DriverDashboard() {
               </div>
             )}
           </div>
+
+          {/* ── Sidebar ────────────────────────────────────────────────────────── */}
+          <aside className="space-y-4">
+            {/* Status card */}
+            <div className="relative rounded-2xl bg-neutral-950 overflow-hidden p-5">
+              <div
+                className="absolute -top-8 -right-8 w-28 h-28 rounded-full opacity-20 blur-2xl"
+                style={{ background: statusCfg.blob }}
+              />
+              <p className="text-[8px] font-bold tracking-[0.25em] uppercase text-neutral-500 mb-1">
+                {t("driver_dashboard.current_status")}
+              </p>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2 h-2 rounded-full ${statusCfg.dot} ${status !== "offline" ? "animate-pulse" : ""}`} />
+                <p className="text-xl font-black text-white">{t(statusCfg.label)}</p>
+              </div>
+              <p className="text-xs text-neutral-400">
+                {status === "online" ? (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3 text-emerald-400" />
+                    {t("driver_dashboard.ready_for_orders")}
+                  </span>
+                ) : status === "busy" ? (
+                  <span className="flex items-center gap-1">
+                    <Navigation className="w-3 h-3 text-amber-400 animate-pulse" />
+                    {t("driver_dashboard.delivering_orders")}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-neutral-500" />
+                    {t("driver_dashboard.offline_status_help")}
+                  </span>
+                )}
+              </p>
+            </div>
+
+            {/* Location card */}
+            <div className="bg-white border border-neutral-100 rounded-2xl p-4">
+              <div className="flex items-center gap-1.5 mb-3">
+                <MapPin className="w-3.5 h-3.5 text-violet-600" />
+                <h3 className="text-xs font-bold text-neutral-900">{t("driver_dashboard.my_location")}</h3>
+              </div>
+              <div className="space-y-2">
+                <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-2.5">
+                  <p className="text-[8px] uppercase tracking-widest text-neutral-400 font-bold">Coordinates</p>
+                  <p className="text-[10px] font-mono text-neutral-700 mt-0.5">
+                    {locationCoords
+                      ? `${Number(locationCoords.latitude ?? 0).toFixed(4)}, ${Number(locationCoords.longitude ?? 0).toFixed(4)}`
+                      : t("driver_dashboard.no_location_record")}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-sky-100 bg-sky-50 p-2.5 flex items-center justify-between">
+                  <div>
+                    <p className="text-[8px] uppercase tracking-widest text-sky-600 font-bold">Active</p>
+                    <p className="text-lg font-black text-sky-900 leading-tight">{activeOrders.length}</p>
+                  </div>
+                  <Navigation className="w-6 h-6 text-sky-300" />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick stats */}
+            <div className="bg-white border border-neutral-100 rounded-2xl p-4 divide-y divide-neutral-100">
+              {[
+                { icon: Star,        color: "text-amber-500",  label: "Rating",    value: `${Number(profile?.rating ?? 4.8).toFixed(1)}★`, vc: "text-amber-600"  },
+                { icon: CheckCircle, color: "text-emerald-500", label: "Completed", value: earnings?.completedOrders ?? 0,                    vc: "text-emerald-600" },
+                { icon: Activity,    color: "text-orange-500",  label: "Available", value: totalPending,                                       vc: "text-orange-600" },
+              ].map(({ icon: Icon, color, label, value, vc }) => (
+                <div key={label} className="flex items-center justify-between py-2.5 px-1">
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-3.5 h-3.5 ${color}`} />
+                    <span className="text-xs text-neutral-600 font-medium">{label}</span>
+                  </div>
+                  <span className={`text-xs font-black ${vc}`}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </div>
     </DashboardLayout>
