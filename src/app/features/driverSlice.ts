@@ -11,7 +11,7 @@ import {
   updateLocation as updateLocationService,
   getMyLocation,
   getEarnings as getEarningsService,
-} from "../services/driverService";
+} from "../services/driverservice";
 import type {
   DriverProfile,
   DriverStatus,
