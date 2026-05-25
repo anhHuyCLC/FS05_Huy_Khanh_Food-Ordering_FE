@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { MapPin, Navigation, Clock, Phone, CheckCircle, Star, Package, DollarSign } from "lucide-react";
+import { MapPin, Navigation, Clock, Phone, CheckCircle, Star, Package, DollarSign, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Can } from "../../components/auth/Can";
 import { useAuthStore } from "../../stores/authStore";
-import { orderService } from "../../services/orderService";
+import { driverService } from "../../services/driverService";
+import type { DriverProfile } from "../../services/driverService";
 import { toast } from "sonner";
 import type { Order } from "../../types/order";
 
@@ -20,25 +21,38 @@ export default function DriverDashboard() {
   const currentUser = useAuthStore((state) => state.user);
 
   // States
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null);
   const [completingOrderId, setCompletingOrderId] = useState<string | null>(null);
   const [skippedOrderIds, setSkippedOrderIds] = useState<string[]>([]);
-  
-  // Online/Offline State loaded from LocalStorage
-  const [online, setOnline] = useState<boolean>(() => {
-    const saved = localStorage.getItem("driver_online");
-    return saved !== null ? saved === "true" : true;
-  });
+  const [online, setOnline] = useState<boolean>(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
-  // Fetch orders from API
+  // Fetch orders and driver profile from API
   const fetchOrders = useCallback(async () => {
     try {
-      const data = await orderService.getMyOrders();
-      setOrders(data);
+      const profileData = await driverService.getProfile();
+      setProfile(profileData);
+      setOnline(profileData.currentStatus === "online");
+
+      const activeData = await driverService.getActiveOrders();
+      setActiveOrders(activeData);
+
+      const historyData = await driverService.getOrderHistory();
+      setHistoryOrders(historyData);
+
+      if (profileData.currentStatus === "online") {
+        const availableData = await driverService.getAvailableOrders();
+        setAvailableOrders(availableData);
+      } else {
+        setAvailableOrders([]);
+      }
     } catch (err: any) {
-      console.error("Failed to fetch driver orders", err);
+      console.error("Failed to fetch driver data", err);
     } finally {
       setLoading(false);
     }
@@ -52,18 +66,23 @@ export default function DriverDashboard() {
   }, [fetchOrders]);
 
   // Handle Online toggle
-  const handleToggleOnline = () => {
-    const nextOnline = !online;
-    setOnline(nextOnline);
-    localStorage.setItem("driver_online", String(nextOnline));
-    toast.success(nextOnline ? "Bạn đã trực tuyến và sẵn sàng nhận đơn!" : "Bạn đã ngoại tuyến.");
+  const handleToggleOnline = async () => {
+    const nextStatus = online ? "offline" : "online";
+    try {
+      await driverService.updateStatus(nextStatus);
+      setOnline(!online);
+      toast.success(!online ? "Bạn đã trực tuyến và sẵn sàng nhận đơn!" : "Bạn đã ngoại tuyến.");
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Không thể cập nhật trạng thái trực tuyến");
+    }
   };
 
   // Handle Accept Order
   const handleAccept = async (orderId: string) => {
     try {
       setAcceptingOrderId(orderId);
-      await orderService.updateOrderStatus(orderId, { status: "delivering", note: "Driver accepted order" });
+      await driverService.respondToOrder(orderId, "accepted");
       toast.success("Đã nhận đơn hàng! Hãy di chuyển tới nhà hàng để lấy hàng.");
       fetchOrders();
     } catch (err: any) {
@@ -73,25 +92,37 @@ export default function DriverDashboard() {
     }
   };
 
-  // Handle Skip Order (locally)
-  const handleSkipOrder = (orderId: string) => {
-    setSkippedOrderIds(prev => [...prev, orderId]);
-    toast.info("Đã bỏ qua yêu cầu giao hàng này.");
-  };
-
-  // Handle Mark Delivered
-  const handleComplete = async (orderId: string) => {
+  // Handle Skip Order
+  const handleSkipOrder = async (orderId: string) => {
     try {
-      setCompletingOrderId(orderId);
-      await orderService.updateOrderStatus(orderId, { status: "completed", note: "Delivered successfully" });
-      toast.success("Đơn hàng đã được giao thành công! Chúc mừng bạn.");
+      await driverService.respondToOrder(orderId, "rejected");
+      setSkippedOrderIds(prev => [...prev, orderId]);
+      toast.info("Đã từ chối yêu cầu giao hàng này.");
       fetchOrders();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể hoàn thành đơn hàng");
+      console.error("Failed to reject order", err);
+      toast.error("Không thể bỏ qua đơn hàng");
+    }
+  };
+
+  // Handle delivery status updates (picked_up, completed)
+  const handleUpdateDeliveryStatus = async (orderId: string, status: "picked_up" | "completed") => {
+    try {
+      setCompletingOrderId(orderId);
+      await driverService.updateDeliveryStatus(orderId, status);
+      if (status === "picked_up") {
+        toast.success("Đã lấy hàng thành công! Hãy giao tới khách hàng.");
+      } else {
+        toast.success("Đơn hàng đã được giao thành công! Chúc mừng bạn.");
+      }
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Không thể cập nhật trạng thái đơn hàng");
     } finally {
       setCompletingOrderId(null);
     }
   };
+
 
   // Helper: check if a date string represents today
   const isToday = (dateString: string) => {
@@ -116,20 +147,46 @@ export default function DriverDashboard() {
     return `$${amount.toFixed(2)}`;
   };
 
-  // Filter orders
-  const completedDeliveries = orders.filter(
-    (o) => o.status === "completed" && o.driverId === currentUser?.id
+  // Filter orders using our new backend collections
+  const completedDeliveries = historyOrders.filter(
+    (o) => o.status === "completed"
   );
 
-  const activeDelivery = orders.find(
-    (o) => o.status === "delivering" && o.driverId === currentUser?.id
-  );
+  const activeDelivery = activeOrders[0];
 
-  // Available requests: status "ready" (prepared by restaurant) and no driver assigned yet
-  const pendingOrders = orders.filter(
-    (o) => o.status === "ready" && !o.driverId && !skippedOrderIds.includes(o.id)
+  // Available requests: from availableOrders list, skipping rejected ones
+  const pendingOrders = availableOrders.filter(
+    (o) => !skippedOrderIds.includes(o.id)
   );
   const pendingOrder = pendingOrders[0];
+
+  // Timer effect for sequential assignment offers
+  useEffect(() => {
+    if (!pendingOrder || !pendingOrder.assignmentExpiresAt || pendingOrder.currentDriverId !== profile?.id) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const calculateTimeLeft = () => {
+      const expiresAt = new Date(pendingOrder.assignmentExpiresAt!).getTime();
+      const now = Date.now();
+      const diff = Math.max(0, Math.round((expiresAt - now) / 1000));
+      return diff;
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
+    const timer = setInterval(() => {
+      const remaining = calculateTimeLeft();
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+        fetchOrders();
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [pendingOrder, profile, fetchOrders]);
 
   // Dynamic statistics calculations
   const todayEarnings = completedDeliveries
@@ -138,14 +195,13 @@ export default function DriverDashboard() {
 
   const tripsToday = completedDeliveries.filter((o) => isToday(o.createdAt)).length;
 
-  const averageRating = "4.97★"; // Mock or default average rating
-  const onlineTime = "6.2h"; // Mock online duration for today
+  const averageRating = profile?.rating ? `${profile.rating}★` : "5.0★";
 
   const stats = [
-    { label: t('driver_dashboard.today_earnings'), value: formatMoney(todayEarnings), icon: DollarSign, color: "#10B981", change: todayEarnings > 0 ? "+Thực tế" : "+$0 vs avg" },
+    { label: t('driver_dashboard.today_earnings'), value: formatMoney(todayEarnings), icon: DollarSign, color: "#10B981", change: todayEarnings > 0 ? "+Thực tế" : "+0đ" },
     { label: t('driver_dashboard.trips_today'), value: String(tripsToday), icon: Package, color: "#FF4500", change: `${tripsToday} chuyến hoàn thành` },
     { label: t('home.rating'), value: averageRating, icon: Star, color: "#F59E0B", change: "+0.02 tuần này" },
-    { label: t('driver_dashboard.online_time'), value: onlineTime, icon: Clock, color: "#6366F1", change: "Hiệu suất 98%" },
+    { label: t('driver_dashboard.wallet_balance'), value: formatMoney(profile?.walletBalance || 0), icon: Wallet, color: "#6366F1", change: "Số dư khả dụng" },
   ];
 
   // Recharts: Calculate weekly earnings by grouping completed deliveries
@@ -168,15 +224,15 @@ export default function DriverDashboard() {
 
     const hasEarnings = chartData.some((d) => d.earnings > 0);
     if (!hasEarnings) {
-      // Fallback mock data if there are no real earnings yet
+      // Fallback mock data if there are no real earnings yet (VND)
       return [
-        { day: "Mon", earnings: 84 },
-        { day: "Tue", earnings: 112 },
-        { day: "Wed", earnings: 98 },
-        { day: "Thu", earnings: 145 },
-        { day: "Fri", earnings: 178 },
-        { day: "Sat", earnings: 210 },
-        { day: "Sun", earnings: 164 },
+        { day: "Mon", earnings: 84000 },
+        { day: "Tue", earnings: 112000 },
+        { day: "Wed", earnings: 98000 },
+        { day: "Thu", earnings: 145000 },
+        { day: "Fri", earnings: 178000 },
+        { day: "Sat", earnings: 210000 },
+        { day: "Sun", earnings: 164000 },
       ];
     }
     return chartData;
@@ -209,9 +265,9 @@ export default function DriverDashboard() {
   }));
 
   // Initial Full Loading Screen
-  if (loading && orders.length === 0) {
+  if (loading && historyOrders.length === 0 && activeOrders.length === 0 && !profile) {
     return (
-      <DashboardLayout navItems={authorizedNavItems} role="driver" userName={currentUser?.fullName || "Driver"} userAvatar="DR">
+      <DashboardLayout navItems={authorizedNavItems} role="driver" userName={currentUser?.fullName || t('driver_dashboard.driver_fallback')} userAvatar="DR">
         <div className="min-h-[60vh] flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="w-10 h-10 border-4 border-[#10B981] border-t-transparent rounded-full animate-spin" />
@@ -225,16 +281,16 @@ export default function DriverDashboard() {
   // Delivery History List
   const deliveryHistory = completedDeliveries.slice(0, 5).map((o) => ({
     id: `#${o.id.slice(0, 8).toUpperCase()}`,
-    from: o.restaurant?.name || "Restaurant",
-    to: o.deliveryAddress || "Customer Address",
-    time: "25 min",
+    from: o.restaurant?.name || t('driver_dashboard.restaurant_fallback'),
+    to: o.deliveryAddress || t('driver_dashboard.customer_address_fallback'),
+    time: `25 ${t('driver_dashboard.minutes_unit')}`,
     earnings: formatMoney(o.deliveryFee || 0),
     rating: 5,
     status: "completed" as const,
   }));
 
   return (
-    <DashboardLayout navItems={authorizedNavItems} role="driver" userName={currentUser?.fullName || "Driver"} userAvatar="DR">
+    <DashboardLayout navItems={authorizedNavItems} role="driver" userName={currentUser?.fullName || t('driver_dashboard.driver_fallback')} userAvatar="DR">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -267,10 +323,14 @@ export default function DriverDashboard() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-ping" />
-                <span className="text-green-400 text-sm font-bold">{t('driver_dashboard.new_delivery_request')}</span>
+                <span className="text-green-400 text-sm font-bold animate-pulse">
+                  {timeLeft !== null
+                    ? t('driver_dashboard.exclusive_request', { seconds: timeLeft })
+                    : t('driver_dashboard.new_delivery_request')}
+                </span>
               </div>
               <h2 className="text-xl font-black text-white">
-                {pendingOrder.restaurant?.name || "Restaurant"} → {pendingOrder.deliveryAddress || "Customer Address"}
+                {pendingOrder.restaurant?.name || t('driver_dashboard.restaurant_fallback')} → {pendingOrder.deliveryAddress || t('driver_dashboard.customer_address_fallback')}
               </h2>
             </div>
             <div className="text-right">
@@ -281,7 +341,7 @@ export default function DriverDashboard() {
           <div className="grid grid-cols-3 gap-4 mb-6">
             {[
               ["2.4 km", t('driver_dashboard.distance'), MapPin],
-              ["22 min", t('driver_dashboard.est_time'), Clock],
+              [`22 ${t('driver_dashboard.minutes_unit')}`, t('driver_dashboard.est_time'), Clock],
               ["4.9★", t('driver_dashboard.rest_rating'), Star],
             ].map(([val, label, Icon]: any) => (
               <div key={label} className="bg-white/10 rounded-2xl p-3 text-center">
@@ -331,7 +391,7 @@ export default function DriverDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-bold text-gray-900">
-                {activeDelivery.restaurant?.name || "Restaurant"} → {activeDelivery.deliveryAddress || "Customer Address"}
+                {activeDelivery.restaurant?.name || t('driver_dashboard.restaurant_fallback')} → {activeDelivery.deliveryAddress || t('driver_dashboard.customer_address_fallback')}
               </p>
               <p className="text-sm text-gray-500">
                 Order #{activeDelivery.id.slice(0, 8).toUpperCase()} · {activeDelivery.orderItems?.length || 0} {t('driver_dashboard.items')} · {formatMoney(activeDelivery.finalAmount)}
@@ -350,7 +410,7 @@ export default function DriverDashboard() {
             </a>
             <Can permission="delivery:edit">
               <button
-                onClick={() => handleComplete(activeDelivery.id)}
+                onClick={() => handleUpdateDeliveryStatus(activeDelivery.id, activeDelivery.status === "accepted" ? "picked_up" : "completed")}
                 disabled={completingOrderId === activeDelivery.id}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 hover:opacity-95 transition-opacity disabled:opacity-60"
                 style={{ background: "#10B981" }}
@@ -358,7 +418,11 @@ export default function DriverDashboard() {
                 {completingOrderId === activeDelivery.id ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Đang hoàn thành...
+                    Đang cập nhật...
+                  </>
+                ) : activeDelivery.status === "accepted" ? (
+                  <>
+                    <Package className="w-4 h-4" /> Xác nhận đã lấy hàng
                   </>
                 ) : (
                   <>
@@ -400,8 +464,8 @@ export default function DriverDashboard() {
             <BarChart data={weeklyEarningsData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
-              <Tooltip formatter={(v: any) => [`$${v}`, t('driver_dashboard.nav.earnings')]} contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6" }} />
+              <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`} />
+              <Tooltip formatter={(v: any) => [formatMoney(v), t('driver_dashboard.nav.earnings')]} contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6" }} />
               <Bar dataKey="earnings" fill="#10B981" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -481,7 +545,7 @@ export default function DriverDashboard() {
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold text-green-600">{d.earnings}</p>
                     <span className="text-xs text-green-500 bg-green-50 px-2 py-0.5 rounded-full font-semibold">
-                      ✓ {d.status}
+                      ✓ {d.status === "completed" ? t('driver_dashboard.status_completed') : d.status}
                     </span>
                   </div>
                 </div>

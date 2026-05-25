@@ -62,6 +62,8 @@ export interface Order {
   customerPhone?: string | null;
   createdAt: string;
   updatedAt: string;
+  assignmentExpiresAt?: string;
+  currentDriverId?: string | null;
   orderItems?: OrderItem[];
   orderStatusHistories?: OrderStatusHistory[];
   restaurant?: {

@@ -177,6 +177,10 @@ export default function RegisterDriver() {
         confirmpassword: form.confirmpassword,
         address: form.address,
         role: "DRIVER",
+        vehicleType: form.vehicleType,
+        licensePlate: form.licensePlate,
+        driverLicenseNumber: form.driverLicenseNumber,
+        nationalIdNumber: form.nationalIdNumber,
       });
       navigate("/login", {
         state: {
