@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Flame, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { IMGS } from "../data/mock";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
 import { useAuthActions } from "../hooks/useAuth";
 import { useAuthStore } from "../stores/authStore";
+import { toast } from "sonner";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
@@ -39,6 +41,13 @@ export default function Login() {
       navigate("/");
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (location.state?.successMessage) {
+      toast.success(location.state.successMessage);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">

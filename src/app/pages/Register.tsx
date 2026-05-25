@@ -89,7 +89,11 @@ export default function Register() {
     setError(null);
     try {
       await register({ ...form, role: selectedRole });
-      navigate("/login");
+      navigate("/login", {
+        state: {
+          successMessage: "Đăng ký tài khoản thành công! Vui lòng đăng nhập.",
+        },
+      });
     } catch (error: any) {
       setError(
         error.response?.data?.message ||

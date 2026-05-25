@@ -59,8 +59,11 @@ export interface Order {
   deliveryLongitude?: number;
   note?: string;
   cancelReason?: string;
+  customerPhone?: string | null;
   createdAt: string;
   updatedAt: string;
+  assignmentExpiresAt?: string;
+  currentDriverId?: string | null;
   orderItems?: OrderItem[];
   orderStatusHistories?: OrderStatusHistory[];
   restaurant?: {
@@ -75,6 +78,7 @@ export interface Order {
     name: string;
     avatar?: string;
     fullName?: string;
+    phoneNumber?: string | null;
   };
   driver?: {
     id: string;

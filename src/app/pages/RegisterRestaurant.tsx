@@ -185,6 +185,12 @@ export default function RegisterRestaurant() {
         confirmpassword: form.confirmpassword,
         address: form.restaurantAddress,
         role: "RESTAURANT",
+        restaurantName: form.restaurantName,
+        restaurantAddress: form.restaurantAddress,
+        cuisineType: form.cuisineType,
+        openTime: form.openTime,
+        closeTime: form.closeTime,
+        restaurantDescription: form.restaurantDescription,
       });
       navigate("/login", {
         state: {
