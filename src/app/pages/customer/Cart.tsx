@@ -92,8 +92,6 @@ export default function Cart() {
     );
   }
 
-  const total = subtotal;
-
   // Group items by restaurant
   const itemsByRestaurant = items.reduce((acc, item) => {
     const rId = item.restaurantId || restaurantId || 'unknown';

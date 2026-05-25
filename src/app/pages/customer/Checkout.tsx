@@ -38,7 +38,7 @@ export default function Checkout() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
   const [note, setNote] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerPhone] = useState("");
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -235,7 +235,7 @@ export default function Checkout() {
         });
         toast.success("Cập nhật địa chỉ thành công");
       } else {
-        const newAddr = await addressService.createAddress({
+        await addressService.createAddress({
           label: formLabel,
           address: formAddress,
           phone: formPhone,

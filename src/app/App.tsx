@@ -18,7 +18,6 @@ import DriverDashboard from "./pages/driver/DriverDashboard";
 import Forbidden from "./pages/Forbidden";
 import { AuthBootstrap } from "./components/auth/AuthBootstrap";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
-import { PERMISSIONS } from "./constants/permissions";
 import { ChatBox } from "../components/chat/ChatBox";
 import { Toaster } from "./components/ui/sonner";
 

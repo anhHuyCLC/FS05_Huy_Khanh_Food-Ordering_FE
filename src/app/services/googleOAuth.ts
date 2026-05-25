@@ -7,12 +7,7 @@
  * 3. Use useGoogleAuth() hook to get OAuth functions in your components
  */
 
-interface GoogleAuthConfig {
-  clientId: string;
-  redirectUri: string;
-}
-
-export function initGoogleSDK(clientId: string) {
+export function initGoogleSDK(_clientId: string) {
   const script = document.createElement('script');
   script.src = 'https://accounts.google.com/gsi/client';
   script.async = true;
