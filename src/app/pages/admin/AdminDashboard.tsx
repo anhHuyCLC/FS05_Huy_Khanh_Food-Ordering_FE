@@ -18,7 +18,7 @@ import {
   adminService, type PendingRestaurant, type PendingDriver, type FraudAlert,
   type CategoryPieItem, type AdminUser, type AdminOrderItem, type SystemKPIs,
   type ActiveRestaurant, type ActiveDriver, type Announcement, type PayoutItem,
-  type AdminRole
+  type AdminRole, type RevenueDataItem, type AdminUserDetail
 } from "../../services/adminService";
 import { toast } from "sonner";
 import { useAuthStore } from "../../stores/authStore";
@@ -42,7 +42,7 @@ export default function AdminDashboard() {
 
   // States
   const [kpis, setKpis] = useState<SystemKPIs | null>(null);
-  const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [revenueData, setRevenueData] = useState<RevenueDataItem[]>([]);
   const [pieData, setPieData] = useState<CategoryPieItem[]>([]);
   const [orders, setOrders] = useState<AdminOrderItem[]>([]);
   const [pendingRestaurants, setPendingRestaurants] = useState<PendingRestaurant[]>([]);
@@ -166,8 +166,9 @@ export default function AdminDashboard() {
       await adminService.approveRestaurant(id);
       toast.success("Phê duyệt nhà hàng thành công!");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể duyệt nhà hàng.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể duyệt nhà hàng.");
     }
   };
 
@@ -176,8 +177,9 @@ export default function AdminDashboard() {
       await adminService.rejectRestaurant(id);
       toast.success("Đã từ chối đơn ứng tuyển của nhà hàng.");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể từ chối nhà hàng.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể từ chối nhà hàng.");
     }
   };
 
@@ -186,8 +188,9 @@ export default function AdminDashboard() {
       await adminService.approveDriver(id);
       toast.success("Phê duyệt tài xế thành công!");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể duyệt tài xế.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể duyệt tài xế.");
     }
   };
 
@@ -196,8 +199,9 @@ export default function AdminDashboard() {
       await adminService.rejectDriver(id);
       toast.success("Đã từ chối đơn ứng tuyển của tài xế.");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể từ chối tài xế.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể từ chối tài xế.");
     }
   };
 
@@ -207,8 +211,9 @@ export default function AdminDashboard() {
       await adminService.updateUserStatus(email, nextStatus);
       toast.success(`Đã ${nextStatus === "suspended" ? "tạm khóa" : "mở khóa"} người dùng thành công!`);
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể cập nhật trạng thái người dùng.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể cập nhật trạng thái người dùng.");
     }
   };
 
@@ -238,8 +243,9 @@ export default function AdminDashboard() {
       toast.success("Thêm người dùng mới thành công!");
       setIsAddModalOpen(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể tạo tài khoản người dùng.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể tạo tài khoản người dùng.");
     } finally {
       setAddingUser(false);
     }
@@ -261,10 +267,10 @@ export default function AdminDashboard() {
         setEditLastName(fullUser.lastName || "");
         setEditEmail(fullUser.email || user.email);
         setEditStatus(fullUser.status || "ACTIVE");
-        setEditRoleIds((fullUser.roles || []).map((r: any) => r.roleId));
+        setEditRoleIds((fullUser.roles || []).map((r: AdminUserDetail['roles'][number]) => r.roleId));
       }
-    } catch (err) {
-      console.error("Failed to load user details", err);
+    } catch (_err) {
+      console.error("Failed to load user details", _err);
       const nameParts = user.name.split(" ");
       if (nameParts.length > 1) {
         setEditLastName(nameParts[0]);
@@ -294,8 +300,9 @@ export default function AdminDashboard() {
       toast.success("Cập nhật thông tin người dùng thành công!");
       setIsEditModalOpen(false);
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể cập nhật tài khoản người dùng.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể cập nhật tài khoản người dùng.");
     } finally {
       setSavingUser(false);
     }
@@ -309,13 +316,14 @@ export default function AdminDashboard() {
       await adminService.deleteUser(userId);
       toast.success("Xóa người dùng thành công!");
       fetchData();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Không thể xóa tài khoản người dùng.");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Không thể xóa tài khoản người dùng.");
     }
   };
 
   // Format Helper
-  const formatMoney = (amount: any) => {
+  const formatMoney = (amount: number | string | null | undefined) => {
     const numericAmount = Number(amount || 0);
     if (numericAmount >= 1000) {
       return `${numericAmount.toLocaleString("vi-VN")}đ`;
@@ -461,7 +469,7 @@ export default function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v: any) => [`$${v.toLocaleString()}`, t('admin.nav.revenue')]} contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6" }} />
+                <Tooltip formatter={(v) => [`$${Number(v).toLocaleString()}`, t('admin.nav.revenue')]} contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6" }} />
                 <Area type="monotone" dataKey="revenue" stroke="#6366F1" strokeWidth={2.5} fill="url(#adminGrad)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -1494,8 +1502,9 @@ export default function AdminDashboard() {
         });
         toast.success("Lưu cấu hình hệ thống thành công!");
         fetchData();
-      } catch (err) {
-        toast.error("Không thể lưu cấu hình hệ thống.");
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { message?: string } }; message?: string };
+        toast.error(e.response?.data?.message || "Không thể lưu cấu hình hệ thống.");
       }
     };
 
@@ -1622,8 +1631,9 @@ export default function AdminDashboard() {
         setAnnouncementText("");
         toast.success("Đăng tải bản tin thông báo toàn hệ thống thành công!");
         fetchData();
-      } catch (err) {
-        toast.error("Không thể đăng tải thông báo.");
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { message?: string } }; message?: string };
+        toast.error(e.response?.data?.message || "Không thể đăng tải thông báo.");
       }
     };
 
@@ -1632,8 +1642,9 @@ export default function AdminDashboard() {
         await adminService.deleteAnnouncement(id);
         toast.success("Đã xóa bản tin thông báo.");
         fetchData();
-      } catch (err) {
-        toast.error("Không thể xóa thông báo.");
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { message?: string } }; message?: string };
+        toast.error(e.response?.data?.message || "Không thể xóa thông báo.");
       }
     };
 

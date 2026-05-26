@@ -38,10 +38,11 @@ export const detectCurrentLocation = createAsyncThunk(
         coords: { lat, lng },
         addressInfo,
       };
-    } catch (error: any) {
-      const msg = error.code === 1 
-        ? "Quyền truy cập vị trí bị từ chối." 
-        : error.message || "Không thể tự động xác định vị trí của bạn.";
+    } catch (error: unknown) {
+      const geoErr = error as Partial<GeolocationPositionError> & Partial<Error>;
+      const msg = geoErr.code === 1
+        ? "Quyền truy cập vị trí bị từ chối."
+        : geoErr.message || "Không thể tự động xác định vị trí của bạn.";
       return rejectWithValue(msg);
     }
   }
@@ -59,8 +60,9 @@ export const fetchAutocompleteSuggestions = createAsyncThunk(
         lat: item.latitude,
         lng: item.longitude,
       }));
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || "Lấy danh sách gợi ý địa chỉ thất bại.");
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(e.response?.data?.message || "Lấy danh sách gợi ý địa chỉ thất bại.");
     }
   }
 );
@@ -76,8 +78,9 @@ export const reverseGeocodeCoords = createAsyncThunk(
         lat,
         lng,
       } as AddressInfo;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || "Không thể lấy địa chỉ từ tọa độ.");
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } }; message?: string };
+      return rejectWithValue(e.response?.data?.message || "Không thể lấy địa chỉ từ tọa độ.");
     }
   }
 );
@@ -114,9 +117,10 @@ export const fetchRouteInfo = createAsyncThunk(
       };
 
       return routeState;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const e = error as { response?: { data?: { message?: string } }; message?: string };
       return rejectWithValue(
-        error.response?.data?.message || "Không thể tính toán đường đi giao hàng."
+        e.response?.data?.message || "Không thể tính toán đường đi giao hàng."
       );
     }
   }

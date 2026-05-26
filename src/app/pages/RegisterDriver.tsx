@@ -188,10 +188,11 @@ export default function RegisterDriver() {
             "Đăng ký tài xế thành công! Tài khoản đang chờ được phê duyệt.",
         },
       });
-    } catch (err: any) {
+    } catch (err) {
+      const error = err as { response?: { data?: { message?: string } }; message?: string };
       setError(
-        err.response?.data?.message ||
-          err.message ||
+        error.response?.data?.message ||
+          error.message ||
           "Đăng ký thất bại. Vui lòng thử lại."
       );
       setStep(1);

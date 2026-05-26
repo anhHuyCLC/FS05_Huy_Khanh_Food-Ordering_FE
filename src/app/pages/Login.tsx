@@ -8,6 +8,8 @@ import { useAuthActions } from "../hooks/useAuth";
 import { useAuthStore } from "../stores/authStore";
 import { toast } from "sonner";
 
+import { getRedirectPath } from "../lib/authorization";
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -27,10 +29,11 @@ export default function Login() {
     setError(null);
 
     try {
-      await login(form);
-      navigate("/");
-    } catch (error: any) {
-      setError(error.response?.data?.message || error.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+      const auth = await login(form);
+      navigate(getRedirectPath(auth.user));
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      setError(err.response?.data?.message || err.message || "Đăng nhập thất bại. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -38,7 +41,7 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      navigate("/");
+      navigate(getRedirectPath(user));
     }
   }, [user, navigate]);
 

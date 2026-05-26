@@ -8,6 +8,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { TrendingUp, ShoppingBag, Star, Users, Plus, Edit, Eye,  CheckCircle, XCircle, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Can } from "../../components/auth/Can";
+import { PERMISSIONS } from "../../constants/permissions";
 
 const kpis = [
   { label: "Today's Revenue", value: "$1,284", change: "+12.5%", up: true, icon: TrendingUp, color: "#FF4500" },
@@ -49,7 +50,7 @@ export default function RestaurantDashboard() {
     fetchOrders();
   }, []);
 
-  const formatMoney = (amount: any) => {
+  const formatMoney = (amount: number | string | undefined | null) => {
     const numericAmount = Number(amount || 0);
     if (t('common.currency') === "VND") {
       if (numericAmount > 0 && numericAmount < 1000) {
@@ -78,14 +79,14 @@ export default function RestaurantDashboard() {
     { icon: "⚙️", label: t('restaurant_dashboard.nav.settings'), path: "/restaurant-dashboard/settings" },
   ];
   const navPermissions: Record<string, string> = {
-    "/restaurant-dashboard": "restaurant:dashboard:view",
-    "/restaurant-dashboard/orders": "order:view",
-    "/restaurant-dashboard/menu": "menu:view",
-    "/restaurant-dashboard/pricing": "pricing:view",
-    "/restaurant-dashboard/promotions": "promotion:view",
-    "/restaurant-dashboard/analytics": "analytics:view",
-    "/restaurant-dashboard/reviews": "review:view",
-    "/restaurant-dashboard/settings": "restaurant:settings:view",
+    "/restaurant-dashboard": PERMISSIONS.RESTAURANT_PROFILE.READ,
+    "/restaurant-dashboard/orders": PERMISSIONS.ORDER.READ,
+    "/restaurant-dashboard/menu": PERMISSIONS.MENU.READ,
+    "/restaurant-dashboard/pricing": PERMISSIONS.MENU.READ,
+    "/restaurant-dashboard/promotions": PERMISSIONS.MENU.READ,
+    "/restaurant-dashboard/analytics": PERMISSIONS.RESTAURANT_PROFILE.READ,
+    "/restaurant-dashboard/reviews": PERMISSIONS.RESTAURANT_PROFILE.READ,
+    "/restaurant-dashboard/settings": PERMISSIONS.RESTAURANT_PROFILE.UPDATE,
   };
   const authorizedNavItems = translatedNavItems.map((item) => ({
     ...item,
@@ -97,8 +98,9 @@ export default function RestaurantDashboard() {
       await orderService.updateOrderStatus(id, { status: "preparing", note: t('restaurant_dashboard.accepted_note') || "Accepted by restaurant" });
       toast.success(t('restaurant_dashboard.order_accepted_toast') || "Order accepted!");
       fetchOrders();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || t('restaurant_dashboard.order_accept_failed_toast') || "Failed to accept order");
+    } catch (err) {
+      const errorMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(errorMsg || t('restaurant_dashboard.order_accept_failed_toast') || "Failed to accept order");
     }
   };
 
@@ -117,7 +119,7 @@ export default function RestaurantDashboard() {
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             <span className="text-sm font-semibold text-green-600">{t('restaurant_dashboard.restaurant_open')}</span>
           </div>
-          <Can permission="menu:create">
+          <Can permission={PERMISSIONS.MENU.CREATE}>
             <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
               <Plus className="w-4 h-4" /> {t('restaurant_dashboard.add_item')}
             </button>
@@ -165,7 +167,7 @@ export default function RestaurantDashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 12, fill: "#9CA3AF" }} axisLine={false} tickLine={false} tickFormatter={(v) => t('common.currency') === "VND" ? `${((v * 25000)/1000000).toFixed(0)} trđ` : `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: any) => [formatMoney(v), t('restaurant_dashboard.nav.revenue')]} contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6" }} />
+              <Tooltip formatter={(v) => [formatMoney(v as number), t('restaurant_dashboard.nav.revenue')]} contentStyle={{ borderRadius: 12, border: "1px solid #F3F4F6" }} />
               <Area type="monotone" dataKey="revenue" stroke="#FF4500" strokeWidth={2.5} fill="url(#revGrad)" />
             </AreaChart>
           </ResponsiveContainer>
@@ -210,7 +212,7 @@ export default function RestaurantDashboard() {
                     <p className="text-xs text-gray-400">{t('common.just_now')}</p>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{(order.customer as any)?.fullName || order.customer?.name || t('auth.customer')}</p>
+                    <p className="text-sm font-semibold text-gray-800">{order.customer?.fullName || order.customer?.name || t('auth.customer')}</p>
                     <p className="text-xs text-gray-400 truncate">{order.orderItems?.length || 0} {t('restaurant_dashboard.items')}</p>
                   </div>
                   <p className="text-sm font-bold text-gray-900 shrink-0">{formatMoney(order.finalAmount)}</p>
@@ -220,12 +222,12 @@ export default function RestaurantDashboard() {
                   <div className="flex gap-2 shrink-0">
                     {order.status === "pending" && (
                       <>
-                        <Can permission="order:approve">
+                        <Can permission={PERMISSIONS.ORDER.UPDATE}>
                           <button onClick={() => acceptOrder(order.id)} className="w-8 h-8 rounded-xl bg-green-50 text-green-500 flex items-center justify-center hover:bg-green-100 transition-colors">
                             <CheckCircle className="w-4 h-4" />
                           </button>
                         </Can>
-                        <Can permission="order:delete">
+                        <Can permission={PERMISSIONS.ORDER.DELETE}>
                           <button className="w-8 h-8 rounded-xl bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors">
                             <XCircle className="w-4 h-4" />
                           </button>
@@ -253,7 +255,7 @@ export default function RestaurantDashboard() {
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-gray-50">
             <h2 className="font-bold text-gray-900">{t('restaurant_dashboard.menu_items')}</h2>
-            <Can permission="menu:view">
+            <Can permission={PERMISSIONS.MENU.READ}>
               <button className="text-xs text-[#FF4500] font-semibold hover:underline">{t('restaurant_dashboard.manage_all')}</button>
             </Can>
           </div>
@@ -269,7 +271,7 @@ export default function RestaurantDashboard() {
                   <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
                     <Eye className="w-3.5 h-3.5" />
                   </button>
-                  <Can permission="menu:edit">
+                  <Can permission={PERMISSIONS.MENU.UPDATE}>
                     <button className="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200 transition-colors">
                       <Edit className="w-3.5 h-3.5" />
                     </button>
