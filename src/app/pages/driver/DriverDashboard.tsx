@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
+import { useToast } from "../../hooks/usetoast";
+import { ToastContainer } from "../../hooks/toasrContainer";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   MapPin, Navigation, Clock, CheckCircle, Star, Package,
   DollarSign, ArrowRight, RefreshCw, Map as MapIcon, BarChart3,
-  Zap, TrendingUp, Activity, AlertCircle,
+  Zap, TrendingUp, Activity, AlertCircle, Percent,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
@@ -198,18 +200,6 @@ function EmptyState({ icon: Icon, text }: { icon: React.ElementType; text: strin
   );
 }
 
-function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-700">
-      <div className="flex items-center gap-2">
-        <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-        {message}
-      </div>
-      <button onClick={onClose} className="text-emerald-400 hover:text-emerald-600 text-base leading-none ml-2">×</button>
-    </div>
-  );
-}
-
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function DriverDashboard() {
@@ -228,8 +218,7 @@ export default function DriverDashboard() {
   } = useAppSelector((s) => s.driver);
   const token = useAppSelector((s) => s.auth.token ?? localStorage.getItem("token") ?? "");
 
-  const [message, setMessage] = useState<string | null>(null);
-  const showMsg = (msg: string) => { setMessage(msg); setTimeout(() => setMessage(null), 4000); };
+  const { toasts, toast: notify, dismiss } = useToast();
 
   // ── Nav ──────────────────────────────────────────────────────────────────────
   const navItems = [
@@ -243,18 +232,18 @@ export default function DriverDashboard() {
 
   // ── Socket callbacks ─────────────────────────────────────────────────────────
   const handleNewOrder = useCallback(() => {
-    showMsg(t("driver_dashboard.new_order_received"));
+    notify.info(t("driver_dashboard.new_order_received"));
     dispatch(fetchAvailableOrdersThunk());
   }, [dispatch, t]);
 
   const handleOrderCancelled = useCallback(() => {
-    showMsg(t("driver_dashboard.order_cancelled"));
+    notify.warning(t("driver_dashboard.order_cancelled"));
     dispatch(fetchAvailableOrdersThunk());
     dispatch(fetchActiveOrdersThunk());
   }, [dispatch, t]);
 
   const handleEarning = useCallback((data: { amount: number; message: string }) => {
-    showMsg(data.message || t("driver_dashboard.new_earning"));
+    notify.success(data.message || t("driver_dashboard.new_earning"));
     dispatch(fetchEarningsThunk("week"));
   }, [dispatch, t]);
 
@@ -263,7 +252,7 @@ export default function DriverDashboard() {
   }, [dispatch]);
 
   const handleError = useCallback((data: { message: string }) => {
-    showMsg(data.message);
+    notify.error(data.message);
   }, []);
 
   const {
@@ -301,9 +290,9 @@ export default function DriverDashboard() {
   }
 
   function toggleStatus() {
-    if (status === "busy") { window.alert(t("driver_dashboard.busy_status_warning")); return; }
+    if (status === "busy") { notify.warning(t("driver_dashboard.busy_status_warning")); return; }
     updateDriverStatus(status === "online" ? "offline" : "online");
-    showMsg(t("driver_dashboard.status_update_requested"));
+    notify.info(t("driver_dashboard.status_update_requested"));
   }
 
   async function handleAccept(orderId: string) {
@@ -312,8 +301,9 @@ export default function DriverDashboard() {
       joinOrderRoom(orderId);
       await refreshOrders();
       dispatch(loadDriverDashboard());
+      notify.success("Đã nhận đơn hàng thành công!");
     } catch (e: any) {
-      window.alert(e?.message || t("driver_dashboard.order_accept_failed"));
+      notify.error(e?.message || t("driver_dashboard.order_accept_failed"));
     }
   }
 
@@ -321,39 +311,44 @@ export default function DriverDashboard() {
     try {
       await dispatch(respondOrderThunk({ orderId, action: "rejected" })).unwrap();
       await refreshOrders();
+      notify.info("Đã từ chối đơn hàng.");
     } catch (e: any) {
-      window.alert(e?.message || t("driver_dashboard.order_reject_failed"));
+      notify.error(e?.message || t("driver_dashboard.order_reject_failed"));
     }
   }
 
   function handleUpdateDelivery(orderId: string, newStatus: string) {
     updateOrderStatus(orderId, newStatus as DeliveryStatus);
     refreshOrders();
-    if (newStatus === "completed") dispatch(loadDriverDashboard());
+    if (newStatus === "completed") {
+      dispatch(loadDriverDashboard());
+      notify.success("Đơn hàng hoàn thành!");
+    }
   }
 
   async function handleOptimizeRoute() {
     const ids = activeOrders.map((o) => o.id);
-    if (!ids.length) { window.alert(t("driver_dashboard.no_active_orders_to_optimize")); return; }
+    if (!ids.length) { notify.warning(t("driver_dashboard.no_active_orders_to_optimize")); return; }
     try {
       await dispatch(optimizeRouteThunk(ids)).unwrap();
+      notify.success("Tuyến đường đã được tối ưu!");
     } catch (e: any) {
-      window.alert(e?.message || t("driver_dashboard.route_optimize_failed"));
+      notify.error(e?.message || t("driver_dashboard.route_optimize_failed"));
     }
   }
 
   async function handleUpdateLocation() {
-    if (!navigator.geolocation) { window.alert(t("driver_dashboard.geolocation_not_supported")); return; }
+    if (!navigator.geolocation) { notify.error(t("driver_dashboard.geolocation_not_supported")); return; }
     navigator.geolocation.getCurrentPosition(
       async ({ coords: { latitude, longitude } }) => {
         try {
           await dispatch(updateLocationThunk({ latitude, longitude })).unwrap();
-          showMsg("✅ Đã cập nhật vị trí");
+          notify.success("Đã cập nhật vị trí!");
         } catch (e: any) {
-          window.alert(e?.message || t("driver_dashboard.location_update_failed"));
+          notify.error(e?.message || t("driver_dashboard.location_update_failed"));
         }
       },
-      () => window.alert(t("driver_dashboard.location_permission_denied")),
+      () => notify.error(t("driver_dashboard.location_permission_denied")),
     );
   }
 
@@ -380,12 +375,15 @@ export default function DriverDashboard() {
             {t("driver_dashboard.loading_dashboard")}
           </div>
         )}
+        {/* ── ToastContainer (fixed top-right, outside flow) ─────────────── */}
+        <ToastContainer toasts={toasts} onDismiss={dismiss} />
+
+        {/* Redux error banner (nếu có) */}
         {error && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700">
             <AlertCircle className="w-3.5 h-3.5" />{error}
           </div>
         )}
-        {message && <Toast message={message} onClose={() => setMessage(null)} />}
 
         {/* ── Hero header ────────────────────────────────────────────────────── */}
         <div className="relative rounded-2xl bg-neutral-950 overflow-hidden">
@@ -440,8 +438,8 @@ export default function DriverDashboard() {
           />
           <StatCard
             label={t("driver_dashboard.current_location")}
-            value={locationCoords?.latitude != null  ? `${locationCoords.latitude.toFixed(3)}°` : "—"}
-            sub={locationCoords?.longitude != null ? `${locationCoords.longitude.toFixed(3)}°` : t("driver_dashboard.live_tracking")}
+            value={locationCoords ? `${locationCoords.latitude?.toFixed(3)}°` : "—"}
+            sub={locationCoords ? `${locationCoords.longitude?.toFixed(3)}°` : t("driver_dashboard.live_tracking")}
             accent="violet"
             icon={MapPin}
           />
@@ -639,19 +637,93 @@ export default function DriverDashboard() {
             {/* ━━ EARNINGS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             {currentSection === "earnings" && (
               <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    { bg: "bg-emerald-950", accent: "text-emerald-400 bg-emerald-400", label: t("driver_dashboard.total_earned"),      value: earnings ? `${earnings.totalEarned.toLocaleString("vi-VN")}đ` : "—" },
-                    { bg: "bg-sky-950",     accent: "text-sky-400 bg-sky-400",         label: t("driver_dashboard.completed_orders"),  value: earnings?.completedOrders ?? 0 },
-                    { bg: "bg-violet-950",  accent: "text-violet-400 bg-violet-400",   label: t("driver_dashboard.wallet_balance"),    value: profile ? `${Number(profile.walletBalance).toLocaleString("vi-VN")}đ` : "—" },
-                  ].map(({ bg, accent, label, value }) => (
-                    <div key={label} className={`relative overflow-hidden rounded-2xl ${bg} p-5`}>
-                      <div className={`absolute -top-4 -right-4 w-24 h-24 rounded-full ${accent.split(" ")[1]} opacity-10 blur-2xl`} />
-                      <p className={`text-[9px] font-bold tracking-[0.25em] uppercase ${accent.split(" ")[0]}`}>{label}</p>
-                      <p className="mt-2 text-3xl font-black text-white">{value}</p>
-                    </div>
-                  ))}
+                {/* ── 4 stat cards ── */}
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {/* Tổng thu */}
+                  <div className="relative overflow-hidden rounded-2xl bg-emerald-950 p-5">
+                    <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-emerald-400 opacity-10 blur-2xl" />
+                    <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-emerald-400">
+                      {t("driver_dashboard.total_earned")}
+                    </p>
+                    <p className="mt-2 text-3xl font-black text-white">
+                      {earnings ? `${earnings.totalEarned.toLocaleString("vi-VN")}đ` : "—"}
+                    </p>
+                  </div>
+
+                  {/* Hoa hồng bị trừ */}
+                  <div className="relative overflow-hidden rounded-2xl bg-rose-950 p-5">
+                    <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-rose-400 opacity-10 blur-2xl" />
+                    <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-rose-400">
+                      Hoa hồng ({profile?.commissionRate ?? 0}%)
+                    </p>
+                    <p className="mt-2 text-3xl font-black text-white">
+                      {earnings && profile?.commissionRate != null
+                        ? `-${Math.round(
+                            earnings.totalEarned * (Number(profile.commissionRate) / 100),
+                          ).toLocaleString("vi-VN")}đ`
+                        : "—"}
+                    </p>
+                  </div>
+
+                  {/* Thu thực nhận */}
+                  <div className="relative overflow-hidden rounded-2xl bg-sky-950 p-5">
+                    <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-sky-400 opacity-10 blur-2xl" />
+                    <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-sky-400">
+                      Thực nhận
+                    </p>
+                    <p className="mt-2 text-3xl font-black text-white">
+                      {earnings && profile?.commissionRate != null
+                        ? `${Math.round(
+                            earnings.totalEarned *
+                              (1 - Number(profile.commissionRate) / 100),
+                          ).toLocaleString("vi-VN")}đ`
+                        : earnings
+                        ? `${earnings.totalEarned.toLocaleString("vi-VN")}đ`
+                        : "—"}
+                    </p>
+                  </div>
+
+                  {/* Số dư ví */}
+                  <div className="relative overflow-hidden rounded-2xl bg-violet-950 p-5">
+                    <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-violet-400 opacity-10 blur-2xl" />
+                    <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-violet-400">
+                      {t("driver_dashboard.wallet_balance")}
+                    </p>
+                    <p className="mt-2 text-3xl font-black text-white">
+                      {profile
+                        ? `${Number(profile.walletBalance).toLocaleString("vi-VN")}đ`
+                        : "—"}
+                    </p>
+                  </div>
                 </div>
+
+                {/* ── Công thức hoa hồng ── */}
+                {profile?.commissionRate != null && earnings && (
+                  <div className="flex items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-xs text-rose-700">
+                    <Percent className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      Tổng thu{" "}
+                      <strong className="font-semibold">
+                        {earnings.totalEarned.toLocaleString("vi-VN")}đ
+                      </strong>{" "}
+                      × {profile.commissionRate}% hoa hồng ={" "}
+                      <strong className="font-semibold">
+                        {Math.round(
+                          earnings.totalEarned * (Number(profile.commissionRate) / 100),
+                        ).toLocaleString("vi-VN")}đ
+                      </strong>{" "}
+                      → Thực nhận{" "}
+                      <strong className="font-semibold text-emerald-700">
+                        {Math.round(
+                          earnings.totalEarned *
+                            (1 - Number(profile.commissionRate) / 100),
+                        ).toLocaleString("vi-VN")}đ
+                      </strong>
+                    </span>
+                  </div>
+                )}
+
+                {/* ── Giao dịch gần đây ── */}
                 <div className="bg-white border border-neutral-100 rounded-2xl p-5">
                   <SectionDivider>{t("driver_dashboard.recent_transactions")}</SectionDivider>
                   <div className="space-y-1">
@@ -843,7 +915,7 @@ export default function DriverDashboard() {
                   <p className="text-[8px] uppercase tracking-widest text-neutral-400 font-bold">Coordinates</p>
                   <p className="text-[10px] font-mono text-neutral-700 mt-0.5">
                     {locationCoords
-                      ? `${Number(locationCoords.latitude ?? 0).toFixed(4)}, ${Number(locationCoords.longitude ?? 0).toFixed(4)}`
+                      ? `${locationCoords.latitude?.toFixed(4)}, ${locationCoords.longitude?.toFixed(4)}`
                       : t("driver_dashboard.no_location_record")}
                   </p>
                 </div>
@@ -860,9 +932,38 @@ export default function DriverDashboard() {
             {/* Quick stats */}
             <div className="bg-white border border-neutral-100 rounded-2xl p-4 divide-y divide-neutral-100">
               {[
-                { icon: Star,        color: "text-amber-500",  label: "Rating",    value: `${Number(profile?.rating ?? 4.8).toFixed(1)}★`, vc: "text-amber-600"  },
-                { icon: CheckCircle, color: "text-emerald-500", label: "Completed", value: earnings?.completedOrders ?? 0,                    vc: "text-emerald-600" },
-                { icon: Activity,    color: "text-orange-500",  label: "Available", value: totalPending,                                       vc: "text-orange-600" },
+                {
+                  icon: Star,
+                  color: "text-amber-500",
+                  label: "Rating",
+                  value: profile?.rating != null
+                    ? `${Number(profile.rating).toFixed(1)}★`
+                    : "—",
+                  vc: "text-amber-600",
+                },
+                {
+                  icon: CheckCircle,
+                  color: "text-emerald-500",
+                  label: "Hoàn thành",
+                  value: earnings?.completedOrders ?? 0,
+                  vc: "text-emerald-600",
+                },
+                {
+                  icon: Percent,
+                  color: "text-violet-500",
+                  label: "Hoa hồng",
+                  value: profile?.commissionRate != null
+                    ? `${profile.commissionRate}%`
+                    : "—",
+                  vc: "text-violet-600",
+                },
+                {
+                  icon: Activity,
+                  color: "text-orange-500",
+                  label: "Đơn chờ",
+                  value: totalPending,
+                  vc: "text-orange-600",
+                },
               ].map(({ icon: Icon, color, label, value, vc }) => (
                 <div key={label} className="flex items-center justify-between py-2.5 px-1">
                   <div className="flex items-center gap-2">

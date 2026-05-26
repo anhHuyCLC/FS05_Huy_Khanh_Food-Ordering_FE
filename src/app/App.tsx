@@ -22,7 +22,7 @@ import { PERMISSIONS } from "./constants/permissions";
 import { ChatBox } from "../components/chat/ChatBox";
 import { Toaster } from "./components/ui/sonner";
 
-function App() {
+function App() {  
   return (
     <AuthBootstrap>
       <Routes>
@@ -40,7 +40,7 @@ function App() {
         <Route path="/tracking" element={<Tracking />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/community" element={<Community />} />
-        <Route path="/restaurant-dashboard" element={<ProtectedRoute permission="restaurant:dashboard:view"><RestaurantDashboard /></ProtectedRoute>} />
+        <Route path="/restaurant-dashboard" element={<RestaurantDashboard />  } />
         <Route path="/admin" element={<ProtectedRoute permission={PERMISSIONS.ADMIN_MANAGEMENT.READ}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
 
