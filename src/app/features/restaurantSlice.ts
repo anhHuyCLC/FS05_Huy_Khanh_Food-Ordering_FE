@@ -69,12 +69,13 @@ const initialState: RestaurantState = {
 
 export const fetchRestaurants = createAsyncThunk(
     "restaurants/list",
-    async (_, {rejectWithValue}) => {
-        try{
+    async (_, { rejectWithValue }) => {
+        try {
             const response = await listRestaurants();
             return response as Restaurant[];
-        } catch (error: any) {
-            const message = error.response?.data?.message || error.message || "Lấy danh sách nhà hàng thất bại.";
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } }; message?: string };
+            const message = err.response?.data?.message || err.message || "Lấy danh sách nhà hàng thất bại.";
             return rejectWithValue(message);
         }
     }

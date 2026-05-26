@@ -94,10 +94,11 @@ export default function Register() {
           successMessage: "Đăng ký tài khoản thành công! Vui lòng đăng nhập.",
         },
       });
-    } catch (error: any) {
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
       setError(
-        error.response?.data?.message ||
-          error.message ||
+        err.response?.data?.message ||
+          err.message ||
           "Đăng ký thất bại. Vui lòng thử lại."
       );
     } finally {

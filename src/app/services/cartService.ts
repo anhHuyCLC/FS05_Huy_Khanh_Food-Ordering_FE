@@ -1,4 +1,5 @@
 import apiClient from "./apiClient";
+import type { OptionChoice, OptionGroup } from "../features/restaurantSlice";
 
 export interface CartItemResponse {
   id: string;
@@ -6,7 +7,7 @@ export interface CartItemResponse {
   menuItemId: string;
   addedByUserId: string;
   quantity: number;
-  selectedOptions: Record<string, any>;
+  selectedOptions: Record<string, OptionChoice | OptionChoice[]>;
   note: string | null;
   menuItem: {
     id: string;
@@ -14,7 +15,7 @@ export interface CartItemResponse {
     basePrice: number | string;
     imageUrl: string | null;
     isAvailable: boolean;
-    optionGroups?: any[];
+    optionGroups?: OptionGroup[];
   };
 }
 
@@ -67,7 +68,7 @@ export const cartService = {
     cartId: string,
     menuItemId: string,
     quantity: number,
-    selectedOptions?: Record<string, any>,
+    selectedOptions?: Record<string, OptionChoice | OptionChoice[]>,
     note?: string
   ): Promise<{ success: boolean; data: CartItemResponse; message: string }> => {
     const response = await apiClient.post(`/v1/carts/${cartId}/items`, {
@@ -82,7 +83,7 @@ export const cartService = {
   updateCartItem: async (
     cartId: string,
     cartItemId: string,
-    data: { quantity?: number; selectedOptions?: Record<string, any>; note?: string }
+    data: { quantity?: number; selectedOptions?: Record<string, OptionChoice | OptionChoice[]>; note?: string }
   ): Promise<{ success: boolean; data: CartItemResponse; message: string }> => {
     const response = await apiClient.patch(`/v1/carts/${cartId}/items/${cartItemId}`, data);
     return response.data.data;

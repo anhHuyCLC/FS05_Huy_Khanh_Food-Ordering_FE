@@ -26,16 +26,17 @@ export default function AddressAutocomplete({
   const loading = useAppSelector(selectMapLoading);
   const selectedAddress = useAppSelector(selectSelectedAddress);
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(selectedAddress?.address ?? "");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Initialize input query if selectedAddress exists
-  useEffect(() => {
-    if (selectedAddress) {
-      setQuery(selectedAddress.address);
-    }
-  }, [selectedAddress]);
+  // React-recommended pattern: adjust state during render when external value changes
+  // (avoids double render caused by useEffect + setState)
+  const [prevSelectedAddress, setPrevSelectedAddress] = useState(selectedAddress);
+  if (selectedAddress !== prevSelectedAddress) {
+    setPrevSelectedAddress(selectedAddress);
+    setQuery(selectedAddress?.address ?? "");
+  }
 
   // Debounced search trigger
   useEffect(() => {
@@ -79,8 +80,9 @@ export default function AddressAutocomplete({
       if (onSelectAddress) {
         onSelectAddress(res.addressInfo);
       }
-    } catch (err: any) {
-      toast.error(err || "Lỗi định vị. Vui lòng thử lại.");
+    } catch (err: unknown) {
+      toast.error(typeof err === "string" ? err : "Lỗi định vị. Vui lòng thử lại.");
+
     }
   };
 

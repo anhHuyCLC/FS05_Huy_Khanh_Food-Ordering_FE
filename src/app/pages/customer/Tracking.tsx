@@ -99,9 +99,10 @@ export default function Tracking() {
       setOrder(updatedOrder);
       toast.success("Hủy đơn hàng thành công!");
       setShowCancelPrompt(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Không thể hủy đơn hàng");
+      const error = err as { response?: { data?: { message?: string } } };
+      toast.error(error.response?.data?.message || "Không thể hủy đơn hàng");
     } finally {
       setIsCancelling(false);
     }
@@ -119,9 +120,10 @@ export default function Tracking() {
       });
       toast.success("Đánh giá của bạn đã được ghi nhận. Cảm ơn bạn!");
       setReviewSubmitted(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Gửi đánh giá thất bại");
+      const error = err as { response?: { data?: { message?: string } } };
+      toast.error(error.response?.data?.message || "Gửi đánh giá thất bại");
     } finally {
       setIsSubmittingReview(false);
     }

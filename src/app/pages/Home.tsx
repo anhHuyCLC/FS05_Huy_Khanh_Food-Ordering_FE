@@ -9,7 +9,7 @@ import { Navbar } from "../components/layout/Navbar";
 import { Footer } from "../components/layout/Footer";
 import { testimonials, faqItems, IMGS } from "../data/mock";
 import { useAppDispatch, useAppSelector } from "../stores/store";
-import { fetchRestaurants } from "../features/restaurantSlice";
+import { fetchRestaurants, type Restaurant } from "../features/restaurantSlice";
 import AddressAutocomplete from "../components/map/AddressAutocomplete";
 import MapView from "../components/map/MapView";
 import RestaurantMarkers from "../components/map/RestaurantMarkers";
@@ -71,7 +71,7 @@ export default function Home() {
   }, [restaurants]);
 
   // Proximity calculation utilities
-  const getRestaurantCoords = (r: any): [number, number] => {
+  const getRestaurantCoords = (r: Restaurant): [number, number] => {
     const lat = r.latitude ? parseFloat(r.latitude) : null;
     const lng = r.longitude ? parseFloat(r.longitude) : null;
     if (lat && lng && !isNaN(lat) && !isNaN(lng)) {

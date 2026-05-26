@@ -10,6 +10,7 @@ import {
   Zap, TrendingUp, Activity, AlertCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PERMISSIONS } from "../../constants/permissions";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { useDriverSocket } from "../../hooks/useDriverSocket";
 import {
@@ -22,7 +23,7 @@ import {
   updateLocationThunk,
   setDriverStatus,
 } from "../../features/driverSlice";
-import type { DeliveryStatus } from "../../types/driver";
+import type { DeliveryStatus, Order } from "../../types/driver";
 
 // ── Biểu đồ thu nhập theo ngày (fallback khi chưa có data từ API) ─────────────
 const SAMPLE_CHART: { day: string; earnings: number }[] = [
@@ -93,7 +94,7 @@ function StatCard({
 function AvailableOrderCard({
   order, onAccept, onReject, t,
 }: {
-  order: any; onAccept: () => void; onReject: () => void; t: (k: string) => string;
+  order: Order; onAccept: () => void; onReject: () => void; t: (k: string) => string;
 }) {
   const itemCount = order.orderItems?.length ?? 0;
   return (
@@ -144,7 +145,7 @@ function AvailableOrderCard({
 function ActiveOrderCard({
   order, onUpdate, t,
 }: {
-  order: any; onUpdate: (s: string) => void; t: (k: string) => string;
+  order: Order; onUpdate: (s: string) => void; t: (k: string) => string;
 }) {
   const steps = [
     { key: "picked_up",  emoji: "📦", label: t("driver_dashboard.mark_picked_up"),  activeCls: "bg-sky-500 text-white border-sky-500",       inactiveCls: "border-sky-100 text-sky-700 bg-sky-50 hover:bg-sky-100"         },
@@ -231,14 +232,13 @@ export default function DriverDashboard() {
   const [message, setMessage] = useState<string | null>(null);
   const showMsg = (msg: string) => { setMessage(msg); setTimeout(() => setMessage(null), 4000); };
 
-  // ── Nav ──────────────────────────────────────────────────────────────────────
   const navItems = [
-    { icon: "🏠", label: t("driver_dashboard.nav.home"),        path: "/driver-dashboard",             permission: "driver:dashboard:view"    },
-    { icon: "📦", label: t("driver_dashboard.nav.deliveries"),  path: "/driver-dashboard/deliveries",  permission: "delivery:view"             },
-    { icon: "💰", label: t("driver_dashboard.nav.earnings"),    path: "/driver-dashboard/earnings",    permission: "earning:view"              },
-    { icon: "🗺️", label: t("driver_dashboard.nav.heatmap"),    path: "/driver-dashboard/heatmap",     permission: "delivery:heatmap:view"     },
-    { icon: "📊", label: t("driver_dashboard.nav.performance"), path: "/driver-dashboard/performance", permission: "driver:performance:view"   },
-    { icon: "⚙️", label: t("driver_dashboard.nav.settings"),   path: "/driver-dashboard/settings",    permission: "driver:settings:view"      },
+    { icon: "🏠", label: t("driver_dashboard.nav.home"),        path: "/driver-dashboard",             permission: PERMISSIONS.DRIVER_PROFILE.READ    },
+    { icon: "📦", label: t("driver_dashboard.nav.deliveries"),  path: "/driver-dashboard/deliveries",  permission: PERMISSIONS.ORDER.READ             },
+    { icon: "💰", label: t("driver_dashboard.nav.earnings"),    path: "/driver-dashboard/earnings",    permission: PERMISSIONS.DRIVER_PROFILE.READ    },
+    { icon: "🗺️", label: t("driver_dashboard.nav.heatmap"),    path: "/driver-dashboard/heatmap",     permission: PERMISSIONS.ORDER.READ             },
+    { icon: "📊", label: t("driver_dashboard.nav.performance"), path: "/driver-dashboard/performance", permission: PERMISSIONS.DRIVER_PROFILE.READ    },
+    { icon: "⚙️", label: t("driver_dashboard.nav.settings"),   path: "/driver-dashboard/settings",    permission: PERMISSIONS.DRIVER_PROFILE.UPDATE  },
   ];
 
   // ── Socket callbacks ─────────────────────────────────────────────────────────
@@ -312,8 +312,8 @@ export default function DriverDashboard() {
       joinOrderRoom(orderId);
       await refreshOrders();
       dispatch(loadDriverDashboard());
-    } catch (e: any) {
-      window.alert(e?.message || t("driver_dashboard.order_accept_failed"));
+    } catch (e) {
+      window.alert((e as { message?: string })?.message || t("driver_dashboard.order_accept_failed"));
     }
   }
 
@@ -321,8 +321,8 @@ export default function DriverDashboard() {
     try {
       await dispatch(respondOrderThunk({ orderId, action: "rejected" })).unwrap();
       await refreshOrders();
-    } catch (e: any) {
-      window.alert(e?.message || t("driver_dashboard.order_reject_failed"));
+    } catch (e) {
+      window.alert((e as { message?: string })?.message || t("driver_dashboard.order_reject_failed"));
     }
   }
 
@@ -337,8 +337,8 @@ export default function DriverDashboard() {
     if (!ids.length) { window.alert(t("driver_dashboard.no_active_orders_to_optimize")); return; }
     try {
       await dispatch(optimizeRouteThunk(ids)).unwrap();
-    } catch (e: any) {
-      window.alert(e?.message || t("driver_dashboard.route_optimize_failed"));
+    } catch (e) {
+      window.alert((e as { message?: string })?.message || t("driver_dashboard.route_optimize_failed"));
     }
   }
 
@@ -349,8 +349,8 @@ export default function DriverDashboard() {
         try {
           await dispatch(updateLocationThunk({ latitude, longitude })).unwrap();
           showMsg("✅ Đã cập nhật vị trí");
-        } catch (e: any) {
-          window.alert(e?.message || t("driver_dashboard.location_update_failed"));
+        } catch (e) {
+          window.alert((e as { message?: string })?.message || t("driver_dashboard.location_update_failed"));
         }
       },
       () => window.alert(t("driver_dashboard.location_permission_denied")),
@@ -703,7 +703,7 @@ export default function DriverDashboard() {
                       <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#6366F1", fontWeight: 600 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: "#6366F1" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}k`} />
                       <Tooltip
-                        formatter={(v: any) => [`${v}k đ`, t("driver_dashboard.nav.earnings")]}
+                        formatter={(v) => [v ? `${v}k đ` : "—", t("driver_dashboard.nav.earnings")]}
                         contentStyle={{ borderRadius: 8, border: "1px solid #E0E7FF", background: "#fff", fontSize: 11 }}
                         cursor={{ fill: "rgba(99,102,241,0.05)" }}
                       />

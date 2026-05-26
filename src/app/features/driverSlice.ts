@@ -20,6 +20,7 @@ import type {
   RouteItem,
   Earnings,
   DeliveryStatus,
+  EarningsPeriod,
 } from "../types/driver";
 
 export interface DriverState {
@@ -73,8 +74,8 @@ export const loadDriverDashboard = createAsyncThunk(
         locationCoords,
         earnings: earningsRes.data,
       };
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải dữ liệu tài xế.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || " Không thể tải dữ liệu tài xế.");
     }
   }
 );
@@ -85,8 +86,8 @@ export const fetchAvailableOrdersThunk = createAsyncThunk(
     try {
       const response = await getAvailableOrders();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải đơn chờ.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải đơn chờ.");
     }
   }
 );
@@ -97,8 +98,8 @@ export const fetchActiveOrdersThunk = createAsyncThunk(
     try {
       const response = await getActiveOrders();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải đơn đang giao.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải đơn đang giao.");
     }
   }
 );
@@ -109,8 +110,8 @@ export const fetchHeatmapThunk = createAsyncThunk(
     try {
       const response = await getDemandHeatmap();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải heatmap.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải heatmap.");
     }
   }
 );
@@ -121,20 +122,20 @@ export const fetchLocationThunk = createAsyncThunk(
     try {
       const response = await getMyLocation();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể lấy vị trí tài xế.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể lấy vị trí tài xế.");
     }
   }
 );
 
 export const fetchEarningsThunk = createAsyncThunk(
   "driver/fetchEarnings",
-  async (period: string | undefined, { rejectWithValue }) => {
+  async (period: EarningsPeriod | undefined, { rejectWithValue }) => {
     try {
-      const response = await getEarningsService(period as any);
+      const response = await getEarningsService(period);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải thu nhập.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải thu nhập.");
     }
   }
 );
@@ -145,8 +146,8 @@ export const updateDriverStatusThunk = createAsyncThunk(
     try {
       await updateDriverStatusService(status);
       return status;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể cập nhật trạng thái.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể cập nhật trạng thái.");
     }
   }
 );
@@ -160,8 +161,8 @@ export const respondOrderThunk = createAsyncThunk(
     try {
       const response = await respondOrderService(payload.orderId, payload.action);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể xử lý yêu cầu đơn.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể xử lý yêu cầu đơn.");
     }
   }
 );
@@ -175,8 +176,8 @@ export const updateDeliveryStatusThunk = createAsyncThunk(
     try {
       await updateDeliveryStatusService(payload.orderId, payload.status);
       return payload;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể cập nhật trạng thái giao.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể cập nhật trạng thái giao.");
     }
   }
 );
@@ -190,8 +191,8 @@ export const updateLocationThunk = createAsyncThunk(
     try {
       await updateLocationService(payload.latitude, payload.longitude);
       return payload;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể cập nhật vị trí.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể cập nhật vị trí.");
     }
   }
 );
@@ -202,8 +203,8 @@ export const optimizeRouteThunk = createAsyncThunk(
     try {
       const response = await optimizeRouteService(orderIds);
       return response.data.route;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tối ưu lộ trình.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tối ưu lộ trình.");
     }
   }
 );

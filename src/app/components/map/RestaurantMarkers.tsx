@@ -1,5 +1,5 @@
 import { Marker, Popup } from "react-leaflet";
-import { restaurantIcon } from "./MapView";
+import { restaurantIcon } from "./mapIcons";
 
 export interface RestaurantMarkerData {
   id: string;

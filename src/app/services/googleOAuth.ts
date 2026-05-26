@@ -7,7 +7,24 @@
  * 3. Use useGoogleAuth() hook to get OAuth functions in your components
  */
 
-export function initGoogleSDK(_clientId: string) {
+interface GoogleGsi {
+  accounts: {
+    id: {
+      initialize: (config: { client_id: string; callback: (res: { credential?: string }) => void }) => void;
+      prompt: (promptHandler?: unknown, errorCallback?: () => void) => void;
+      renderButton: (element: HTMLElement | null, options: unknown) => void;
+    };
+  };
+}
+
+const getGoogle = (): GoogleGsi | undefined => {
+  if (typeof window !== 'undefined') {
+    return (window as unknown as { google?: GoogleGsi }).google;
+  }
+  return undefined;
+};
+
+export function initGoogleSDK() {
   const script = document.createElement('script');
   script.src = 'https://accounts.google.com/gsi/client';
   script.async = true;
@@ -37,9 +54,10 @@ export function getAuthorizationCodeFromUrl(): string | null {
  * Google One Tap Sign-In Integration
  * Use this for One Tap UI
  */
-export function renderGoogleOneTap(elementId: string, options?: any) {
-  if (typeof window !== 'undefined' && (window as any).google) {
-    (window as any).google.accounts.id.renderButton(
+export function renderGoogleOneTap(elementId: string, options?: unknown) {
+  const google = getGoogle();
+  if (google) {
+    google.accounts.id.renderButton(
       document.getElementById(elementId),
       options || {
         theme: 'outline',
@@ -53,12 +71,17 @@ export function renderGoogleOneTap(elementId: string, options?: any) {
 /**
  * Initialize Google One Tap
  */
-export function initializeGoogleOneTap(clientId: string, onSuccess: (credentialResponse: any) => void, onError?: () => void) {
-  if (typeof window !== 'undefined' && (window as any).google) {
-    (window as any).google.accounts.id.initialize({
+export function initializeGoogleOneTap(
+  clientId: string,
+  onSuccess: (credentialResponse: { credential?: string }) => void,
+  onError?: () => void
+) {
+  const google = getGoogle();
+  if (google) {
+    google.accounts.id.initialize({
       client_id: clientId,
       callback: onSuccess,
     });
-    (window as any).google.accounts.id.prompt(undefined, onError);
+    google.accounts.id.prompt(undefined, onError);
   }
 }

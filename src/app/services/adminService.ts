@@ -116,6 +116,20 @@ export interface PayoutItem {
   amount: string;
 }
 
+export interface RevenueDataItem {
+  month: string;
+  revenue: number;
+}
+
+export interface AdminUserDetail {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: string;
+  roles: { roleId: string; role?: { name: string; code: string } }[];
+}
+
 // Config đặc biệt: bỏ qua auto-redirect khi gặp lỗi 403
 const adminConfig: AxiosRequestConfig & { _skipForbiddenRedirect?: boolean } = {
   _skipForbiddenRedirect: true,
@@ -130,8 +144,9 @@ async function adminGet<T>(url: string, fallback: T): Promise<T> {
       return data.data;
     }
     return data;
-  } catch (err: any) {
-    if (err?.response?.status === 403) {
+  } catch (err: unknown) {
+    const error = err as { response?: { status?: number } };
+    if (error?.response?.status === 403) {
       console.warn(`[adminService] 403 on ${url} - user may not have admin permissions.`);
       return fallback;
     }
@@ -151,8 +166,8 @@ export const adminService = {
     });
   },
 
-  getRevenueData: async (): Promise<any[]> => {
-    return adminGet<any[]>("/v1/admin/revenue", []);
+  getRevenueData: async (): Promise<RevenueDataItem[]> => {
+    return adminGet<RevenueDataItem[]>("/v1/admin/revenue", []);
   },
 
   getCategoryPieData: async (): Promise<CategoryPieItem[]> => {
@@ -176,8 +191,11 @@ export const adminService = {
   },
 
   getUsers: async (): Promise<AdminUser[]> => {
-    const data = await adminGet<any>("/v1/admin/users", []);
-    return data?.data || data?.items || data || [];
+    const data = await adminGet<{ data?: AdminUser[]; items?: AdminUser[] } | AdminUser[]>("/v1/admin/users", []);
+    if (Array.isArray(data)) {
+      return data;
+    }
+    return data?.data || data?.items || [];
   },
 
   approveRestaurant: async (restaurantId: string): Promise<void> => {
@@ -239,29 +257,32 @@ export const adminService = {
     return adminGet<PayoutItem[]>("/v1/admin/payouts", []);
   },
 
-  createUser: async (userData: { firstName: string; lastName: string; email: string; roleIds: string[] }): Promise<any> => {
+  createUser: async (userData: { firstName: string; lastName: string; email: string; roleIds: string[] }): Promise<unknown> => {
     const response = await apiClient.post("/v1/admin/users", userData, adminConfig);
     return response.data?.data || response.data;
   },
 
-  getUser: async (userId: string): Promise<any> => {
+  getUser: async (userId: string): Promise<AdminUserDetail> => {
     const response = await apiClient.get(`/v1/admin/users/${userId}`, adminConfig);
     return response.data?.data || response.data;
   },
 
-  updateUser: async (userId: string, userData: { firstName: string; lastName: string; email: string; status: string; roleIds: string[] }): Promise<any> => {
+  updateUser: async (userId: string, userData: { firstName: string; lastName: string; email: string; status: string; roleIds: string[] }): Promise<unknown> => {
     const response = await apiClient.put(`/v1/admin/users/${userId}`, userData, adminConfig);
     return response.data?.data || response.data;
   },
 
-  deleteUser: async (userId: string): Promise<any> => {
+  deleteUser: async (userId: string): Promise<unknown> => {
     const response = await apiClient.delete(`/v1/admin/users/${userId}`, adminConfig);
     return response.data?.data || response.data;
   },
 
   getRoles: async (): Promise<AdminRole[]> => {
-    const data = await adminGet<any>("/v1/admin/roles", []);
-    return data?.data || data?.items || data || [];
+    const data = await adminGet<{ data?: AdminRole[]; items?: AdminRole[] } | AdminRole[]>("/v1/admin/roles", []);
+    if (Array.isArray(data)) {
+      return data;
+    }
+    return data?.data || data?.items || [];
   }
 };
 

@@ -22,7 +22,7 @@ export function useGoogleAuth() {
 
   useEffect(() => {
     if (GOOGLE_CLIENT_ID) {
-      initGoogleSDK(GOOGLE_CLIENT_ID);
+      initGoogleSDK();
     }
   }, []);
 
