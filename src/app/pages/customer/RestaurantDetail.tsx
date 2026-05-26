@@ -27,7 +27,7 @@ export default function RestaurantDetail() {
 
   // Customize modal state
   const [customizeItem, setCustomizeItem] = useState<MenuItem | null>(null);
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, any>>({});
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, OptionChoice | OptionChoice[]>>({});
   const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   useEffect(() => {
@@ -71,32 +71,7 @@ export default function RestaurantDetail() {
     }, {} as Record<string, number>);
   }, [items]);
 
-  // Open customize modal or add directly if no options
-  const handleAddClick = useCallback((itemId: string) => {
-    if (!isLoggedIn) {
-      setShowLoginModal(true);
-      return;
-    }
-    const item = restaurant?.menuItems?.find((i) => i.id === itemId);
-    if (!item) return;
-
-    if (item.optionGroups && item.optionGroups.length > 0) {
-      // Pre-select first choice of required single-select groups
-      const preSelected: Record<string, any> = {};
-      item.optionGroups.forEach((group) => {
-        if (group.isRequired && group.maxChoices === 1 && group.choices?.length > 0) {
-          preSelected[group.name] = group.choices[0];
-        }
-      });
-      setSelectedOptions(preSelected);
-      setCustomizeItem(item);
-    } else {
-      // No options, add directly
-      addItemToCart(item, {});
-    }
-  }, [isLoggedIn, restaurant]);
-
-  const addItemToCart = useCallback(async (item: MenuItem, opts: Record<string, any>) => {
+  const addItemToCart = useCallback(async (item: MenuItem, opts: Record<string, OptionChoice | OptionChoice[]>) => {
     if (!restaurant) return;
     setLoadingItemId(item.id);
     try {
@@ -112,6 +87,31 @@ export default function RestaurantDetail() {
       setLoadingItemId(null);
     }
   }, [restaurant, addToCart]);
+
+  // Open customize modal or add directly if no options
+  const handleAddClick = useCallback((itemId: string) => {
+    if (!isLoggedIn) {
+      setShowLoginModal(true);
+      return;
+    }
+    const item = restaurant?.menuItems?.find((i) => i.id === itemId);
+    if (!item) return;
+
+    if (item.optionGroups && item.optionGroups.length > 0) {
+      // Pre-select first choice of required single-select groups
+      const preSelected: Record<string, OptionChoice | OptionChoice[]> = {};
+      item.optionGroups.forEach((group) => {
+        if (group.isRequired && group.maxChoices === 1 && group.choices?.length > 0) {
+          preSelected[group.name] = group.choices[0];
+        }
+      });
+      setSelectedOptions(preSelected);
+      setCustomizeItem(item);
+    } else {
+      // No options, add directly
+      addItemToCart(item, {});
+    }
+  }, [isLoggedIn, restaurant, addItemToCart]);
 
   const handleConfirmCustomize = useCallback(async () => {
     if (!customizeItem) return;
@@ -255,8 +255,8 @@ export default function RestaurantDetail() {
                       {group.choices?.map((choice: OptionChoice) => {
                         const priceExtra = Number(choice.additionalPrice);
                         const isChecked = isSingle
-                          ? currentVal?.id === choice.id
-                          : (Array.isArray(currentVal) ? currentVal : []).some((c: any) => c.id === choice.id);
+                          ? (!Array.isArray(currentVal) && currentVal?.id === choice.id)
+                          : (Array.isArray(currentVal) && currentVal.some((c: OptionChoice) => c.id === choice.id));
 
                         return (
                           <label
@@ -289,11 +289,11 @@ export default function RestaurantDetail() {
                                   if (isSingle) {
                                     setSelectedOptions(prev => ({ ...prev, [group.name]: choice }));
                                   } else {
-                                    const currentList = Array.isArray(currentVal) ? currentVal : [];
-                                    const exists = currentList.some((c: any) => c.id === choice.id);
+                                    const currentList = (Array.isArray(currentVal) ? currentVal : []) as OptionChoice[];
+                                    const exists = currentList.some((c: OptionChoice) => c.id === choice.id);
                                     const canAdd = !exists && currentList.length < group.maxChoices;
                                     const newList = exists
-                                      ? currentList.filter((c: any) => c.id !== choice.id)
+                                      ? currentList.filter((c: OptionChoice) => c.id !== choice.id)
                                       : canAdd ? [...currentList, choice] : currentList;
                                     setSelectedOptions(prev => ({ ...prev, [group.name]: newList }));
                                   }
@@ -512,8 +512,10 @@ export default function RestaurantDetail() {
                           <span className="text-sm text-gray-700 font-medium block truncate">{item.name}</span>
                           {item.selectedOptions && Object.keys(item.selectedOptions).length > 0 && (
                             <div className="text-xs text-gray-400 mt-0.5">
-                              {Object.entries(item.selectedOptions).map(([k, v]: [string, any]) => {
-                                const val = Array.isArray(v) ? v.map((c: any) => c.name).join(", ") : v?.name;
+                              {Object.entries(item.selectedOptions).map(([k, v]) => {
+                                const val = Array.isArray(v)
+                                  ? (v as OptionChoice[]).map((c: OptionChoice) => c.name).join(", ")
+                                  : (v as OptionChoice | undefined)?.name;
                                 return val ? <span key={k} className="block">{k}: {val}</span> : null;
                               })}
                             </div>

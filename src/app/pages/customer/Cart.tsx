@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useCartStore, type CartItem } from "../../stores/cartStore";
 import { useAuthStore } from "../../stores/authStore";
 import { cartService } from "../../services/cartService";
+import type { OptionChoice, OptionGroup } from "../../features/restaurantSlice";
 
 export default function Cart() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function Cart() {
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<CartItem | null>(null);
-  const [selectedOptionsState, setSelectedOptionsState] = useState<Record<string, any>>({});
+  const [selectedOptionsState, setSelectedOptionsState] = useState<Record<string, OptionChoice | OptionChoice[]>>({});
   const [isSavingOptions, setIsSavingOptions] = useState(false);
   const { t } = useTranslation();
 
@@ -92,8 +93,6 @@ export default function Cart() {
     );
   }
 
-  const total = subtotal;
-
   // Group items by restaurant
   const itemsByRestaurant = items.reduce((acc, item) => {
     const rId = item.restaurantId || restaurantId || 'unknown';
@@ -163,11 +162,11 @@ export default function Cart() {
                         
                         {item.selectedOptions && Object.keys(item.selectedOptions).length > 0 && (
                           <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                            {Object.entries(item.selectedOptions).map(([groupName, val]: [string, any]) => {
+                            {Object.entries(item.selectedOptions).map(([groupName, val]) => {
                               if (!val) return null;
                               const displayVal = Array.isArray(val)
-                                ? val.map((c: any) => c.name).join(", ")
-                                : val.name;
+                                ? (val as OptionChoice[]).map((c: OptionChoice) => c.name).join(", ")
+                                : (val as OptionChoice).name;
                               return (
                                 <div key={groupName}>
                                   <span className="font-medium text-gray-600">{groupName}:</span> {displayVal}
@@ -282,7 +281,7 @@ export default function Cart() {
 
             {/* Options */}
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
-              {selectedItem.optionGroups?.map((group: any) => {
+              {selectedItem.optionGroups?.map((group: OptionGroup) => {
                 const isSingle = group.maxChoices === 1;
                 const currentVal = selectedOptionsState[group.name];
 
@@ -299,11 +298,11 @@ export default function Cart() {
                       )}
                     </div>
                     <div className="space-y-2">
-                      {group.choices?.map((choice: any) => {
+                      {group.choices?.map((choice: OptionChoice) => {
                         const priceExtra = Number(choice.additionalPrice);
                         const isChecked = isSingle
-                          ? currentVal?.id === choice.id
-                          : (Array.isArray(currentVal) ? currentVal : []).some((c: any) => c.id === choice.id);
+                          ? (!Array.isArray(currentVal) && currentVal?.id === choice.id)
+                          : (Array.isArray(currentVal) && currentVal.some((c: OptionChoice) => c.id === choice.id));
 
                         return (
                           <label
@@ -328,11 +327,11 @@ export default function Cart() {
                                   if (isSingle) {
                                     setSelectedOptionsState(prev => ({ ...prev, [group.name]: choice }));
                                   } else {
-                                    const currentList = Array.isArray(currentVal) ? currentVal : [];
-                                    const exists = currentList.some((c: any) => c.id === choice.id);
+                                    const currentList = (Array.isArray(currentVal) ? currentVal : []) as OptionChoice[];
+                                    const exists = currentList.some((c: OptionChoice) => c.id === choice.id);
                                     const canAdd = !exists && currentList.length < group.maxChoices;
                                     const newList = exists
-                                      ? currentList.filter((c: any) => c.id !== choice.id)
+                                      ? currentList.filter((c: OptionChoice) => c.id !== choice.id)
                                       : canAdd ? [...currentList, choice] : currentList;
                                     setSelectedOptionsState(prev => ({ ...prev, [group.name]: newList }));
                                   }

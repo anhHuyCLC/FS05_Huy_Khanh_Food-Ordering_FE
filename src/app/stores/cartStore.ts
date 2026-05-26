@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { useAuthStore } from "./authStore";
 import { cartService } from "../services/cartService";
+import type { CartResponse } from "../services/cartService";
+import type { OptionChoice, OptionGroup } from "../features/restaurantSlice";
 
 export interface CartItem {
   id: string; // menuItemId
@@ -15,8 +17,8 @@ export interface CartItem {
   restaurantId?: string;
   restaurantName?: string;
   restaurantAddress?: string;
-  selectedOptions?: Record<string, any>;
-  optionGroups?: any[];
+  selectedOptions?: Record<string, OptionChoice | OptionChoice[]>;
+  optionGroups?: OptionGroup[];
   restaurantLatitude?: number;
   restaurantLongitude?: number;
 }
@@ -30,7 +32,7 @@ interface CartStoreState {
     item: Omit<CartItem, "qty" | "restaurantId" | "restaurantName" | "cartItemId" | "cartId">,
     restaurantId: string,
     restaurantName: string,
-    selectedOptions?: Record<string, any>
+    selectedOptions?: Record<string, OptionChoice | OptionChoice[]>
   ) => Promise<void>;
   removeItem: (id: string, restaurantId?: string) => Promise<void>;
   updateQty: (id: string, delta: number, restaurantId?: string) => Promise<void>;
@@ -66,7 +68,7 @@ export const useCartStore = create<CartStoreState>()(
               const basePrice = Number(item.menuItem.basePrice);
               let optionTotal = 0;
               if (item.selectedOptions && typeof item.selectedOptions === "object") {
-                const options = item.selectedOptions as Record<string, any>;
+              const options = item.selectedOptions as Record<string, OptionChoice | OptionChoice[]>;
                 for (const key of Object.keys(options)) {
                   const optionValue = options[key];
                   if (Array.isArray(optionValue)) {
@@ -138,9 +140,9 @@ export const useCartStore = create<CartStoreState>()(
           console.log("cartRes from API:", cartRes);
           
           // Safely extract cart supporting nested structure if backend changes
-          const cart = cartRes?.data && (cartRes.data as any).cart 
-            ? (cartRes.data as any).cart 
-            : cartRes?.data;
+          type CartOrNested = CartResponse & { cart?: CartResponse };
+          const cartData = cartRes?.data as CartOrNested;
+          const cart = cartData?.cart ?? cartData;
             
           console.log("cart object:", cart);
 

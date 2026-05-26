@@ -1,5 +1,5 @@
 import apiClient from './apiClient';
-import type { Order, CreateOrderInput, UpdateOrderStatusInput, CancelOrderInput, OrderStatusHistory } from '../types/order';
+import type { Order, CreateOrderInput, UpdateOrderStatusInput, CancelOrderInput, OrderStatusHistory, Promotion } from '../types/order';
 
 export const orderService = {
   createOrder: async (data: CreateOrderInput): Promise<Order> => {
@@ -7,9 +7,14 @@ export const orderService = {
     return response.data.data;
   },
 
-  checkPromotion: async (data: { promotionCode: string; restaurantId: string; totalAmount: number }) => {
+  checkPromotion: async (data: { promotionCode: string; restaurantId: string; totalAmount: number; deliveryFee?: number }) => {
     const response = await apiClient.post('/v1/orders/check-promotion', data);
     return response.data;
+  },
+
+  getPromotions: async (restaurantId?: string): Promise<Promotion[]> => {
+    const response = await apiClient.get('/v1/promotions', { params: { restaurantId } });
+    return response.data.data || [];
   },
 
   getMyOrders: async (): Promise<Order[]> => {
@@ -35,7 +40,7 @@ export const orderService = {
       driverRating?: number;
       driverComment?: string;
     }
-  ): Promise<any> => {
+  ): Promise<unknown> => {
     const response = await apiClient.post(`/v1/orders/${orderId}/review`, data);
     return response.data;
   },

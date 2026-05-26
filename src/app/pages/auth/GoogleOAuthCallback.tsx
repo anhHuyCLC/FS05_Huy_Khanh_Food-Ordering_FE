@@ -4,6 +4,8 @@ import { useAuthActions } from "../../hooks/useAuth";
 import { useAuthStore } from "../../stores/authStore";
 import { getAuthorizationCodeFromUrl } from "../../services/googleOAuth";
 
+import { getRedirectPath } from "../../lib/authorization";
+
 const getErrorMessage = (error: unknown) => {
   if (error && typeof error === "object" && "response" in error) {
     const response = (error as { response?: { data?: { message?: string } } }).response;
@@ -24,20 +26,18 @@ export default function GoogleOAuthCallback() {
 
   useEffect(() => {
     if (user) {
-      navigate("/");
+      navigate(getRedirectPath(user));
       return;
     }
 
     const code = getAuthorizationCodeFromUrl();
     if (code && !isFetched.current) {
       isFetched.current = true;
-      setLoading(true);
-      setError(null);
 
       loginWithGoogleCode(code)
-        .then(() => {
+        .then((auth) => {
           window.history.replaceState({}, document.title, window.location.pathname);
-          navigate("/");
+          navigate(getRedirectPath(auth.user));
         })
         .catch((error) => {
           setError(getErrorMessage(error));

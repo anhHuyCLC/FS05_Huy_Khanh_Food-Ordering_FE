@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Flame, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { IMGS } from "../data/mock";
 import { useGoogleAuth } from "../hooks/useGoogleAuth";
 import { useAuthActions } from "../hooks/useAuth";
 import { useAuthStore } from "../stores/authStore";
+import { toast } from "sonner";
+
+import { getRedirectPath } from "../lib/authorization";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
@@ -25,10 +29,11 @@ export default function Login() {
     setError(null);
 
     try {
-      await login(form);
-      navigate("/");
-    } catch (error: any) {
-      setError(error.response?.data?.message || error.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+      const auth = await login(form);
+      navigate(getRedirectPath(auth.user));
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      setError(err.response?.data?.message || err.message || "Đăng nhập thất bại. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -36,9 +41,16 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      navigate("/");
+      navigate(getRedirectPath(user));
     }
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (location.state?.successMessage) {
+      toast.success(location.state.successMessage);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">

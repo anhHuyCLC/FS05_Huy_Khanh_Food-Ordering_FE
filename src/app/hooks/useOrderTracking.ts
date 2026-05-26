@@ -38,7 +38,7 @@ export function useOrderTracking(orderId: string, token: string) {
     });
 
     // Vị trí tài xế cập nhật
-    socket.on("tracking:location", (data: any) => {
+    socket.on("tracking:location", (data: { lat: number; lng: number; timestamp: string }) => {
       setTracking((prev) => ({
         ...prev,
         driverLat: data.lat,
@@ -48,7 +48,7 @@ export function useOrderTracking(orderId: string, token: string) {
     });
 
     // Trạng thái đơn cập nhật
-    socket.on("tracking:status", (data: any) => {
+    socket.on("tracking:status", (data: { status: string; timestamp: string }) => {
       setTracking((prev) => ({
         ...prev,
         status: data.status,

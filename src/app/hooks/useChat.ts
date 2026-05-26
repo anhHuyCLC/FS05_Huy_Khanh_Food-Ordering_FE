@@ -71,3 +71,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearHistory: () => set({ messages: [] }),
 }));
+
+export const useChat = () => {
+  const messages = useChatStore((state) => state.messages);
+  const loading = useChatStore((state) => state.isLoading);
+  const sendMessage = useChatStore((state) => state.sendMessage);
+  const isOpen = useChatStore((state) => state.isOpen);
+  const toggleChat = useChatStore((state) => state.toggleChat);
+
+  return {
+    messages,
+    loading,
+    sendMessage,
+    isOpen,
+    toggleChat,
+  };
+};

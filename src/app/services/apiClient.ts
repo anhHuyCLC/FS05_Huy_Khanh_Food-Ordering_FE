@@ -14,6 +14,7 @@ const apiClient = axios.create({
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
+  _skipForbiddenRedirect?: boolean;
 };
 
 const publicClient = axios.create({
@@ -104,7 +105,11 @@ apiClient.interceptors.response.use(
     }
 
     if (status === 403 && window.location.pathname !== "/403") {
-      window.location.assign("/403");
+      // Chỉ redirect khi request không tự xử lý lỗi 403
+      const skipRedirect = originalRequest?._skipForbiddenRedirect;
+      if (!skipRedirect) {
+        window.location.assign("/403");
+      }
     }
 
     return Promise.reject(error);

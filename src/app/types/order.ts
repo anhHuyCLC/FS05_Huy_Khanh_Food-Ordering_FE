@@ -59,8 +59,11 @@ export interface Order {
   deliveryLongitude?: number;
   note?: string;
   cancelReason?: string;
+  customerPhone?: string | null;
   createdAt: string;
   updatedAt: string;
+  assignmentExpiresAt?: string;
+  currentDriverId?: string | null;
   orderItems?: OrderItem[];
   orderStatusHistories?: OrderStatusHistory[];
   restaurant?: {
@@ -75,6 +78,7 @@ export interface Order {
     name: string;
     avatar?: string;
     fullName?: string;
+    phoneNumber?: string | null;
   };
   driver?: {
     id: string;
@@ -92,4 +96,18 @@ export interface UpdateOrderStatusInput {
 
 export interface CancelOrderInput {
   reason?: string;
+}
+
+export interface Promotion {
+  id: string;
+  restaurantId: string | null;
+  code: string;
+  description: string | null;
+  discountPercentage: number | null;
+  fixedDiscount: number | null;
+  minOrderValue: number | null;
+  validFrom: string;
+  validTo: string;
+  isActive: boolean;
+  promotionType: 'food' | 'shipping';
 }

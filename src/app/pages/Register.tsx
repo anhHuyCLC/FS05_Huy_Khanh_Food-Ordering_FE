@@ -89,11 +89,16 @@ export default function Register() {
     setError(null);
     try {
       await register({ ...form, role: selectedRole });
-      navigate("/login");
-    } catch (error: any) {
+      navigate("/login", {
+        state: {
+          successMessage: "Đăng ký tài khoản thành công! Vui lòng đăng nhập.",
+        },
+      });
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
       setError(
-        error.response?.data?.message ||
-          error.message ||
+        err.response?.data?.message ||
+          err.message ||
           "Đăng ký thất bại. Vui lòng thử lại."
       );
     } finally {

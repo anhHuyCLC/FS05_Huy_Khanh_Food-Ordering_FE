@@ -95,8 +95,9 @@ export const loginUser = createAsyncThunk(
             localStorage.setItem('refreshToken', responseData.refreshToken);
             localStorage.setItem('user', JSON.stringify(responseData.user));
             return responseData;
-        } catch (error: any) {
-            const message = error.response?.data?.message || error.message || "Đăng nhập thất bại. Vui lòng thử lại.";
+        } catch (error: unknown) {
+            const e = error as { response?: { data?: { message?: string } }; message?: string };
+            const message = e.response?.data?.message || e.message || "Đăng nhập thất bại. Vui lòng thử lại.";
             return rejectWithValue(message);
         }
     }
@@ -108,8 +109,9 @@ export const registerUser = createAsyncThunk(
         try {
             const response = await authService.register(data);
             return response;
-        } catch (error: any) {
-            const message = error.response?.data?.message || error.message || "Đăng ký thất bại. Vui lòng thử lại.";
+        } catch (error: unknown) {
+            const e = error as { response?: { data?: { message?: string } }; message?: string };
+            const message = e.response?.data?.message || e.message || "Đăng ký thất bại. Vui lòng thử lại.";
             return rejectWithValue(message);
         }
     }
@@ -126,8 +128,9 @@ export const loginWithGoogleIdToken = createAsyncThunk(
             localStorage.setItem('user', JSON.stringify(payload.user));
             console.log(payload.user);
             return payload;
-        } catch (error: any) {
-            const message = error.response?.data?.message || error.message || "Đăng nhập bằng Google thất bại.";
+        } catch (error: unknown) {
+            const e = error as { response?: { data?: { message?: string } }; message?: string };
+            const message = e.response?.data?.message || e.message || "Đăng nhập bằng Google thất bại.";
             return rejectWithValue(message);
         }
     }
@@ -147,8 +150,9 @@ export const loginWithGoogleCode = createAsyncThunk(
             if (payload.refreshToken) localStorage.setItem('refreshToken', payload.refreshToken);
             localStorage.setItem('user', JSON.stringify(payload.user));
             return payload;
-        } catch (error: any) {
-            const message = error.response?.data?.message || error.message || "Xác thực Google thất bại.";
+        } catch (error: unknown) {
+            const e = error as { response?: { data?: { message?: string } }; message?: string };
+            const message = e.response?.data?.message || e.message || "Xác thực Google thất bại.";
             return rejectWithValue(message);
         }
     }

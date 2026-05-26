@@ -20,3 +20,12 @@ export function hasAllPermissions(permissions: PermissionCode[], user: User | nu
 export function hasRole(role: RoleCode, user: User | null = getCurrentUser()) {
   return Boolean(user?.roles?.some((item) => item.code === role));
 }
+
+export function getRedirectPath(user: User | null): string {
+  if (!user) return "/";
+  const roleCodes = user.roles.map((r) => r.code);
+  if (roleCodes.includes("ADMIN")) return "/admin";
+  if (roleCodes.includes("RESTAURANT")) return "/restaurant-dashboard";
+  if (roleCodes.includes("DRIVER")) return "/driver-dashboard";
+  return "/explore";
+}

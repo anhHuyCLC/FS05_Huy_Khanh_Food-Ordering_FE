@@ -4,11 +4,11 @@ import { ArrowLeft, MapPin, CreditCard, Wallet, DollarSign, Tag, Clock, CheckCir
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { orderService } from "../../services/orderService";
-import type { CreateOrderInput } from "../../types/order";
+import type { CreateOrderInput, Promotion } from "../../types/order";
 import { useCartStore } from "../../stores/cartStore";
 import { addressService } from "../../services/addressService";
 import type { SavedAddress } from "../../types/address";
-import { mapService } from "../../services/mapService";
+import { mapService,type AutocompleteSuggestion } from "../../services/mapService";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRouteInfo } from "../../features/mapThunk";
 import { selectRoute } from "../../features/mapSelectors";
@@ -38,9 +38,30 @@ export default function Checkout() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
   const [note, setNote] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerPhone] = useState("");
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [isLoadingPromotions, setIsLoadingPromotions] = useState(false);
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [appliedPromoType, setAppliedPromoType] = useState<"food" | "shipping">("food");
+
+  useEffect(() => {
+    if (restaurantId) {
+      setIsLoadingPromotions(true);
+      orderService.getPromotions(restaurantId)
+        .then((data) => {
+          setPromotions(data || []);
+        })
+        .catch((err) => {
+          console.error("Failed to load promotions:", err);
+        })
+        .finally(() => {
+          setIsLoadingPromotions(false);
+        });
+    }
+  }, [restaurantId]);
 
   // Address states
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
@@ -60,7 +81,7 @@ export default function Checkout() {
 
   // Modal map & autocomplete state
   const [searchQuery, setSearchQuery] = useState("");
-  const [modalSuggestions, setModalSuggestions] = useState<any[]>([]);
+  const [modalSuggestions, setModalSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
   const [isLocatingUser, setIsLocatingUser] = useState(false);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
@@ -109,7 +130,7 @@ export default function Checkout() {
           setFormLatitude(lat);
           setFormLongitude(lng);
           toast.success("Định vị thành công!");
-        } catch (err) {
+        } catch {
           toast.error("Không thể xác định địa chỉ từ GPS");
         } finally {
           setIsReverseGeocoding(false);
@@ -235,7 +256,7 @@ export default function Checkout() {
         });
         toast.success("Cập nhật địa chỉ thành công");
       } else {
-        const newAddr = await addressService.createAddress({
+        await addressService.createAddress({
           label: formLabel,
           address: formAddress,
           phone: formPhone,
@@ -400,9 +421,43 @@ export default function Checkout() {
   };
 
   const subtotal = getTotal();
-  const discount = promoApplied ? discountAmount : 0;
   const delivery = routeState ? calculateDeliveryFee(routeState.distance / 1000) : deliveryFee;
-  const total = subtotal - discount + delivery;
+
+  const handleApplyPromo = async (codeToApply: string) => {
+    if (!codeToApply.trim() || !restaurantId) return;
+    setIsCheckingPromo(true);
+    try {
+      const res = await orderService.checkPromotion({
+        promotionCode: codeToApply,
+        restaurantId: restaurantId,
+        totalAmount: subtotal,
+        deliveryFee: delivery
+      });
+      const hasDiscount = res.success ? (res.data?.discountAmount !== undefined) : (res.discountAmount !== undefined);
+      const discountVal = res.success ? res.data.discountAmount : res.discountAmount;
+      const typeVal = res.success ? res.data.promotionType : res.promotionType;
+      if (hasDiscount) {
+        setPromoCode(codeToApply);
+        setPromoApplied(true);
+        setDiscountAmount(discountVal);
+        setAppliedPromoType(typeVal || "food");
+        toast.success("Áp dụng mã giảm giá thành công!");
+        setIsPromoModalOpen(false);
+      }
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      toast.error(err.response?.data?.message || "Mã không hợp lệ");
+      setPromoApplied(false);
+      setDiscountAmount(0);
+    } finally {
+      setIsCheckingPromo(false);
+    }
+  };
+
+  const discount = promoApplied
+    ? (appliedPromoType === "shipping" ? Math.min(discountAmount, delivery) : discountAmount)
+    : 0;
+  const total = Math.max(0, subtotal - discount + delivery);
 
   const translatedPayMethods = [
     { ...payMethods[0], label: t('checkout.credit_debit_card') },
@@ -575,12 +630,6 @@ export default function Checkout() {
                 </div>
               </div>
             ) : null}
-            <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
-              <div>
-                <p className="text-xs text-gray-400">{t('checkout.driver_assigned')}</p>
-                <p className="text-sm font-semibold text-green-500">Alex K. 🚴</p>
-              </div>
-            </div>
           </div>
 
           {/* Order Note */}
@@ -645,52 +694,39 @@ export default function Checkout() {
             </div>
 
             {/* Promo code */}
-            <div className="flex gap-2 mb-5">
-              <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
-                <Tag className="w-4 h-4 text-gray-400" />
-                <input
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder={t('cart.promo_code')}
-                  className="bg-transparent text-sm outline-none flex-1 text-gray-600"
-                />
+            <div className="flex flex-col gap-2 mb-5">
+              <div className="flex gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                  <Tag className="w-4 h-4 text-gray-400" />
+                  <input
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    placeholder={t('cart.promo_code')}
+                    className="bg-transparent text-sm outline-none flex-1 text-gray-600"
+                  />
+                </div>
+                <button
+                  onClick={() => handleApplyPromo(promoCode)}
+                  disabled={isCheckingPromo}
+                  className="px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+                  style={{ background: "#FF4500" }}
+                >
+                  {isCheckingPromo ? "..." : t('cart.apply')}
+                </button>
               </div>
               <button
-                onClick={async () => {
-                  if (!promoCode || !restaurantId) return;
-                  setIsCheckingPromo(true);
-                  try {
-                    const res = await orderService.checkPromotion({
-                      promotionCode: promoCode,
-                      restaurantId: restaurantId,
-                      totalAmount: subtotal
-                    });
-                    // Hỗ trợ cả định dạng bọc { success, data } và định dạng phẳng { discountAmount }
-                    const hasDiscount = res.success ? (res.data?.discountAmount !== undefined) : (res.discountAmount !== undefined);
-                    const discountVal = res.success ? res.data.discountAmount : res.discountAmount;
-                    if (hasDiscount) {
-                      setPromoApplied(true);
-                      setDiscountAmount(discountVal);
-                      toast.success("Áp dụng mã giảm giá thành công!");
-                    }
-                  } catch (error: any) {
-                    toast.error(error.response?.data?.message || "Mã không hợp lệ");
-                    setPromoApplied(false);
-                    setDiscountAmount(0);
-                  } finally {
-                    setIsCheckingPromo(false);
-                  }
-                }}
-                disabled={isCheckingPromo}
-                className="px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
-                style={{ background: "#FF4500" }}
+                type="button"
+                onClick={() => setIsPromoModalOpen(true)}
+                className="w-full py-2.5 rounded-xl border border-[#FF4500]/30 hover:border-[#FF4500]/60 text-[#FF4500] font-semibold text-sm transition-all hover:bg-orange-50/50 flex items-center justify-center gap-2 cursor-pointer"
               >
-                {isCheckingPromo ? "..." : t('cart.apply')}
+                🎟️ Chọn mã giảm giá cho bạn
               </button>
             </div>
             {promoApplied && (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 text-green-600 text-sm mb-4">
-                <CheckCircle className="w-4 h-4" /> {t('cart.discount_applied')}
+                <CheckCircle className="w-4 h-4" /> {appliedPromoType === "shipping"
+                  ? `Đã áp dụng mã giảm phí vận chuyển (-${discount.toLocaleString()}đ)!`
+                  : `Đã áp dụng mã giảm giá đồ ăn (-${discount.toLocaleString()}đ)!`}
               </div>
             )}
 
@@ -699,14 +735,19 @@ export default function Checkout() {
               <div className="flex justify-between text-sm text-gray-500">
                 <span>{t('cart.subtotal')}</span><span>{subtotal.toLocaleString()}đ</span>
               </div>
-              {promoApplied && (
+              {promoApplied && appliedPromoType === "food" && (
                 <div className="flex justify-between text-sm text-green-500">
-                  <span>{t('cart.discount')}</span><span>-{discount.toLocaleString()}đ</span>
+                  <span>Giảm giá món ăn</span><span>-{discount.toLocaleString()}đ</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-gray-500">
                 <span>{t('cart.delivery_fee')}</span><span>{delivery.toLocaleString()}đ</span>
               </div>
+              {promoApplied && appliedPromoType === "shipping" && (
+                <div className="flex justify-between text-sm text-green-500">
+                  <span>Giảm phí vận chuyển</span><span>-{discount.toLocaleString()}đ</span>
+                </div>
+              )}
               <div className="flex justify-between font-black text-gray-900 text-lg pt-2 border-t border-gray-100">
                 <span>{t('cart.total')}</span><span>{total.toLocaleString()}đ</span>
               </div>
@@ -940,6 +981,176 @@ export default function Checkout() {
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Promotion Selector Modal */}
+      {isPromoModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Chọn mã giảm giá</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Áp dụng mã giảm giá cho đơn hàng của bạn</p>
+              </div>
+              <button
+                onClick={() => setIsPromoModalOpen(false)}
+                className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {isLoadingPromotions ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#FF4500]" />
+                  <span className="text-sm">Đang tải danh sách khuyến mãi...</span>
+                </div>
+              ) : promotions.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">
+                  Không có mã giảm giá nào khả dụng vào lúc này.
+                </div>
+              ) : (
+                <>
+                  {/* Food Vouchers Section */}
+                  <div>
+                    <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-1.5">
+                      🍔 Khuyến mãi món ăn
+                    </h4>
+                    <div className="space-y-3">
+                      {promotions.filter(p => p.promotionType !== "shipping").map((p) => {
+                        const isEligible = subtotal >= Number(p.minOrderValue || 0);
+                        const isApplied = promoCode === p.code && promoApplied;
+                        return (
+                          <div
+                            key={p.id}
+                            className={`p-4 rounded-2xl border-2 flex items-start gap-4 transition-all ${
+                              isApplied
+                                ? "border-orange-500 bg-orange-50/30"
+                                : isEligible
+                                ? "border-gray-100 hover:border-orange-200"
+                                : "border-gray-50 opacity-60"
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0 text-lg">
+                              🏷️
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-gray-800 text-sm">{p.code}</span>
+                                {isApplied && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-600">
+                                    Đang áp dụng
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-600 mb-2 font-medium">{p.description}</p>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-400">
+                                <span>Đơn tối thiểu: {Number(p.minOrderValue || 0).toLocaleString()}đ</span>
+                                <span>HSD: {new Date(p.validTo).toLocaleDateString("vi-VN")}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!isEligible || isApplied}
+                              onClick={() => handleApplyPromo(p.code)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                                isApplied
+                                  ? "bg-green-500 text-white cursor-default"
+                                  : isEligible
+                                  ? "bg-[#FF4500] text-white hover:opacity-90"
+                                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              }`}
+                            >
+                              {isApplied ? "Đã dùng" : "Áp dụng"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {promotions.filter(p => p.promotionType !== "shipping").length === 0 && (
+                        <p className="text-xs text-gray-400 italic pl-2">Không có mã giảm giá món ăn nào.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Shipping Vouchers Section */}
+                  <div>
+                    <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-1.5">
+                      🚚 Khuyến mãi vận chuyển (Freeship)
+                    </h4>
+                    <div className="space-y-3">
+                      {promotions.filter(p => p.promotionType === "shipping").map((p) => {
+                        const isEligible = subtotal >= Number(p.minOrderValue || 0);
+                        const isApplied = promoCode === p.code && promoApplied;
+                        return (
+                          <div
+                            key={p.id}
+                            className={`p-4 rounded-2xl border-2 flex items-start gap-4 transition-all ${
+                              isApplied
+                                ? "border-orange-500 bg-orange-50/30"
+                                : isEligible
+                                ? "border-gray-100 hover:border-orange-200"
+                                : "border-gray-50 opacity-60"
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 text-lg">
+                              🚚
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-gray-800 text-sm">{p.code}</span>
+                                {isApplied && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-600">
+                                    Đang áp dụng
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-600 mb-2 font-medium">{p.description}</p>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-400">
+                                <span>Đơn tối thiểu: {Number(p.minOrderValue || 0).toLocaleString()}đ</span>
+                                <span>HSD: {new Date(p.validTo).toLocaleDateString("vi-VN")}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!isEligible || isApplied}
+                              onClick={() => handleApplyPromo(p.code)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                                isApplied
+                                  ? "bg-green-500 text-white cursor-default"
+                                  : isEligible
+                                  ? "bg-[#FF4500] text-white hover:opacity-90"
+                                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                              }`}
+                            >
+                              {isApplied ? "Đã dùng" : "Áp dụng"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {promotions.filter(p => p.promotionType === "shipping").length === 0 && (
+                        <p className="text-xs text-gray-400 italic pl-2">Không có mã vận chuyển nào.</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsPromoModalOpen(false)}
+                className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

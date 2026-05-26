@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { Flame} from "lucide-react";
 import {
   FaInstagram,

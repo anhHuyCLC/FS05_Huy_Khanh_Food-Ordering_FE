@@ -3,11 +3,17 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
+import type { Order } from "../types/driver";
+
+interface DriverConnectedData {
+  driverProfileId: string;
+  status: string;
+}
 
 type DriverSocketOptions = {
   token: string;
-  onConnected?: (data: any) => void;
-  onNewOrder?: (order: any) => void;
+  onConnected?: (data: DriverConnectedData) => void;
+  onNewOrder?: (order: Order) => void;
   onOrderCancelled?: (data: { orderId: string }) => void;
   onEarning?: (data: { amount: number; message: string }) => void;
   onStatusAck?: (data: { status: string }) => void;
@@ -23,7 +29,7 @@ useEffect(() => {
   optionsRef.current = options;
 });
 
-  const emit = useCallback((event: string, data?: any) => {
+  const emit = useCallback((event: string, data?: unknown) => {
     socketRef.current?.emit(event, data);
   }, []);
 
@@ -93,17 +99,17 @@ useEffect(() => {
     console.error("[DriverSocket] Connect error:", err.message);
   });
 
-  socket.on("driver:connected", (data: any) => {
+  socket.on("driver:connected", (data: DriverConnectedData) => {
     console.log("[DriverSocket] Authenticated:", data.driverProfileId);
     optionsRef.current.onConnected?.(data);
   });
 
-  socket.on("driver:new_order",      (order: any) => optionsRef.current.onNewOrder?.(order));
-  socket.on("driver:order_cancelled",(data: any)  => optionsRef.current.onOrderCancelled?.(data));
-  socket.on("driver:earning",        (data: any)  => optionsRef.current.onEarning?.(data));
-  socket.on("driver:status_ack",     (data: any)  => optionsRef.current.onStatusAck?.(data));
-  socket.on("driver:order_status_ack",(data: any) => optionsRef.current.onOrderStatusAck?.(data));
-  socket.on("driver:error",          (data: any)  => {
+  socket.on("driver:new_order",      (order: Order) => optionsRef.current.onNewOrder?.(order));
+  socket.on("driver:order_cancelled",(data: { orderId: string })  => optionsRef.current.onOrderCancelled?.(data));
+  socket.on("driver:earning",        (data: { amount: number; message: string })  => optionsRef.current.onEarning?.(data));
+  socket.on("driver:status_ack",     (data: { status: string })  => optionsRef.current.onStatusAck?.(data));
+  socket.on("driver:order_status_ack",(data: { orderId: string; status: string }) => optionsRef.current.onOrderStatusAck?.(data));
+  socket.on("driver:error",          (data: { message: string })  => {
     console.error("[DriverSocket] Error:", data.message);
     optionsRef.current.onError?.(data);
   });

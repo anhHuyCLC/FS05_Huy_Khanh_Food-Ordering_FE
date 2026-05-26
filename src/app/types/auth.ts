@@ -62,6 +62,21 @@ export interface RegisterPayload {
   phonenumber: string;
   address: string;
   role: string;
+
+  // Driver fields
+  vehicleType?: string;
+  vehicleInfo?: string;
+  licensePlate?: string;
+  driverLicenseNumber?: string;
+  nationalIdNumber?: string;
+
+  // Restaurant specific
+  restaurantName?: string;
+  restaurantAddress?: string;
+  cuisineType?: string;
+  openTime?: string;
+  closeTime?: string;
+  restaurantDescription?: string;
 }
 
 export type PermissionCode = string;

@@ -1,8 +1,4 @@
-import {
-  createAsyncThunk,
-  createSlice,
-  type PayloadAction,
-} from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import {
   getDriverProfile,
   updateDriverStatus as updateDriverStatusService,
@@ -15,7 +11,7 @@ import {
   updateLocation as updateLocationService,
   getMyLocation,
   getEarnings as getEarningsService,
-} from "../services/driverservice";
+} from "../services/driverService";
 import type {
   DriverProfile,
   DriverStatus,
@@ -24,6 +20,7 @@ import type {
   RouteItem,
   Earnings,
   DeliveryStatus,
+  EarningsPeriod,
 } from "../types/driver";
 
 export interface DriverState {
@@ -60,14 +57,7 @@ export const loadDriverDashboard = createAsyncThunk(
         .then((res) => res.data)
         .catch(() => null);
 
-      const [
-        profileRes,
-        availableRes,
-        activeRes,
-        heatmapRes,
-        locationCoords,
-        earningsRes,
-      ] = await Promise.allSettled([
+      const [profileRes, availableRes, activeRes, heatmapRes, locationCoords, earningsRes] = await Promise.all([
         getDriverProfile(),
         getAvailableOrders(),
         getActiveOrders(),
@@ -76,18 +66,18 @@ export const loadDriverDashboard = createAsyncThunk(
         getEarningsService("week"),
       ]);
 
-     return {
-  profile:         profileRes.status  === "fulfilled" ? profileRes.value.data   : null,
-  availableOrders: availableRes.status === "fulfilled" ? availableRes.value.data : [],
-  activeOrders:    activeRes.status   === "fulfilled" ? activeRes.value.data    : [],
-  heatmap:         heatmapRes.status  === "fulfilled" ? heatmapRes.value.data   : [],
-  locationCoords:  locationCoords.status === "fulfilled" ? locationCoords.value    : null,
-  earnings:        earningsRes.status === "fulfilled" ? earningsRes.value.data  : null,
-};
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải dữ liệu tài xế.");
+      return {
+        profile: profileRes.data,
+        availableOrders: availableRes.data,
+        activeOrders: activeRes.data,
+        heatmap: heatmapRes.data,
+        locationCoords,
+        earnings: earningsRes.data,
+      };
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || " Không thể tải dữ liệu tài xế.");
     }
-  },
+  }
 );
 
 export const fetchAvailableOrdersThunk = createAsyncThunk(
@@ -96,10 +86,10 @@ export const fetchAvailableOrdersThunk = createAsyncThunk(
     try {
       const response = await getAvailableOrders();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải đơn chờ.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải đơn chờ.");
     }
-  },
+  }
 );
 
 export const fetchActiveOrdersThunk = createAsyncThunk(
@@ -108,10 +98,10 @@ export const fetchActiveOrdersThunk = createAsyncThunk(
     try {
       const response = await getActiveOrders();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải đơn đang giao.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải đơn đang giao.");
     }
-  },
+  }
 );
 
 export const fetchHeatmapThunk = createAsyncThunk(
@@ -120,10 +110,10 @@ export const fetchHeatmapThunk = createAsyncThunk(
     try {
       const response = await getDemandHeatmap();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải heatmap.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải heatmap.");
     }
-  },
+  }
 );
 
 export const fetchLocationThunk = createAsyncThunk(
@@ -132,22 +122,22 @@ export const fetchLocationThunk = createAsyncThunk(
     try {
       const response = await getMyLocation();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể lấy vị trí tài xế.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể lấy vị trí tài xế.");
     }
-  },
+  }
 );
 
 export const fetchEarningsThunk = createAsyncThunk(
   "driver/fetchEarnings",
-  async (period: string | undefined, { rejectWithValue }) => {
+  async (period: EarningsPeriod | undefined, { rejectWithValue }) => {
     try {
-      const response = await getEarningsService(period as any);
+      const response = await getEarningsService(period);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tải thu nhập.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tải thu nhập.");
     }
-  },
+  }
 );
 
 export const updateDriverStatusThunk = createAsyncThunk(
@@ -156,60 +146,55 @@ export const updateDriverStatusThunk = createAsyncThunk(
     try {
       await updateDriverStatusService(status);
       return status;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể cập nhật trạng thái.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể cập nhật trạng thái.");
     }
-  },
+  }
 );
 
 export const respondOrderThunk = createAsyncThunk(
   "driver/respondOrder",
   async (
     payload: { orderId: string; action: "accepted" | "rejected" },
-    { rejectWithValue },
+    { rejectWithValue }
   ) => {
     try {
-      const response = await respondOrderService(
-        payload.orderId,
-        payload.action,
-      );
+      const response = await respondOrderService(payload.orderId, payload.action);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể xử lý yêu cầu đơn.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể xử lý yêu cầu đơn.");
     }
-  },
+  }
 );
 
 export const updateDeliveryStatusThunk = createAsyncThunk(
   "driver/updateDeliveryStatus",
   async (
     payload: { orderId: string; status: DeliveryStatus },
-    { rejectWithValue },
+    { rejectWithValue }
   ) => {
     try {
       await updateDeliveryStatusService(payload.orderId, payload.status);
       return payload;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.message || "Không thể cập nhật trạng thái giao.",
-      );
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể cập nhật trạng thái giao.");
     }
-  },
+  }
 );
 
 export const updateLocationThunk = createAsyncThunk(
   "driver/updateLocation",
   async (
     payload: { latitude: number; longitude: number },
-    { rejectWithValue },
+    { rejectWithValue }
   ) => {
     try {
       await updateLocationService(payload.latitude, payload.longitude);
       return payload;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể cập nhật vị trí.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể cập nhật vị trí.");
     }
-  },
+  }
 );
 
 export const optimizeRouteThunk = createAsyncThunk(
@@ -218,10 +203,10 @@ export const optimizeRouteThunk = createAsyncThunk(
     try {
       const response = await optimizeRouteService(orderIds);
       return response.data.route;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Không thể tối ưu lộ trình.");
+    } catch (error: unknown) {
+      return rejectWithValue((error as Error).message || "Không thể tối ưu lộ trình.");
     }
-  },
+  }
 );
 
 const driverSlice = createSlice({
@@ -243,25 +228,12 @@ const driverSlice = createSlice({
       })
       .addCase(loadDriverDashboard.fulfilled, (state, action) => {
         state.loading = false;
-
         state.profile = action.payload.profile;
-
-        state.status = action.payload.profile?.currentStatus || "offline";
-
-        state.availableOrders = Array.isArray(action.payload.availableOrders)
-          ? action.payload.availableOrders
-          : [];
-
-        state.activeOrders = Array.isArray(action.payload.activeOrders)
-          ? action.payload.activeOrders
-          : [];
-
-        state.heatmap = Array.isArray(action.payload.heatmap)
-          ? action.payload.heatmap
-          : [];
-
+        state.status = action.payload.profile.currentStatus;
+        state.availableOrders = action.payload.availableOrders;
+        state.activeOrders = action.payload.activeOrders;
+        state.heatmap = action.payload.heatmap;
         state.locationCoords = action.payload.locationCoords;
-
         state.earnings = action.payload.earnings;
       })
       .addCase(loadDriverDashboard.rejected, (state, action) => {

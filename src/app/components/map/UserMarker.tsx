@@ -1,5 +1,5 @@
 import { Marker, Popup } from "react-leaflet";
-import { userIcon } from "./MapView";
+import { userIcon } from "./mapIcons";
 
 interface UserMarkerProps {
   position: { lat: number; lng: number } | null;
