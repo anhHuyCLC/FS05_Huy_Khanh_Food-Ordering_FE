@@ -17,6 +17,8 @@ export interface CreateOrderInput {
   note?: string;
   tableNumber?: string;
   reservationTime?: string;
+  paymentMethod?: 'cash' | 'e_wallet' | 'bank_transfer';
+  paymentProvider?: 'momo' | 'vnpay';
 }
 
 export interface OrderItem {
@@ -64,6 +66,7 @@ export interface Order {
   updatedAt: string;
   assignmentExpiresAt?: string;
   currentDriverId?: string | null;
+  paymentUrl?: string | null;
   orderItems?: OrderItem[];
   orderStatusHistories?: OrderStatusHistory[];
   restaurant?: {

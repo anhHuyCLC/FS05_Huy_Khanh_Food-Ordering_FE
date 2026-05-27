@@ -181,7 +181,7 @@ export default function Login() {
             </Link>
           </p>
 
-          {/* Demo roles */}
+          {/* Demo roles
           <div className="mt-8 p-4 rounded-2xl bg-orange-50 border border-orange-100">
             <p className="text-xs font-semibold text-orange-600 mb-3">{t('auth.demo_sign_in')}</p>
             <div className="grid grid-cols-2 gap-2">
@@ -200,7 +200,7 @@ export default function Login() {
                 </button>
               ))}
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div >
