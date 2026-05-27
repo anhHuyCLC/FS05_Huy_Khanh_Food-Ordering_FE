@@ -1,25 +1,25 @@
-import { useState } from "react";
+// import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShoppingCart, ChevronDown, Flame } from "lucide-react";
+import { ShoppingCart, Flame } from "lucide-react";
 import { Button } from "../ui/button";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../stores/authStore";
 import { useCartStore } from "../../stores/cartStore";
 
-const demoRoles = [
-  { label: "🛍️ Customer View", path: "/explore" },
-  { label: "🍴 Restaurant Dashboard", path: "/restaurant-dashboard" },
-  { label: "🚴 Driver Dashboard", path: "/driver-dashboard" },
-  { label: "⚙️ Admin Panel", path: "/admin" },
-];
+// const demoRoles = [
+//   { label: "🛍️ Customer View", path: "/explore" },
+//   { label: "🍴 Restaurant Dashboard", path: "/restaurant-dashboard" },
+//   { label: "🚴 Driver Dashboard", path: "/driver-dashboard" },
+//   { label: "⚙️ Admin Panel", path: "/admin" },
+// ];
 
 interface NavbarProps {
   transparent?: boolean;
 }
 
 export function Navbar({ transparent = false }: NavbarProps) {
-  const [demoOpen, setDemoOpen] = useState(false);
+  // const [demoOpen, setDemoOpen] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -70,7 +70,7 @@ export function Navbar({ transparent = false }: NavbarProps) {
           <LanguageSwitcher />
 
           {/* Demo Roles Dropdown */}
-          <div className="relative">
+          {/* <div className="relative">
             <button
               onClick={() => setDemoOpen(!demoOpen)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-[#FF4500]/10 text-[#FF4500] hover:bg-[#FF4500]/20 transition-colors"
@@ -90,7 +90,7 @@ export function Navbar({ transparent = false }: NavbarProps) {
                 ))}
               </div>
             )}
-          </div>
+          </div> */}
 
           {user && (
             <Link to="/cart" className="relative p-2 hover:bg-gray-100 rounded-xl transition-colors">
