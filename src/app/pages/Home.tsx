@@ -9,7 +9,7 @@ import { Navbar } from "../components/layout/Navbar";
 import { Footer } from "../components/layout/Footer";
 import { testimonials, faqItems, IMGS } from "../data/mock";
 import { useAppDispatch, useAppSelector } from "../stores/store";
-import { fetchRestaurants, type Restaurant } from "../features/restaurantSlice";
+import { fetchRestaurants} from "../features/restaurantSlice";
 import AddressAutocomplete from "../components/map/AddressAutocomplete";
 import MapView from "../components/map/MapView";
 import RestaurantMarkers from "../components/map/RestaurantMarkers";
@@ -17,6 +17,7 @@ import UserMarker from "../components/map/UserMarker";
 import { reverseGeocodeCoords } from "../features/mapThunk";
 import { selectSelectedAddress } from "../features/mapSelectors";
 import { getDeliveryTimeText } from "../utils/geo";
+import type{ Restaurant } from "../types/restaurant";
 
 
 const features = [

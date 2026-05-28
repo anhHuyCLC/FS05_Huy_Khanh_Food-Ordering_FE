@@ -400,6 +400,7 @@ export default function Checkout() {
         customerPhone: selectedAddr.phone || customerPhone || undefined,
         note: note,
         promotionCode: promoApplied ? promoCode : undefined,
+        paymentMethod: payMethod as "cash" | "e_wallet" | "bank_transfer",
         items: items.map((item) => ({
           menuItemId: item.id,
           quantity: item.qty,
