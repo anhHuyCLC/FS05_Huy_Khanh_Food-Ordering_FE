@@ -20,7 +20,7 @@ import { calculateDistance, getStableCoords, calculateDeliveryFee, getDeliveryTi
 
 const payMethods = [
   { id: "card", icon: <CreditCard className="w-5 h-5" />, label: "Credit / Debit Card", sub: "**** **** **** 4242" },
-  { id: "wallet", icon: <Wallet className="w-5 h-5" />, label: "E-Wallet", sub: "Apple Pay · Google Pay · PayPal" },
+  { id: "vnpay", icon: <Wallet className="w-5 h-5" />, label: "Cổng thanh toán VNPay", sub: "Thanh toán bằng thẻ ATM, thẻ quốc tế hoặc mã QR" },
   { id: "cash", icon: <DollarSign className="w-5 h-5" />, label: "Cash on Delivery", sub: "Pay when your food arrives" },
 ];
 
@@ -400,7 +400,8 @@ export default function Checkout() {
         customerPhone: selectedAddr.phone || customerPhone || undefined,
         note: note,
         promotionCode: promoApplied ? promoCode : undefined,
-        paymentMethod: payMethod as "cash" | "e_wallet" | "bank_transfer",
+        paymentMethod: payMethod === "vnpay" ? "bank_transfer" : payMethod === "card" ? "e_wallet" : "cash",
+        paymentProvider: payMethod === "vnpay" ? "vnpay" : undefined,
         items: items.map((item) => ({
           menuItemId: item.id,
           quantity: item.qty,
@@ -412,7 +413,12 @@ export default function Checkout() {
       const order = await orderService.createOrder(payload);
       toast.success(t('checkout.place_order_success') || "Order placed successfully!");
       await clearCart();
-      navigate(`/tracking?orderId=${order.id}`);
+      
+      if (payMethod === "vnpay" && order.paymentUrl) {
+        window.location.href = order.paymentUrl;
+      } else {
+        navigate(`/tracking?orderId=${order.id}`);
+      }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       toast.error(err.response?.data?.message || "Failed to place order. Note: dummy data is used.");
@@ -462,7 +468,7 @@ export default function Checkout() {
 
   const translatedPayMethods = [
     { ...payMethods[0], label: t('checkout.credit_debit_card') },
-    { ...payMethods[1], label: t('checkout.e_wallet') },
+    { ...payMethods[1], label: t('checkout.vnpay', 'Cổng thanh toán VNPay'), sub: t('checkout.vnpay_sub', 'Thanh toán bằng thẻ ATM, thẻ quốc tế hoặc mã QR') },
     { ...payMethods[2], label: t('checkout.cash_on_delivery'), sub: t('checkout.pay_on_arrival') },
   ];
 
