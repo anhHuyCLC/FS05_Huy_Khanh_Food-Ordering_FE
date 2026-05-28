@@ -14,10 +14,10 @@ export interface CreateOrderInput {
   deliveryLongitude?: number;
   customerPhone?: string;
   promotionCode?: string;
+  paymentMethod?: "cash" | "e_wallet" | "bank_transfer";
   note?: string;
   tableNumber?: string;
   reservationTime?: string;
-  paymentMethod?: 'cash' | 'e_wallet' | 'bank_transfer';
   paymentProvider?: 'momo' | 'vnpay';
 }
 
@@ -27,6 +27,7 @@ export interface OrderItem {
   menuItemId: string;
   quantity: number;
   unitPrice: number;
+  price?: number;
   selectedOptions?: Record<string, unknown>;
   note?: string;
   menuItem?: {
@@ -81,6 +82,7 @@ export interface Order {
     name: string;
     avatar?: string;
     fullName?: string;
+    phone?: string | null;
     phoneNumber?: string | null;
   };
   driver?: {
@@ -90,13 +92,28 @@ export interface Order {
       phone?: string;
     };
   };
+  promotion?: {
+    code?: string;
+    discountPercentage?: number | null;
+    fixedDiscount?: number | null;
+  };
+  payment?: {
+    status?: string;
+    method?: string;
+    amount?: number;
+  };
 }
 
 export interface UpdateOrderStatusInput {
   status: string;
   note?: string;
 }
-
+export interface OrderMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 export interface CancelOrderInput {
   reason?: string;
 }
@@ -113,4 +130,7 @@ export interface Promotion {
   validTo: string;
   isActive: boolean;
   promotionType: 'food' | 'shipping';
+}
+export interface OrderMetaCreateOrderInput extends CreateOrderInput {
+  paymentMethod?: "cash" | "e_wallet" | "bank_transfer";
 }

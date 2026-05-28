@@ -5,6 +5,7 @@ import restaurantReducer from "../features/restaurantSlice";
 import driverReducer from "../features/driverSlice";
 
 import mapReducer from "../features/mapSlice";
+import orderReducer from "../features/orderSlice";
 import {
   useDispatch,
   useSelector,
@@ -18,6 +19,7 @@ export const store = configureStore({
     restaurants: restaurantReducer,
     driver: driverReducer,
     map: mapReducer,
+    order: orderReducer,
   },
 
 

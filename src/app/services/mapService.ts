@@ -35,11 +35,22 @@ export const mapService = {
   },
 
   reverseGeocode: async (lat: number, lon: number): Promise<string> => {
-    const response = await apiClient.get("/v1/maps/geocode", {
-      params: { lat, lon },
-    });
-    const result = response.data.data || response.data || {};
-    return result.address || `Địa chỉ tại ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    // Coerce Prisma Decimal / string to plain number before sending
+    const safeLat = Number(lat);
+    const safeLon = Number(lon);
+    if (isNaN(safeLat) || isNaN(safeLon)) {
+      return `${lat}, ${lon}`;
+    }
+    try {
+      const response = await apiClient.get("/v1/maps/geocode", {
+        params: { lat: safeLat, lon: safeLon },
+      });
+      const result = response.data.data || response.data || {};
+      return result.address || `${safeLat.toFixed(5)}, ${safeLon.toFixed(5)}`;
+    } catch {
+      // If geocoding fails (400/500/network), fall back to formatted coords
+      return `${safeLat.toFixed(5)}, ${safeLon.toFixed(5)}`;
+    }
   },
 
   getRoute: async (

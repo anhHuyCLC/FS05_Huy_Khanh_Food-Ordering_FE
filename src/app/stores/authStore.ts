@@ -32,7 +32,7 @@ const getLegacyAuth = () => {
   }
 
   return {
-    accessToken: window.localStorage.getItem("token"),
+    accessToken: window.localStorage.getItem("token") || window.localStorage.getItem("accessToken"),
     refreshToken: window.localStorage.getItem("refreshToken"),
     user: readLegacyUser(),
   };
@@ -43,8 +43,10 @@ const persistLegacyAuth = (state: Pick<AuthStoreState, "accessToken" | "refreshT
 
   if (state.accessToken) {
     window.localStorage.setItem("token", state.accessToken);
+    window.localStorage.setItem("accessToken", state.accessToken);
   } else {
     window.localStorage.removeItem("token");
+    window.localStorage.removeItem("accessToken");
   }
 
   if (state.refreshToken) {

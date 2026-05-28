@@ -1,20 +1,35 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Phone, MessageCircle, Star, CheckCircle, Clock, MapPin, Navigation, ArrowLeft } from "lucide-react";
+import {
+  Phone, MessageCircle, Star, CheckCircle,
+  Clock, MapPin, Navigation, ArrowLeft, Wifi,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { orderService } from "../../services/orderService";
 import type { Order } from "../../types/order";
 import { toast } from "sonner";
 import { calculateDistance, getDeliveryTimeText } from "../../utils/geo";
+// ✅ Fix thiếu sót 9: import hook WebSocket đã có sẵn
+import { useOrderTracking } from "../../hooks/useOrderTracking";
 
 export default function Tracking() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("orderId");
-  
+
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useTranslation();
+
+  // ✅ Fix thiếu sót 9: lấy token để dùng WebSocket
+  const token =
+    localStorage.getItem("token") ??
+    sessionStorage.getItem("token") ??
+    "";
+
+  // ✅ Fix thiếu sót 9: real-time tracking qua WebSocket
+  const { driverLat, driverLng, status: liveStatus, driverAssigned } =
+    useOrderTracking(orderId ?? "", token);
 
   // Cancel order state
   const [isCancelling, setIsCancelling] = useState(false);
@@ -29,424 +44,351 @@ export default function Tracking() {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
-  // Calculate dynamic delivery ETA and status description
-  const distance = (order?.restaurant?.latitude && order?.restaurant?.longitude && order?.deliveryLatitude && order?.deliveryLongitude)
-    ? calculateDistance(
-        Number(order.restaurant.latitude),
-        Number(order.restaurant.longitude),
-        Number(order.deliveryLatitude),
-        Number(order.deliveryLongitude)
-      )
-    : null;
+  // Khoảng cách nhà hàng → điểm giao
+  const distance =
+    order?.restaurant?.latitude &&
+    order?.restaurant?.longitude &&
+    order?.deliveryLatitude &&
+    order?.deliveryLongitude
+      ? calculateDistance(
+          Number(order.restaurant.latitude),
+          Number(order.restaurant.longitude),
+          Number(order.deliveryLatitude),
+          Number(order.deliveryLongitude)
+        )
+      : null;
 
   const etaText = distance !== null ? getDeliveryTimeText(distance) : "15-25 min";
 
   const getStatusDescription = (status: string) => {
     switch (status) {
-      case "pending":
-        return "Đang chờ xác nhận từ nhà hàng... ⏳";
-      case "accepted":
-        return "Nhà hàng đã nhận đơn... 👨‍🍳";
-      case "preparing":
-        return "Món ăn đang được chuẩn bị... 🍳";
-      case "ready":
-        return "Chuẩn bị xong! Đang chờ tài xế lấy hàng... 🛵";
-      case "delivering":
-        return "Tài xế đang giao món ăn đến bạn... 🛵";
-      case "completed":
-        return "Đơn hàng đã giao thành công! 🎉";
-      case "cancelled":
-        return "Đơn hàng đã bị hủy. ❌";
-      default:
-        return t('tracking.kitchen_working') + " 👨‍🍳";
+      case "pending":    return "Đang chờ xác nhận từ nhà hàng... ⏳";
+      case "accepted":   return "Nhà hàng đã nhận đơn... 👨‍🍳";
+      case "preparing":  return "Món ăn đang được chuẩn bị... 🍳";
+      case "ready":      return "Chuẩn bị xong! Đang chờ tài xế lấy hàng... 🛵";
+      case "delivering": return "Tài xế đang giao món ăn đến bạn... 🛵";
+      case "completed":  return "Đơn hàng đã giao thành công! 🎉";
+      case "cancelled":  return "Đơn hàng đã bị hủy. ❌";
+      default:           return t("tracking.kitchen_working") + " 👨‍🍳";
     }
   };
 
-  const statusDescription = order ? getStatusDescription(order.status) : t('tracking.kitchen_working') + " 👨‍🍳";
+  const statusDescription = order
+    ? getStatusDescription(order.status)
+    : t("tracking.kitchen_working") + " 👨‍🍳";
 
+  // ✅ Fix thiếu sót 9: chỉ fetch 1 lần đầu — real-time qua WebSocket
   useEffect(() => {
     if (!orderId) {
       setIsLoading(false);
       return;
     }
 
-    const fetchOrder = () => {
-      orderService.getOrder(orderId)
-        .then((data) => {
-          setOrder(data);
-          setIsLoading(false);
-        })
-        .catch((err) => {
-          console.error("Failed to load order", err);
-          setIsLoading(false);
-        });
-    };
-
-    fetchOrder();
-    const interval = setInterval(fetchOrder, 4000);
-    return () => clearInterval(interval);
+    orderService
+      .getOrder(orderId)
+      .then((data) => {
+        setOrder(data);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load order", err);
+        setIsLoading(false);
+      });
   }, [orderId]);
+
+  // ✅ Fix thiếu sót 9: cập nhật order.status real-time từ WebSocket
+  useEffect(() => {
+    if (!liveStatus || !order) return;
+    if (liveStatus !== order.status) {
+      setOrder((prev) =>
+        prev ? { ...prev, status: liveStatus as Order["status"] } : prev
+      );
+    }
+  }, [liveStatus]);
+
+  // ✅ Fix thiếu sót 9: thông báo khi tài xế được gán
+  useEffect(() => {
+    if (driverAssigned) {
+      toast.info("Tài xế đã được gán cho đơn hàng của bạn! 🛵");
+      // Re-fetch để lấy thông tin tài xế mới
+      if (orderId) {
+        orderService.getOrder(orderId).then(setOrder).catch(console.error);
+      }
+    }
+  }, [driverAssigned, orderId]);
 
   const handleCancelOrder = async () => {
     if (!orderId) return;
-    const confirmCancel = window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?");
+    const confirmCancel = window.confirm(
+      "Bạn có chắc chắn muốn hủy đơn hàng này không?"
+    );
     if (!confirmCancel) return;
 
     try {
       setIsCancelling(true);
-      await orderService.cancelOrder(orderId, { reason: cancelReason || "Khách hàng tự hủy đơn" });
+      await orderService.cancelOrder(orderId, {
+        reason: cancelReason || "Khách hàng tự hủy đơn",
+      });
       const updatedOrder = await orderService.getOrder(orderId);
       setOrder(updatedOrder);
       toast.success("Hủy đơn hàng thành công!");
-      setShowCancelPrompt(false);
-    } catch (err: unknown) {
-      console.error(err);
-      const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || "Không thể hủy đơn hàng");
+    } catch {
+      toast.error("Không thể hủy đơn hàng. Vui lòng thử lại.");
     } finally {
       setIsCancelling(false);
+      setShowCancelPrompt(false);
     }
   };
 
-  const handleSubmitReview = async () => {
-    if (!orderId) return;
+  const handleSubmitReview = useCallback(async () => {
+    if (!orderId || reviewSubmitted) return;
+    setIsSubmittingReview(true);
     try {
-      setIsSubmittingReview(true);
       await orderService.submitReview(orderId, {
         restaurantRating,
-        restaurantComment: restaurantComment.trim() || undefined,
-        driverRating: order?.driver ? driverRating : undefined,
-        driverComment: (order?.driver && driverComment.trim()) ? driverComment.trim() : undefined,
+        restaurantComment,
+        ...(order?.driverId
+          ? { driverRating, driverComment }
+          : {}),
       });
-      toast.success("Đánh giá của bạn đã được ghi nhận. Cảm ơn bạn!");
       setReviewSubmitted(true);
-    } catch (err: unknown) {
-      console.error(err);
-      const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || "Gửi đánh giá thất bại");
+      toast.success("Cảm ơn bạn đã đánh giá! ⭐");
+    } catch {
+      toast.error("Không thể gửi đánh giá. Vui lòng thử lại.");
     } finally {
       setIsSubmittingReview(false);
     }
-  };
+  }, [
+    orderId, restaurantRating, restaurantComment,
+    driverRating, driverComment, reviewSubmitted, order,
+  ]);
 
-  const statusRank: Record<string, number> = {
-    pending: 1, accepted: 1,
-    preparing: 2,
-    ready: 3,
-    delivering: 4,
-    completed: 5,
-    cancelled: 0
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-neutral-950">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-orange-500" />
+      </div>
+    );
+  }
 
-  const currentRank = order ? statusRank[order.status] || 1 : 2;
+  if (!order) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-950 text-white gap-4">
+        <p className="text-sm text-neutral-400">Không tìm thấy đơn hàng.</p>
+        <button
+          onClick={() => navigate("/")}
+          className="px-4 py-2 rounded-lg bg-orange-500 text-white text-sm"
+        >
+          Về trang chủ
+        </button>
+      </div>
+    );
+  }
 
-  const steps = [
-    { id: 1, label: t('tracking.order_confirmed'), desc: `${order?.restaurant?.name || "Restaurant"} ${t('tracking.received_order')}`, icon: "✅", done: currentRank > 1, active: currentRank === 1 },
-    { id: 2, label: t('tracking.preparing'), desc: t('tracking.kitchen_working'), icon: "👨‍🍳", done: currentRank > 2, active: currentRank === 2 },
-    { id: 3, label: t('tracking.driver_picked_up'), desc: `${order?.driver?.profile?.fullName || "Driver"} ${t('tracking.collected')}`, icon: "🛵", done: currentRank > 3, active: currentRank === 3 },
-    { id: 4, label: t('tracking.on_the_way'), desc: `${order?.driver?.profile?.fullName || "Driver"} ${t('tracking.heading_to')}`, icon: "🗺️", done: currentRank > 4, active: currentRank === 4 },
-    { id: 5, label: t('tracking.delivered'), desc: t('tracking.enjoy_meal'), icon: "🎉", done: currentRank === 5, active: currentRank === 5 },
-  ];
-
-  const currentStep = steps.findIndex((s) => s.active) + 1 || 2;
+  const isCompleted = order.status === "completed";
+  const isCancelled = order.status === "cancelled";
+  const isDelivering = order.status === "delivering";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-neutral-950 text-white flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-6 h-16 flex items-center gap-4">
-          <button onClick={() => navigate("/explore")} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div>
-            <h1 className="font-bold text-gray-900">{t('tracking.tracking_order')}</h1>
-            {isLoading ? (
-              <p className="text-xs text-gray-400">Loading...</p>
-            ) : order ? (
-              <p className="text-xs text-gray-400">#{order.id.slice(0, 8).toUpperCase()} · {order.restaurant?.name}</p>
-            ) : (
-              <p className="text-xs text-gray-400">Order not found</p>
+      <div className="flex items-center gap-3 px-4 pt-safe pt-4 pb-3 border-b border-neutral-800">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 rounded-full hover:bg-neutral-800 transition"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex-1">
+          <h1 className="text-sm font-bold">Theo dõi đơn hàng</h1>
+          <p className="text-[11px] text-neutral-400">
+            #{order.id.slice(-8).toUpperCase()}
+          </p>
+        </div>
+        {/* ✅ Badge WebSocket live */}
+        <div className="flex items-center gap-1 bg-green-900/40 border border-green-700/40 rounded-full px-2 py-0.5">
+          <Wifi className="w-2.5 h-2.5 text-green-400 animate-pulse" />
+          <span className="text-[9px] font-semibold text-green-400">LIVE</span>
+        </div>
+      </div>
+
+      {/* Status */}
+      <div className="px-4 py-4 flex flex-col gap-1">
+        <p className="text-xs font-semibold text-orange-400 uppercase tracking-widest">
+          {order.status}
+        </p>
+        <p className="text-sm text-neutral-300">{statusDescription}</p>
+
+        {/* ETA */}
+        {!isCompleted && !isCancelled && (
+          <div className="flex items-center gap-1 mt-1 text-xs text-neutral-500">
+            <Clock className="w-3 h-3" />
+            <span>Dự kiến: {etaText}</span>
+          </div>
+        )}
+
+        {/* Driver location badge (khi đang giao) */}
+        {isDelivering && driverLat && driverLng && (
+          <div className="flex items-center gap-1 mt-1 text-xs text-blue-400">
+            <Navigation className="w-3 h-3 animate-pulse" />
+            <span>Tài xế đang di chuyển đến bạn</span>
+          </div>
+        )}
+      </div>
+
+      {/* Restaurant info */}
+      <div className="mx-4 rounded-xl border border-neutral-800 bg-neutral-900 p-4 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-orange-400 shrink-0" />
+          <p className="text-sm font-semibold">
+            {order.restaurant?.name ?? "Nhà hàng"}
+          </p>
+        </div>
+        {order.deliveryAddress && (
+          <div className="flex items-start gap-2 pl-6">
+            <p className="text-xs text-neutral-400">→ {order.deliveryAddress}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Driver info (nếu đã có tài xế) */}
+      {order.driver && (
+        <div className="mx-4 mt-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-sm">
+              {order.driver.profile?.fullName?.slice(0, 1) ?? "T"}
+            </div>
+            <div>
+              <p className="text-sm font-semibold">
+                {order.driver.profile?.fullName ?? "Tài xế"}
+              </p>
+              <p className="text-xs text-neutral-500">
+                {order.driver.profile?.phone ?? ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {order.driver.profile?.phone && (
+              <a
+                href={`tel:${order.driver.profile.phone}`}
+                className="p-2 rounded-full bg-green-900/30 border border-green-700/40 text-green-400"
+              >
+                <Phone className="w-4 h-4" />
+              </a>
             )}
           </div>
-          <div className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-100">
-            <div className="w-2 h-2 rounded-full bg-[#FF4500] animate-pulse" />
-            <span className="text-xs font-semibold text-[#FF4500]">{t('tracking.live_tracking')}</span>
-          </div>
         </div>
-      </div>
+      )}
 
-      <div className="max-w-4xl mx-auto px-6 py-8 grid lg:grid-cols-5 gap-8">
-        {/* Left: Status + Driver */}
-        <div className="lg:col-span-3 space-y-5">
-          {/* ETA Banner / Cancelled Banner */}
-          {order?.status === "cancelled" ? (
-            <div
-              className="rounded-3xl p-6 text-white overflow-hidden relative bg-red-500"
+      {/* Cancel button (chỉ khi pending/accepted) */}
+      {(order.status === "pending" || order.status === "accepted") && (
+        <div className="mx-4 mt-3">
+          {!showCancelPrompt ? (
+            <button
+              onClick={() => setShowCancelPrompt(true)}
+              className="w-full py-2.5 rounded-xl border border-red-800/60 text-red-400 text-sm font-semibold hover:bg-red-900/20 transition"
             >
-              <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10" />
-              <p className="text-red-100 text-sm mb-1">Trạng thái đơn hàng</p>
-              <p className="text-3xl font-black mb-1">ĐÃ HỦY ĐƠN</p>
-              <p className="text-red-100 text-sm">Đơn hàng này đã bị hủy.</p>
-            </div>
+              Huỷ đơn hàng
+            </button>
           ) : (
-            <div
-              className="rounded-3xl p-6 text-white overflow-hidden relative"
-              style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
-            >
-              <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10" />
-              <p className="text-orange-100 text-sm mb-1">{t('checkout.estimated_arrival')}</p>
-              <p className="text-4xl font-black mb-1">{etaText}</p>
-              <p className="text-orange-100 text-sm">{statusDescription}</p>
-            </div>
-          )}
-
-          {/* Progress steps */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-            <h2 className="font-bold text-gray-900 mb-5">{t('tracking.order_status')}</h2>
-            <div className="relative">
-              {/* Progress line */}
-              <div className="absolute left-5 top-5 bottom-5 w-0.5 bg-gray-100" />
-              <div
-                className="absolute left-5 top-5 w-0.5 transition-all duration-1000"
-                style={{
-                  background: "linear-gradient(180deg, #FF4500, #FF6B35)",
-                  height: `${((currentStep - 1) / (steps.length - 1)) * 100}%`,
-                }}
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Lý do huỷ (tùy chọn)..."
+                className="w-full rounded-lg bg-neutral-800 border border-neutral-700 text-sm text-white p-3 resize-none"
+                rows={2}
               />
-              <div className="space-y-6">
-                {steps.map((step) => (
-                  <div key={step.id} className={`flex items-start gap-4 ${!step.done && !step.active ? "opacity-40" : ""}`}>
-                    <div
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0 z-10 ${
-                        step.done || step.active ? "shadow-md" : "bg-gray-100"
-                      }`}
-                      style={step.done || step.active ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
-                    >
-                      {step.icon}
-                    </div>
-                    <div className="flex-1 pt-1.5">
-                      <p className={`font-semibold ${step.active ? "text-[#FF4500]" : "text-gray-800"}`}>{step.label}</p>
-                      <p className="text-sm text-gray-400">{step.desc}</p>
-                      {step.active && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#FF4500] animate-bounce" />
-                          <span className="text-xs text-[#FF4500] font-medium">{t('tracking.in_progress')}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Driver Card */}
-          {order?.driver && (
-            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-              <h2 className="font-bold text-gray-900 mb-4">{t('tracking.your_driver')}</h2>
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-200">
-                    <div className="w-full h-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white text-xl font-bold">
-                      {order.driver.profile?.fullName?.substring(0, 2).toUpperCase() || "DR"}
-                    </div>
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold text-gray-900">{order.driver.profile?.fullName || "Assigned Driver"}</p>
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" /> 4.97 · 1,342 {t('tracking.trips')}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">🏍️ Honda PCX White</p>
-                </div>
-                <div className="flex gap-3">
-                  <button className="w-11 h-11 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 hover:bg-green-100 transition-colors">
-                    <Phone className="w-5 h-5" />
-                  </button>
-                  <button className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 hover:bg-blue-100 transition-colors">
-                    <MessageCircle className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Cancel Order Section */}
-          {order && order.status === "pending" && (
-            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4 animate-in fade-in duration-300">
-              <h3 className="font-bold text-gray-900 text-sm">Hủy đơn hàng</h3>
-              <p className="text-xs text-gray-400">Bạn chỉ có thể tự hủy đơn hàng khi nhà hàng chưa nhận và chuẩn bị món ăn.</p>
-              
-              {showCancelPrompt ? (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={cancelReason}
-                    onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder="Nhập lý do hủy đơn (không bắt buộc)..."
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowCancelPrompt(false)}
-                      className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
-                    >
-                      Bỏ qua
-                    </button>
-                    <button
-                      onClick={handleCancelOrder}
-                      disabled={isCancelling}
-                      className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
-                    >
-                      {isCancelling ? "Đang hủy..." : "Xác nhận hủy"}
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              <div className="flex gap-2">
                 <button
-                  onClick={() => setShowCancelPrompt(true)}
-                  className="w-full py-3 rounded-2xl bg-red-50 text-red-500 font-bold text-sm hover:bg-red-100 transition-colors"
+                  onClick={handleCancelOrder}
+                  disabled={isCancelling}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-50"
                 >
-                  Hủy đơn hàng
+                  {isCancelling ? "Đang huỷ..." : "Xác nhận huỷ"}
                 </button>
-              )}
+                <button
+                  onClick={() => setShowCancelPrompt(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-neutral-700 text-neutral-400 text-sm"
+                >
+                  Không huỷ
+                </button>
+              </div>
             </div>
           )}
         </div>
+      )}
 
-        {/* Right: Map + Order Summary */}
-        <div className="lg:col-span-2 space-y-5">
-          {/* Map placeholder */}
-          <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm h-64 relative">
-            <div className="w-full h-full" style={{ background: "linear-gradient(135deg, #E8F4FD, #D1EBF6)" }}>
-              {/* Fake map grid */}
-              <div className="absolute inset-0 opacity-20">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="border-b border-blue-300" style={{ height: "12.5%" }} />
-                ))}
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="border-r border-blue-300 absolute top-0 bottom-0" style={{ left: `${(i + 1) * 16.67}%` }} />
-                ))}
-              </div>
-              {/* Route line */}
-              <svg className="absolute inset-0 w-full h-full">
-                <path d="M 30 200 Q 150 100 240 80 Q 280 60 300 40" stroke="#FF4500" strokeWidth="3" fill="none" strokeDasharray="8 4" className="animate-pulse" />
-              </svg>
-              {/* Driver pin */}
-              <div className="absolute" style={{ left: "55%", top: "40%" }}>
-                <div className="w-10 h-10 rounded-full bg-[#FF4500] flex items-center justify-center shadow-lg border-2 border-white">
-                  <Navigation className="w-5 h-5 text-white" />
-                </div>
-              </div>
-              {/* Destination pin */}
-              <div className="absolute" style={{ left: "15%", top: "70%" }}>
-                <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shadow-lg border-2 border-white">
-                  <MapPin className="w-4 h-4 text-white" />
-                </div>
-              </div>
-            </div>
-            <div className="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-2 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#FF4500]" />
-              <span className="text-sm font-semibold text-gray-700">
-                {distance !== null ? `${Math.round(distance * 2 + 10)} phút` : `15-25 phút`}
-              </span>
-              <span className="text-xs text-gray-400 ml-auto">
-                {distance !== null ? `${distance.toFixed(1)} km` : ""}
-              </span>
-            </div>
-          </div>
+      {/* Review section (chỉ khi completed) */}
+      {isCompleted && !reviewSubmitted && (
+        <div className="mx-4 mt-4 rounded-xl border border-neutral-800 bg-neutral-900 p-4 flex flex-col gap-4">
+          <p className="text-sm font-bold text-white">Đánh giá đơn hàng</p>
 
-          {/* Order summary */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
-            <h2 className="font-semibold text-gray-900 mb-4">{t('cart.order_summary')}</h2>
-            <div className="space-y-2 text-sm text-gray-600 mb-4">
-              {order ? order.orderItems?.map((item) => (
-                <div key={item.id} className="flex justify-between">
-                  <span>{item.menuItem?.name || "Item"} <span className="text-gray-400">x{item.quantity}</span></span>
-                  <span className="font-medium text-gray-800">{Number(item.unitPrice * item.quantity).toLocaleString("vi-VN")}đ</span>
-                </div>
-              )) : (
-                <div className="flex justify-between">
-                  <span>Loading items...</span>
-                </div>
-              )}
-              <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-gray-900">
-                <span>{t('cart.total')}</span><span>{Number(order?.finalAmount || 0).toLocaleString("vi-VN")}đ</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Real Review Section */}
-          {order?.status === "completed" && !reviewSubmitted && (
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-5 animate-in fade-in duration-300">
-              <h2 className="font-bold text-gray-900 text-sm">{t('tracking.rate_experience', 'Đánh giá đơn hàng')}</h2>
-
-              {/* Restaurant Review */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">Đánh giá nhà hàng ({order.restaurant?.name})</p>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <button key={s} onClick={() => setRestaurantRating(s)} className="p-0.5 transition-transform hover:scale-110">
-                      <Star className={`w-6 h-6 ${s <= restaurantRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
-                    </button>
-                  ))}
-                </div>
-                <textarea
-                  value={restaurantComment}
-                  onChange={(e) => setRestaurantComment(e.target.value)}
-                  placeholder="Nhập nhận xét về món ăn & nhà hàng..."
-                  rows={2}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
-                />
-              </div>
-
-              {/* Driver Review */}
-              {order.driver && (
-                <div className="space-y-2 border-t border-gray-100 pt-3">
-                  <p className="text-xs font-semibold text-gray-600">Đánh giá tài xế ({order.driver.profile?.fullName || "Tài xế"})</p>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <button key={s} onClick={() => setDriverRating(s)} className="p-0.5 transition-transform hover:scale-110">
-                        <Star className={`w-6 h-6 ${s <= driverRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
-                      </button>
-                    ))}
-                  </div>
-                  <textarea
-                    value={driverComment}
-                    onChange={(e) => setDriverComment(e.target.value)}
-                    placeholder="Nhập nhận xét về tài xế..."
-                    rows={2}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
+          {/* Restaurant rating */}
+          <div>
+            <p className="text-xs text-neutral-400 mb-1.5">Nhà hàng</p>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button key={s} onClick={() => setRestaurantRating(s)}>
+                  <Star
+                    className={`w-6 h-6 ${s <= restaurantRating ? "text-amber-400 fill-amber-400" : "text-neutral-600"}`}
                   />
-                </div>
-              )}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={restaurantComment}
+              onChange={(e) => setRestaurantComment(e.target.value)}
+              placeholder="Nhận xét về nhà hàng..."
+              className="mt-2 w-full rounded-lg bg-neutral-800 border border-neutral-700 text-sm text-white p-3 resize-none"
+              rows={2}
+            />
+          </div>
 
-              <button
-                onClick={handleSubmitReview}
-                disabled={isSubmittingReview}
-                className="w-full py-3 rounded-2xl text-white font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
-              >
-                {isSubmittingReview ? "Đang gửi..." : "Gửi đánh giá"}
-              </button>
+          {/* Driver rating (chỉ khi có tài xế) */}
+          {order.driverId && (
+            <div>
+              <p className="text-xs text-neutral-400 mb-1.5">Tài xế</p>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button key={s} onClick={() => setDriverRating(s)}>
+                    <Star
+                      className={`w-6 h-6 ${s <= driverRating ? "text-amber-400 fill-amber-400" : "text-neutral-600"}`}
+                    />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={driverComment}
+                onChange={(e) => setDriverComment(e.target.value)}
+                placeholder="Nhận xét về tài xế..."
+                className="mt-2 w-full rounded-lg bg-neutral-800 border border-neutral-700 text-sm text-white p-3 resize-none"
+                rows={2}
+              />
             </div>
           )}
 
-          {order?.status === "completed" && reviewSubmitted && (
-            <div className="bg-green-50 rounded-3xl p-5 border border-green-100 flex items-center gap-3 animate-in fade-in duration-300">
-              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-              <p className="text-xs font-medium text-green-700">{t('tracking.thanks_for_rating', 'Cảm ơn bạn đã gửi đánh giá!')}</p>
-            </div>
-          )}
-
-          {order && order.status !== "completed" && order.status !== "cancelled" && (
-            <div className="bg-gray-50 rounded-3xl p-5 border border-gray-200 text-center">
-              <p className="text-xs text-gray-500">Đánh giá nhà hàng & tài xế sẽ hiển thị khi đơn hàng hoàn thành. 🍽️</p>
-            </div>
-          )}
+          <button
+            onClick={handleSubmitReview}
+            disabled={isSubmittingReview}
+            className="w-full py-2.5 rounded-xl bg-orange-500 text-white text-sm font-bold disabled:opacity-50"
+          >
+            {isSubmittingReview ? "Đang gửi..." : "Gửi đánh giá"}
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* Review submitted */}
+      {isCompleted && reviewSubmitted && (
+        <div className="mx-4 mt-4 rounded-xl border border-green-800/40 bg-green-900/20 p-4 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
+          <p className="text-sm text-green-400 font-medium">
+            Cảm ơn bạn đã đánh giá!
+          </p>
+        </div>
+      )}
+
+      <div className="h-8" />
     </div>
   );
 }

@@ -1,25 +1,8 @@
-
-
-export type DriverStatus =
-  | "online"
-  | "offline"
-  | "busy";
-
-export type DeliveryStatus =
-  | "picked_up"
-  | "delivering"
-  | "completed";
-
-export type OrderAction =
-  | "accepted"
-  | "rejected";
-
-export type EarningsPeriod =
-  | "today"
-  | "week"
-  | "month";
-
-/* ───────────────── COMMON ───────────────── */
+export type DriverStatus   = "online" | "offline" | "busy";
+export type DeliveryStatus = "picked_up" | "delivering" | "completed";
+export type OrderAction    = "accepted" | "rejected";
+export type EarningsPeriod = "today" | "week" | "month";
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -28,23 +11,15 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-/* ───────────────── DRIVER ───────────────── */
-
 export interface DriverProfile {
   id: string;
-
   currentStatus: DriverStatus;
-
+  approvalStatus: ApprovalStatus; // MỚI
   walletBalance: number;
-
-  rating: number;
-
+  rating: number| string;
   commissionRate: number;
-
   vehicleInfo?: string;
-
   licensePlate?: string;
-
   profile: {
     fullName: string;
     phone: string;
@@ -52,91 +27,82 @@ export interface DriverProfile {
   };
 }
 
-/* ───────────────── ORDER ───────────────── */
+export interface OrderItem {
+  quantity: number;
+  menuItem: { name: string };
+}
 
 export interface Order {
   id: string;
-
   status: string;
-
   finalAmount: number;
-
+  deliveryFee?: number;
+  note?: string; // MỚI: ghi chú của khách
   createdAt: string;
-
   completedAt?: string;
-
+  assignmentExpiresAt?: string; // MỚI: countdown timer
   deliveryAddress?: string;
-
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
+  distance?: number | null;
   restaurant: {
     name: string;
     address: string;
-
     latitude?: number;
     longitude?: number;
   };
-
   customer?: {
     fullName: string;
     phone: string;
   };
-
-  orderItems?: {
-    quantity: number;
-
-    menuItem: {
-      name: string;
-    };
-  }[];
+  orderItems?: OrderItem[];
 }
-
-/* ───────────────── HEATMAP ───────────────── */
 
 export interface HeatmapItem {
   name?: string;
   address?: string;
-
   weight: number;
-
   latitude?: number;
   longitude?: number;
 }
 
-/* ───────────────── ROUTE ───────────────── */
-
 export interface RouteItem {
   orderId: string;
-
   sequence: number;
-
-  restaurant: {
-    name: string;
-    address?: string;
-    latitude?: number;
-    longitude?: number;
-  };
-
-  customer?: {
-    address?: string;
-    phone?: string;
-  };
+  restaurant: { name: string; address?: string; latitude?: number; longitude?: number };
+  customer?: { address?: string; phone?: string };
 }
 
-/* ───────────────── EARNINGS ───────────────── */
 
 export interface Transaction {
   id: string;
-
   amount: number;
-
+  transactionType?: string;
   description: string;
-
   createdAt: string;
 }
 
+// MỚI: dailyBreakdown cho BarChart
+export interface DailyEarning {
+  day: string;     // "T2" | "T3" | ... | "CN" hoặc "DD/MM"
+  earnings: number; // đơn vị nghìn đồng
+}
+
 export interface Earnings {
+  walletBalance?: number;
+  commissionRate?: number;
+  rating?: number;
+  period?: string;
   totalEarned: number;
-
+  totalWithdrawn?: number;
   completedOrders: number;
-
   transactions: Transaction[];
+  dailyBreakdown?: DailyEarning[]; // MỚI
+}
+
+// Input types
+export interface UpdateProfileInput {
+  vehicleInfo?: string;
+  licensePlate?: string;
+  avatarUrl?: string;
 }

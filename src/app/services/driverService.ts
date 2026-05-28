@@ -16,15 +16,16 @@ import type {
 
 
 /* ───────────────── REQUEST ───────────────── */
+const BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api/v1/driver";
 
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
 
-  const token = localStorage.getItem("token");
+  // const token = localStorage.getItem("token");
+  const token =  localStorage.getItem("token");
   // console.log("TOKEN =", token);
-const BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000") + "/api/v1/driver";
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
 
@@ -127,10 +128,13 @@ export const updateLocation = (
     }),
   });
 
-export const getMyLocation =
-  () => request<{ latitude: number; longitude: number }>(
-    "/location"
-  );
+export const getMyLocation = async () => {
+  try {
+    return await request<{ latitude: number; longitude: number }>("/location");
+  } catch {
+    return { success: false, data: null };
+  }
+};
 
 export const getDriverLocation = (
   driverId: string

@@ -1,4 +1,8 @@
-import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import {
+  createAsyncThunk,
+  createSlice,
+  type PayloadAction,
+} from "@reduxjs/toolkit";
 import {
   getDriverProfile,
   updateDriverStatus as updateDriverStatusService,
@@ -11,6 +15,7 @@ import {
   updateLocation as updateLocationService,
   getMyLocation,
   getEarnings as getEarningsService,
+  getOrderHistory,
 } from "../services/driverService";
 import type {
   DriverProfile,
@@ -28,11 +33,15 @@ export interface DriverState {
   status: DriverStatus;
   availableOrders: Order[];
   activeOrders: Order[];
+  orderHistory: Order[]; // MỚI
+  historyLoading: boolean; // MỚI
+  historyHasMore: boolean; // MỚI
   heatmap: HeatmapItem[];
   route: RouteItem[];
   earnings: Earnings | null;
   locationCoords: { latitude: number; longitude: number } | null;
   loading: boolean;
+  actionLoading: boolean; // MỚI: loading cho accept/reject
   error: string | null;
 }
 
@@ -41,11 +50,15 @@ const initialState: DriverState = {
   status: "offline",
   availableOrders: [],
   activeOrders: [],
+  orderHistory: [],
+  historyLoading: false,
+  historyHasMore: true,
   heatmap: [],
   route: [],
   earnings: null,
   locationCoords: null,
   loading: false,
+  actionLoading: false,
   error: null,
 };
 
@@ -57,27 +70,42 @@ export const loadDriverDashboard = createAsyncThunk(
         .then((res) => res.data)
         .catch(() => null);
 
-      const [profileRes, availableRes, activeRes, heatmapRes, locationCoords, earningsRes] = await Promise.all([
+      const [
+        profileRes,
+        availableRes,
+        activeRes,
+        heatmapRes,
+        locationCoords,
+        earningsRes,
+      ] = await Promise.all([
         getDriverProfile(),
         getAvailableOrders(),
         getActiveOrders(),
         getDemandHeatmap(),
         locationPromise,
-        getEarningsService("week"),
+        getEarningsService("week").catch((err) => {
+          console.error("EARNINGS ERROR", err);
+          return { success: false, data: null };
+        }),
       ]);
-
+      // console.log("earningsRes =", earningsRes);
+      // console.log(profileRes);
       return {
-        profile: profileRes.data,
-        availableOrders: availableRes.data,
-        activeOrders: activeRes.data,
-        heatmap: heatmapRes.data,
+        profile: profileRes.data.data,
+        availableOrders: Array.isArray(availableRes.data)
+          ? availableRes.data
+          : [],
+        activeOrders: Array.isArray(activeRes.data) ? activeRes.data : [],
+        heatmap: Array.isArray(heatmapRes.data) ? heatmapRes.data : [],
         locationCoords,
         earnings: earningsRes.data,
       };
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || " Không thể tải dữ liệu tài xế.");
+      return rejectWithValue(
+        (error as Error).message || " Không thể tải dữ liệu tài xế.",
+      );
     }
-  }
+  },
 );
 
 export const fetchAvailableOrdersThunk = createAsyncThunk(
@@ -87,9 +115,11 @@ export const fetchAvailableOrdersThunk = createAsyncThunk(
       const response = await getAvailableOrders();
       return response.data;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể tải đơn chờ.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể tải đơn chờ.",
+      );
     }
-  }
+  },
 );
 
 export const fetchActiveOrdersThunk = createAsyncThunk(
@@ -99,9 +129,25 @@ export const fetchActiveOrdersThunk = createAsyncThunk(
       const response = await getActiveOrders();
       return response.data;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể tải đơn đang giao.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể tải đơn đang giao.",
+      );
     }
-  }
+  },
+);
+export const fetchOrderHistoryThunk = createAsyncThunk(
+  "driver/fetchOrderHistory",
+  async (
+    { skip = 0, take = 20 }: { skip?: number; take?: number },
+    { rejectWithValue },
+  ) => {
+    try {
+      const res = await getOrderHistory(skip, take);
+      return { orders: res.data, skip, take };
+    } catch (e: unknown) {
+      return rejectWithValue((e as Error).message);
+    }
+  },
 );
 
 export const fetchHeatmapThunk = createAsyncThunk(
@@ -111,9 +157,11 @@ export const fetchHeatmapThunk = createAsyncThunk(
       const response = await getDemandHeatmap();
       return response.data;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể tải heatmap.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể tải heatmap.",
+      );
     }
-  }
+  },
 );
 
 export const fetchLocationThunk = createAsyncThunk(
@@ -123,9 +171,11 @@ export const fetchLocationThunk = createAsyncThunk(
       const response = await getMyLocation();
       return response.data;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể lấy vị trí tài xế.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể lấy vị trí tài xế.",
+      );
     }
-  }
+  },
 );
 
 export const fetchEarningsThunk = createAsyncThunk(
@@ -135,9 +185,11 @@ export const fetchEarningsThunk = createAsyncThunk(
       const response = await getEarningsService(period);
       return response.data;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể tải thu nhập.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể tải thu nhập.",
+      );
     }
-  }
+  },
 );
 
 export const updateDriverStatusThunk = createAsyncThunk(
@@ -147,54 +199,65 @@ export const updateDriverStatusThunk = createAsyncThunk(
       await updateDriverStatusService(status);
       return status;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể cập nhật trạng thái.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể cập nhật trạng thái.",
+      );
     }
-  }
+  },
 );
 
 export const respondOrderThunk = createAsyncThunk(
   "driver/respondOrder",
   async (
     payload: { orderId: string; action: "accepted" | "rejected" },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
-      const response = await respondOrderService(payload.orderId, payload.action);
+      const response = await respondOrderService(
+        payload.orderId,
+        payload.action,
+      );
       return response.data;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể xử lý yêu cầu đơn.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể xử lý yêu cầu đơn.",
+      );
     }
-  }
+  },
 );
 
 export const updateDeliveryStatusThunk = createAsyncThunk(
   "driver/updateDeliveryStatus",
   async (
     payload: { orderId: string; status: DeliveryStatus },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       await updateDeliveryStatusService(payload.orderId, payload.status);
       return payload;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể cập nhật trạng thái giao.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể cập nhật trạng thái giao.",
+      );
     }
-  }
+  },
 );
 
 export const updateLocationThunk = createAsyncThunk(
   "driver/updateLocation",
   async (
     payload: { latitude: number; longitude: number },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       await updateLocationService(payload.latitude, payload.longitude);
       return payload;
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể cập nhật vị trí.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể cập nhật vị trí.",
+      );
     }
-  }
+  },
 );
 
 export const optimizeRouteThunk = createAsyncThunk(
@@ -202,11 +265,13 @@ export const optimizeRouteThunk = createAsyncThunk(
   async (orderIds: string[], { rejectWithValue }) => {
     try {
       const response = await optimizeRouteService(orderIds);
-      return response.data.route;
+      return Array.isArray(response.data?.route) ? response.data.route : [];
     } catch (error: unknown) {
-      return rejectWithValue((error as Error).message || "Không thể tối ưu lộ trình.");
+      return rejectWithValue(
+        (error as Error).message || "Không thể tối ưu lộ trình.",
+      );
     }
-  }
+  },
 );
 
 const driverSlice = createSlice({
@@ -219,6 +284,16 @@ const driverSlice = createSlice({
     setDriverStatus: (state, action: PayloadAction<DriverStatus>) => {
       state.status = action.payload;
     },
+    clearHistory: (s) => {
+      s.orderHistory = [];
+      s.historyHasMore = true;
+    }, // MỚI
+    // MỚI: real-time upsert active order khi socket báo status changed
+    upsertActiveOrder: (s, a: PayloadAction<Order>) => {
+      const idx = s.activeOrders.findIndex((o) => o.id === a.payload.id);
+      if (idx !== -1) s.activeOrders[idx] = a.payload;
+      else s.activeOrders.unshift(a.payload);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -229,10 +304,16 @@ const driverSlice = createSlice({
       .addCase(loadDriverDashboard.fulfilled, (state, action) => {
         state.loading = false;
         state.profile = action.payload.profile;
-        state.status = action.payload.profile.currentStatus;
-        state.availableOrders = action.payload.availableOrders;
-        state.activeOrders = action.payload.activeOrders;
-        state.heatmap = action.payload.heatmap;
+        state.status = action.payload.profile?.currentStatus ?? "offline";
+        state.availableOrders = Array.isArray(action.payload.availableOrders)
+          ? action.payload.availableOrders
+          : [];
+        state.activeOrders = Array.isArray(action.payload.activeOrders)
+          ? action.payload.activeOrders
+          : [];
+        state.heatmap = Array.isArray(action.payload.heatmap)
+          ? action.payload.heatmap
+          : [];
         state.locationCoords = action.payload.locationCoords;
         state.earnings = action.payload.earnings;
       })
@@ -241,10 +322,30 @@ const driverSlice = createSlice({
         state.error = action.payload as string;
       })
       .addCase(fetchAvailableOrdersThunk.fulfilled, (state, action) => {
-        state.availableOrders = action.payload;
+        state.availableOrders = Array.isArray(action.payload)
+          ? action.payload
+          : [];
       })
       .addCase(fetchActiveOrdersThunk.fulfilled, (state, action) => {
-        state.activeOrders = action.payload;
+        state.activeOrders = Array.isArray(action.payload)
+          ? action.payload
+          : [];
+      })
+      .addCase(fetchOrderHistoryThunk.pending, (s) => {
+        s.historyLoading = true;
+      })
+      .addCase(fetchOrderHistoryThunk.fulfilled, (s, a) => {
+        s.historyLoading = false;
+        const orders = Array.isArray(a.payload.orders) ? a.payload.orders : [];
+        if (a.payload.skip === 0) {
+          s.orderHistory = orders;
+        } else {
+          s.orderHistory = [...s.orderHistory, ...orders];
+        }
+        s.historyHasMore = orders.length === a.payload.take;
+      })
+      .addCase(fetchOrderHistoryThunk.rejected, (s) => {
+        s.historyLoading = false;
       })
       .addCase(fetchHeatmapThunk.fulfilled, (state, action) => {
         state.heatmap = action.payload;
@@ -263,9 +364,19 @@ const driverSlice = createSlice({
       })
       .addCase(optimizeRouteThunk.fulfilled, (state, action) => {
         state.route = action.payload;
-      });
+      })
+      .addCase(respondOrderThunk.pending,   s => { s.actionLoading = true; })
+      .addCase(respondOrderThunk.fulfilled, (s, a) => {
+        s.actionLoading = false;
+        // Nếu accepted, chuyển sang activeOrders
+        if (a.payload && (a.payload as any).status === "accepted") {
+          s.activeOrders = [a.payload as Order, ...s.activeOrders];
+        }
+        s.availableOrders = s.availableOrders.filter(o => o.id !== (a.payload as any)?.id);
+      })
+      .addCase(respondOrderThunk.rejected, s => { s.actionLoading = false; })
   },
 });
 
-export const { setRoute, setDriverStatus } = driverSlice.actions;
+export const { setRoute, setDriverStatus,clearHistory } = driverSlice.actions;
 export default driverSlice.reducer;
