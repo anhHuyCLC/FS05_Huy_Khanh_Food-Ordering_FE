@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { RestaurantCard } from "./RestaurantCard";
-import type { Restaurant } from "../../features/restaurantSlice";
+import type { Restaurant } from "../../types/restaurant";
 
 interface RestaurantRowProps {
   title: string;

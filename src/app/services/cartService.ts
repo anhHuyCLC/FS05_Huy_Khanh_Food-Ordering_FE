@@ -1,5 +1,5 @@
 import apiClient from "./apiClient";
-import type { OptionChoice, OptionGroup } from "../features/restaurantSlice";
+import type { OptionChoice, OptionGroup } from "../types/restaurant";
 
 export interface CartItemResponse {
   id: string;

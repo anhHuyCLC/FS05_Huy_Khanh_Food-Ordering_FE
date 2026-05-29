@@ -25,7 +25,7 @@ export function useOrderTracking(orderId: string, token: string) {
   useEffect(() => {
     if (!orderId || !token) return;
 
-    const socket = io(import.meta.env.VITE_WS_URL || "http://localhost:3000", {
+    const socket = io(import.meta.env.VITE_API_URL || "http://localhost:8000", {
       auth: { token },
       transports: ["websocket"],
     });

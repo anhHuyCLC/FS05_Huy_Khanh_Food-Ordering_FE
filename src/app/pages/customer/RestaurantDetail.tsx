@@ -5,7 +5,7 @@ import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
-import type { MenuItem, OptionGroup, OptionChoice } from "../../features/restaurantSlice";
+import type { MenuItem, OptionGroup, OptionChoice } from "../../types/restaurant";
 import { useAuthStore } from "../../stores/authStore";
 import { useCartStore } from "../../stores/cartStore";
 import { selectSelectedAddress } from "../../features/mapSelectors";
@@ -45,8 +45,8 @@ export default function RestaurantDetail() {
 
   const distance = useMemo(() => {
     if (!restaurant) return null;
-    let restLat = restaurant.latitude ? parseFloat(restaurant.latitude) : null;
-    let restLon = restaurant.longitude ? parseFloat(restaurant.longitude) : null;
+    let restLat = restaurant.latitude ? Number(restaurant.latitude) : null;
+    let restLon = restaurant.longitude ? Number(restaurant.longitude) : null;
     if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
       const stable = getStableCoords(restaurant.id, restaurant.name);
       restLat = stable.latitude;

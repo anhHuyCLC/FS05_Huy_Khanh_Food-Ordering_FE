@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Phone, MessageCircle, Star, CheckCircle,
+  Phone, Star, CheckCircle,
   Clock, MapPin, Navigation, ArrowLeft, Wifi,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -9,8 +9,8 @@ import { orderService } from "../../services/orderService";
 import type { Order } from "../../types/order";
 import { toast } from "sonner";
 import { calculateDistance, getDeliveryTimeText } from "../../utils/geo";
-// ✅ Fix thiếu sót 9: import hook WebSocket đã có sẵn
 import { useOrderTracking } from "../../hooks/useOrderTracking";
+import { useAuthStore } from "../../stores/authStore";
 
 export default function Tracking() {
   const navigate = useNavigate();
@@ -21,11 +21,8 @@ export default function Tracking() {
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useTranslation();
 
-  // ✅ Fix thiếu sót 9: lấy token để dùng WebSocket
-  const token =
-    localStorage.getItem("token") ??
-    sessionStorage.getItem("token") ??
-    "";
+  // Lấy token từ auth store (thống nhất cách lấy token)
+  const token = useAuthStore((state) => state.accessToken) ?? "";
 
   // ✅ Fix thiếu sót 9: real-time tracking qua WebSocket
   const { driverLat, driverLng, status: liveStatus, driverAssigned } =

@@ -384,6 +384,7 @@ function ActiveOrderCard({
       label: t("driver_dashboard.mark_picked_up"),
       activeCls: "bg-sky-500 text-white border-sky-500",
       inactiveCls: "border-sky-100 text-sky-700 bg-sky-50 hover:bg-sky-100",
+      disabled: order.status !== "ready",
     },
     {
       key: "delivering",
@@ -392,6 +393,7 @@ function ActiveOrderCard({
       activeCls: "bg-amber-500 text-white border-amber-500",
       inactiveCls:
         "border-amber-100 text-amber-700 bg-amber-50 hover:bg-amber-100",
+      disabled: order.status !== "ready" && order.status !== "delivering",
     },
     {
       key: "completed",
@@ -400,13 +402,37 @@ function ActiveOrderCard({
       activeCls: "bg-emerald-600 text-white border-emerald-600",
       inactiveCls:
         "border-emerald-100 text-emerald-700 bg-emerald-50 hover:bg-emerald-100",
+      disabled: order.status !== "delivering",
     },
   ];
-  const badgeMap: Record<string, string> = {
-    picked_up: "bg-sky-100 text-sky-700",
-    delivering: "bg-amber-100 text-amber-700",
-    completed: "bg-emerald-100 text-emerald-700",
+
+  const statusLabels: Record<string, string> = {
+    accepted: "Đã nhận đơn",
+    preparing: "Đang chuẩn bị",
+    ready: "Món đã sẵn sàng",
+    delivering: "Đang giao hàng",
+    completed: "Đã hoàn thành",
+    cancelled: "Đã huỷ",
   };
+
+  const badgeMap: Record<string, string> = {
+    accepted: "bg-blue-50 text-blue-600 border border-blue-200/50",
+    preparing: "bg-amber-50 text-amber-600 border border-amber-200/50",
+    ready: "bg-indigo-50 text-indigo-600 border border-indigo-200/50",
+    delivering: "bg-orange-50 text-orange-600 border border-orange-200/50",
+    completed: "bg-emerald-50 text-emerald-600 border border-emerald-200/50",
+    cancelled: "bg-red-50 text-red-600 border border-red-200/50",
+  };
+
+  const statusEmoji: Record<string, string> = {
+    accepted: "🤝",
+    preparing: "🍳",
+    ready: "🍱",
+    delivering: "🚴",
+    completed: "✅",
+    cancelled: "❌",
+  };
+
   return (
     <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="px-4 pt-3.5 pb-3 flex items-start justify-between gap-2">
@@ -429,15 +455,22 @@ function ActiveOrderCard({
         <span
           className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${badgeMap[order.status] ?? "bg-neutral-100 text-neutral-600"}`}
         >
-          {steps.find((s) => s.key === order.status)?.emoji} {order.status}
+          {statusEmoji[order.status] ?? "⏳"} {statusLabels[order.status] ?? order.status}
         </span>
       </div>
       <div className="grid grid-cols-3 gap-px bg-neutral-100 border-t border-neutral-100">
-        {steps.map(({ key, emoji, label, activeCls, inactiveCls }) => (
+        {steps.map(({ key, emoji, label, activeCls, inactiveCls, disabled }) => (
           <button
             key={key}
+            disabled={disabled}
             onClick={() => onUpdate(key)}
-            className={`py-1.5 text-[9px] font-bold border transition-all ${order.status === key ? activeCls : `bg-white ${inactiveCls}`}`}
+            className={`py-1.5 text-[9px] font-bold border transition-all ${
+              disabled
+                ? "bg-neutral-50 border-neutral-100 text-neutral-300 cursor-not-allowed opacity-50"
+                : order.status === key
+                ? activeCls
+                : `bg-white ${inactiveCls}`
+            }`}
           >
             {emoji} {label}
           </button>
@@ -561,7 +594,7 @@ function HistorySection({
           Đang tải...
         </div>
       )}
-      {hasMore && !loading && orders.length > 0 && (
+      {hasMore && !loading && historyOrders.length > 0 && (
         <div className="p-4 border-t border-neutral-50">
           <button
             onClick={onLoadMore}
@@ -662,22 +695,22 @@ export default function DriverDashboard() {
   const handleNewOrder = useCallback(() => {
     notify.info(t("driver_dashboard.new_order_received"));
     dispatch(fetchAvailableOrdersThunk());
-  }, [dispatch, t]);
+  }, [dispatch, t, notify]);
 
-const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: string }) => {
+  const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: string }) => {
     const shortId = data?.orderId ? `#${data.orderId.slice(-6).toUpperCase()}` : "";
     notify.warning(`Đơn ${shortId} đã bị huỷ bởi nhà hàng`);
     dispatch(fetchAvailableOrdersThunk());
     dispatch(fetchActiveOrdersThunk());
     dispatch(loadDriverDashboard()); // sync lại walletBalance + currentStatus
-  }, [dispatch, t]);
+  }, [dispatch, notify]);
 
   const handleEarning = useCallback(
     (data: { amount: number; message: string }) => {
       notify.success(data.message || t("driver_dashboard.new_earning"));
       dispatch(fetchEarningsThunk("week"));
     },
-    [dispatch, t],
+    [dispatch, t, notify],
   );
 
   const handleStatusAck = useCallback(
@@ -689,7 +722,7 @@ const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: s
 
   const handleError = useCallback((data: { message: string }) => {
     notify.error(data.message);
-  }, []);
+  }, [notify]);
 
   const {
     updateDriverStatus,
@@ -935,7 +968,7 @@ const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: s
       await refreshOrders();
       dispatch(loadDriverDashboard());
       notify.success("Đã nhận đơn hàng thành công!");
-    } catch (e: any) {
+    } catch (e) {
       notify.error(e?.message || t("driver_dashboard.order_accept_failed"));
     }
   }
@@ -948,7 +981,7 @@ const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: s
       await refreshOrders();
 
       notify.info("Đã từ chối đơn hàng.");
-    } catch (e: any) {
+    } catch (e) {
       notify.error(e?.message || t("driver_dashboard.order_reject_failed"));
     }
   }
@@ -963,7 +996,7 @@ const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: s
     dispatch(loadDriverDashboard());
 
     notify.info("Đơn hàng đã hết thời gian nhận!");
-  } catch (e: any) {
+  } catch (e) {
     notify.error(e?.message || "Order expired handling failed");
   }
 }
@@ -987,7 +1020,7 @@ const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: s
       await dispatch(optimizeRouteThunk(ids)).unwrap();
 
       notify.success("Tuyến đường đã được tối ưu!");
-    } catch (e: any) {
+    } catch (e) {
       notify.error(e?.message || t("driver_dashboard.route_optimize_failed"));
     }
   }
@@ -1003,7 +1036,7 @@ const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: s
           await dispatch(updateLocationThunk({ latitude, longitude })).unwrap();
 
           notify.success("Đã cập nhật vị trí!");
-        } catch (e: any) {
+        } catch (e) {
           notify.error(
             e?.message || t("driver_dashboard.location_update_failed"),
           );

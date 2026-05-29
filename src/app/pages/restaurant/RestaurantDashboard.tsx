@@ -15,6 +15,8 @@
   } from "../../types/restaurant";
   import type { Order, Promotion } from "../../types/order";
   import { toast } from "sonner";
+  import { useAuthStore } from "../../stores/authStore";
+  import { io } from "socket.io-client";
   import {
     AreaChart,
     Area,
@@ -77,15 +79,15 @@
     const diffDay = Math.floor(diffHour / 24);
     return `${diffDay} ${t("restaurant_dashboard.days_ago") || "ngày trước"}`;
   }
-  const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
-    pending: { dot: "bg-gray-400", label: "Chờ xác nhận" },
-    accepted: { dot: "bg-blue-500", label: "Đã nhận đơn" },
-    preparing: { dot: "bg-yellow-500", label: "Đang chuẩn bị" },
-    ready: { dot: "bg-orange-500", label: "Sẵn sàng giao" },
-    delivering: { dot: "bg-purple-500", label: "Đang giao" },
-    completed: { dot: "bg-green-500", label: "Hoàn thành" },
-    cancelled: { dot: "bg-red-400", label: "Đã huỷ" },
-  };
+  // const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
+  //   pending: { dot: "bg-gray-400", label: "Chờ xác nhận" },
+  //   accepted: { dot: "bg-blue-500", label: "Đã nhận đơn" },
+  //   preparing: { dot: "bg-yellow-500", label: "Đang chuẩn bị" },
+  //   ready: { dot: "bg-orange-500", label: "Sẵn sàng giao" },
+  //   delivering: { dot: "bg-purple-500", label: "Đang giao" },
+  //   completed: { dot: "bg-green-500", label: "Hoàn thành" },
+  //   cancelled: { dot: "bg-red-400", label: "Đã huỷ" },
+  // };
 
 
   export default function RestaurantDashboard() {
@@ -106,6 +108,7 @@
     const [loadingRestaurant, setLoadingRestaurant] = useState(true);
     const [chartPeriod, setChartPeriod] = useState("30days"); // "30days" or "7months"
     const { t } = useTranslation();
+    const token = useAuthStore((state) => state.accessToken);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -246,7 +249,10 @@
 
     useEffect(() => {
       if (!restaurantId) return;
-      fetchMenuItems();
+      const load = async () => {
+        await fetchMenuItems();
+      };
+      void load();
     }, [restaurantId, fetchMenuItems]);
 
     const fetchPromotions = useCallback(async () => {
@@ -261,8 +267,35 @@
 
     useEffect(() => {
       if (!restaurantId) return;
-      fetchPromotions();
+      const load = async () => {
+        await fetchPromotions();
+      };
+      void load();
     }, [restaurantId, fetchPromotions]);
+
+    useEffect(() => {
+      if (!restaurantId || !token) return;
+
+      const socket = io(import.meta.env.VITE_API_URL || "http://localhost:8000", {
+        auth: { token },
+        transports: ["websocket"],
+      });
+
+      socket.on("connect", () => {
+        console.log("[RestaurantDashboard] Socket connected");
+        // Join room riêng của nhà hàng để nhận updates chính xác
+        socket.emit("join_restaurant_room", { restaurantId });
+      });
+
+      socket.on("order:status_changed", () => {
+        // Refetch orders khi có bất kỳ thay đổi trạng thái nào
+        fetchOrders();
+      });
+
+      return () => {
+        socket.disconnect();
+      };
+    }, [restaurantId, token, fetchOrders]);
 
     // ── Lấy gợi ý combo (AI Suggestions) ──────────────────────────────────
     useEffect(() => {
@@ -801,7 +834,7 @@
     const restaurantName = myRestaurant?.name || "Nhà hàng";
     const restaurantAvatar = restaurantName
       .split(" ")
-      .map((w: any) => w[0])
+      .map((w: string) => w[0])
       .join("")
       .slice(0, 2)
       .toUpperCase();
@@ -1125,6 +1158,17 @@
                                 📍 <strong>{order.deliveryAddress}</strong>
                               </div>
                             )}
+                            {order.driver && (
+                              <div className="pt-2 text-xs text-blue-600 border-t border-dashed border-gray-100 flex items-center gap-1.5">
+                                <span>
+                                  🚴 Tài xế:{" "}
+                                  <strong>
+                                    {order.driver.profile?.fullName || "Chưa có tên"}{" "}
+                                    {order.driver.profile?.phone ? `(${order.driver.profile.phone})` : ""}
+                                  </strong>
+                                </span>
+                              </div>
+                            )}
                             {order.note && (
                               <div className="bg-orange-50 ...">
                                 📝 {order.note}
@@ -1174,7 +1218,7 @@
                     className="px-3.5 py-1.5 text-sm border border-gray-200 rounded-xl bg-gray-50 outline-none"
                   >
                     <option value="all">Tất cả danh mục</option>
-                    {myRestaurant?.categories?.map((cat: any) => (
+                    {myRestaurant?.categories?.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
                       </option>

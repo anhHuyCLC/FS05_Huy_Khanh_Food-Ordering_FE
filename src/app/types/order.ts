@@ -112,7 +112,7 @@ export interface OrderMeta {
   page: number;
   limit: number;
   total: number;
-  totalPages: number;
+  totalPages?: number;
 }
 export interface CancelOrderInput {
   reason?: string;

@@ -2,11 +2,10 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 // import { PayloadAction } from "@reduxjs/toolkit";
 import {
   getMyOrders, getOrder, createOrder, cancelOrder, updateOrderStatus,
-  getRestaurantOrdersPaginated, getOrderHistory,checkPromotion, getPromotions,submitReview,
+  getRestaurantOrdersPaginated, getOrderHistory
 } from "../services/orderService";
 import type {
-  Order, OrderStatusHistory, OrderMeta,CreateOrderInput, OrderMetaCreateOrderInput, CancelOrderInput, UpdateOrderStatusInput, Promotion,
-
+  Order, OrderStatusHistory, OrderMeta,CreateOrderInput, CancelOrderInput, UpdateOrderStatusInput
 } from "../types/order";
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -44,7 +43,7 @@ export const fetchMyOrders = createAsyncThunk<
   async (_, { rejectWithValue }) => {
     try {
       return await getMyOrders();
-    } catch (e: any) {
+    } catch (e) {
       return rejectWithValue(
         e.response?.data?.message ?? e.message
       );
@@ -60,7 +59,7 @@ export const fetchOrder = createAsyncThunk<
   "orders/fetchOne",
   async (orderId: string, { rejectWithValue }) => {
     try { return await getOrder(orderId); }
-    catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
   }
 );
 
@@ -72,7 +71,7 @@ export const placeOrder = createAsyncThunk<
   "orders/create",
   async (data: CreateOrderInput, { rejectWithValue }) => {
     try { return await createOrder(data); }
-    catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
   }
 );
 
@@ -84,7 +83,7 @@ export const cancelMyOrder = createAsyncThunk<
   "orders/cancel",
   async ({ orderId, data }: { orderId: string; data: CancelOrderInput }, { rejectWithValue }) => {
     try { return await cancelOrder(orderId, data); }
-    catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
   }
 );
 
@@ -96,7 +95,7 @@ export const changeOrderStatus = createAsyncThunk<
   "orders/updateStatus",
   async ({ orderId, data }: { orderId: string; data: UpdateOrderStatusInput }, { rejectWithValue }) => {
     try { return await updateOrderStatus(orderId, data); }
-    catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
   }
 );
 
@@ -108,7 +107,7 @@ export const fetchRestaurantOrders = createAsyncThunk<
   "orders/fetchForRestaurant",
   async ({ restaurantId, params }: { restaurantId: string; params?: { status?: string; page?: number; limit?: number } }, { rejectWithValue }) => {
     try { return await getRestaurantOrdersPaginated(restaurantId, params); }
-    catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
   }
 );
 
@@ -120,7 +119,7 @@ export const fetchOrderHistory = createAsyncThunk<
   "orders/fetchHistory",
   async (orderId: string, { rejectWithValue }) => {
     try { return await getOrderHistory(orderId); }
-    catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
   }
 );
 
