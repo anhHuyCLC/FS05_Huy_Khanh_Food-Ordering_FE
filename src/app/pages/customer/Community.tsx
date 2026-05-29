@@ -9,7 +9,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { toast } from "sonner";
 import { socialPostService } from "../../services/socialPostService";
 import type { SocialPost, PostComment, LeaderboardUser } from "../../services/socialPostService";
-import type { Restaurant, MenuItem } from "../../features/restaurantSlice";
+import type { Restaurant, MenuItem } from "../../types/restaurant";
 
 const viLocale = {
   name: "vi",

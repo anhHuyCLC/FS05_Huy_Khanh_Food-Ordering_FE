@@ -91,7 +91,7 @@ export const loadDriverDashboard = createAsyncThunk(
       // console.log("earningsRes =", earningsRes);
       // console.log(profileRes);
       return {
-        profile: profileRes.data.data,
+        profile: profileRes.data,
         availableOrders: Array.isArray(availableRes.data)
           ? availableRes.data
           : [],
@@ -369,10 +369,12 @@ const driverSlice = createSlice({
       .addCase(respondOrderThunk.fulfilled, (s, a) => {
         s.actionLoading = false;
         // Nếu accepted, chuyển sang activeOrders
-        if (a.payload && (a.payload as any).status === "accepted") {
-          s.activeOrders = [a.payload as Order, ...s.activeOrders];
+        const payload = a.payload as Order;
+        const isAccepted = a.meta?.arg?.action === "accepted" || (payload && ["accepted", "preparing", "ready"].includes(payload.status));
+        if (payload && isAccepted) {
+          s.activeOrders = [payload, ...s.activeOrders];
         }
-        s.availableOrders = s.availableOrders.filter(o => o.id !== (a.payload as any)?.id);
+        s.availableOrders = s.availableOrders.filter(o => o.id !== payload?.id);
       })
       .addCase(respondOrderThunk.rejected, s => { s.actionLoading = false; })
   },

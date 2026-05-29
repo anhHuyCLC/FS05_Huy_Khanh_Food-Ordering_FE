@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useCartStore, type CartItem } from "../../stores/cartStore";
 import { useAuthStore } from "../../stores/authStore";
 import { cartService } from "../../services/cartService";
-import type { OptionChoice, OptionGroup } from "../../features/restaurantSlice";
+import type { OptionChoice, OptionGroup } from "../../types/restaurant";
 
 export default function Cart() {
   const navigate = useNavigate();

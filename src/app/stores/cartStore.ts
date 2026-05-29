@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { useAuthStore } from "./authStore";
 import { cartService } from "../services/cartService";
 import type { CartResponse } from "../services/cartService";
-import type { OptionChoice, OptionGroup } from "../features/restaurantSlice";
+import type { OptionChoice, OptionGroup } from "../types/restaurant";
 
 export interface CartItem {
   id: string; // menuItemId
