@@ -365,7 +365,7 @@ const driverSlice = createSlice({
       .addCase(optimizeRouteThunk.fulfilled, (state, action) => {
         state.route = action.payload;
       })
-      .addCase(respondOrderThunk.pending,   s => { s.actionLoading = true; })
+      .addCase(respondOrderThunk.pending, s => { s.actionLoading = true; })
       .addCase(respondOrderThunk.fulfilled, (s, a) => {
         s.actionLoading = false;
         // Nếu accepted, chuyển sang activeOrders
@@ -380,5 +380,5 @@ const driverSlice = createSlice({
   },
 });
 
-export const { setRoute, setDriverStatus,clearHistory } = driverSlice.actions;
+export const { setRoute, setDriverStatus, clearHistory } = driverSlice.actions;
 export default driverSlice.reducer;

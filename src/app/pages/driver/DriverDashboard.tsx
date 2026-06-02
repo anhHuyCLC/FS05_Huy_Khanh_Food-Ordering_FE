@@ -1150,17 +1150,17 @@ export default function DriverDashboard() {
               <p className="text-[9px] font-bold tracking-[0.18em] uppercase text-neutral-400 truncate">
                 {t("driver_dashboard.current_location")}
               </p>
-              {locationCoords ? (
+              {driverCoords ? (
                 <>
                   <p
                     className={`mt-1.5 font-black text-neutral-900 leading-snug truncate ${currentAddress ? "text-sm" : "text-3xl"}`}
                   >
                     {currentAddress ??
-                      `${locationCoords.latitude?.toFixed(4)}°`}
+                      `${driverCoords[0].toFixed(4)}°`}
                   </p>
                   <p className="mt-1 text-[10px] text-neutral-400 font-mono truncate">
-                    {locationCoords.latitude?.toFixed(5)},{" "}
-                    {locationCoords.longitude?.toFixed(5)}
+                    {driverCoords[0].toFixed(5)},{" "}
+                    {driverCoords[1].toFixed(5)}
                   </p>
                 </>
               ) : (
@@ -2023,8 +2023,8 @@ export default function DriverDashboard() {
                     Coordinates
                   </p>
                   <p className="text-[10px] font-mono text-neutral-700 mt-0.5">
-                    {locationCoords
-                      ? `${locationCoords.latitude?.toFixed(4)}, ${locationCoords.longitude?.toFixed(4)}`
+                    {driverCoords
+                      ? `${driverCoords[0].toFixed(4)}, ${driverCoords[1].toFixed(4)}`
                       : t("driver_dashboard.no_location_record")}
                   </p>
                 </div>
