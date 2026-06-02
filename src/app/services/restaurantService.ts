@@ -119,6 +119,10 @@ export const restaurantService = {
     );
     return response.data.data;
   },
+  getRecommendations: async (): Promise<Restaurant[]> => {
+    const response = await apiClient.get("/v1/restaurant/recommendations");
+    return response.data;
+  },
 };
 
 // Backward compatibility
@@ -127,7 +131,7 @@ export const getMyRestaurant = restaurantService.getMyRestaurant;
 export const getMenuItems = restaurantService.getMenuItems;
 export const createMenuItem = restaurantService.createMenuItem;
 export const updateMenuItem = restaurantService.updateMenuItem;
-export const toggleMenuItemAvailability =restaurantService.updateMenuItemAvailability;
+export const toggleMenuItemAvailability = restaurantService.updateMenuItemAvailability;
 export const deleteMenuItem = restaurantService.deleteMenuItem;
 export const listPromotions = restaurantService.listPromotions;
 export const createPromotion = restaurantService.createPromotion;
@@ -135,3 +139,4 @@ export const updatePromotion = restaurantService.updatePromotion;
 export const deletePromotion = restaurantService.deletePromotion;
 export const getComboSuggestions = restaurantService.getComboSuggestions;
 export const togglePromotion = restaurantService.togglePromotion;
+export const getRecommendations = restaurantService.getRecommendations;

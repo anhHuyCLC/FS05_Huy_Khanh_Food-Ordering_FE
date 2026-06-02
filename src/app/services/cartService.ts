@@ -96,4 +96,18 @@ export const cartService = {
     const response = await apiClient.delete(`/v1/carts/${cartId}/items/${cartItemId}`);
     return response.data.data;
   },
+
+  shareCart: async (
+    cartId: string
+  ): Promise<{ success: boolean; data: { sessionToken: string }; message: string }> => {
+    const response = await apiClient.post(`/v1/carts/${cartId}/share`);
+    return response.data;
+  },
+
+  getCartByToken: async (
+    token: string
+  ): Promise<{ success: boolean; data: CartResponse }> => {
+    const response = await apiClient.get(`/v1/carts/share/${token}`);
+    return response.data;
+  },
 };

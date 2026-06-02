@@ -1,8 +1,9 @@
 import apiClient from './apiClient';
-import type { Order, CreateOrderInput, UpdateOrderStatusInput, CancelOrderInput, OrderStatusHistory, Promotion, OrderMeta} from '../types/order';
+import type { Order, CreateOrderInput, UpdateOrderStatusInput, CancelOrderInput, OrderStatusHistory, Promotion } from '../types/order';
 
-const parseResponse = <T>(response: any): T => {
-  return response?.data?.data ?? response?.data;
+const parseResponse = <T>(response: unknown): T => {
+  const resObj = response as { data?: { data?: T } };
+  return resObj?.data?.data ?? (resObj?.data as T);
 };
 
 export const orderService = {
@@ -17,16 +18,25 @@ export const orderService = {
   },
 
    getPromotions: async (restaurantId?: string): Promise<Promotion[]> => {
-    const res = await apiClient.get("/orders/promotions", {
+    const res = await apiClient.get("/v1/promotions", {
       params: restaurantId ? { restaurantId } : {},
     });
-    return res.data;
+    return parseResponse<Promotion[]>(res);
   },
 
   getMyOrders: async (): Promise<Order[]> => {
     const response = await apiClient.get('/v1/orders');
-    const data = parseResponse<any>(response);
-    return data?.items ?? data ?? [];
+    const data = parseResponse<unknown>(response);
+    if (Array.isArray(data)) {
+      return data as Order[];
+    }
+    if (data && typeof data === 'object' && 'items' in data) {
+      const obj = data as { items?: unknown };
+      if (Array.isArray(obj.items)) {
+        return obj.items as Order[];
+      }
+    }
+    return [];
   },
 
   getOrder: async (orderId: string): Promise<Order> => {
@@ -73,11 +83,14 @@ export const orderService = {
         limit:  params?.limit ?? 20,
       },
     });
-    const data = parseResponse<any>(response);
+    const data = parseResponse<unknown>(response);
     // BE trả { items: [], meta: {} }
-    if (data?.items !== undefined) return data;
+    if (data && typeof data === 'object' && 'items' in data) {
+      return data as { items: Order[]; meta: { total: number; page: number; limit: number } };
+    }
     // fallback nếu BE trả array thẳng
-    return { items: data ?? [], meta: { total: data?.length ?? 0, page: 1, limit: 20 } };
+    const items = Array.isArray(data) ? (data as Order[]) : [];
+    return { items, meta: { total: items.length, page: 1, limit: 20 } };
   },
 };
 export const createOrder = orderService.createOrder;

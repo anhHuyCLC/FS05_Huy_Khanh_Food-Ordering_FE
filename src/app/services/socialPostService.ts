@@ -48,10 +48,25 @@ export interface LeaderboardUser {
   badge: string;
 }
 
+const extractArray = <T>(resBody: unknown): T[] => {
+  if (!resBody || typeof resBody !== "object") return [];
+  if (Array.isArray(resBody)) return resBody as T[];
+  
+  const obj = resBody as Record<string, unknown>;
+  if (obj.data) {
+    if (Array.isArray(obj.data)) return obj.data as T[];
+    if (obj.data && typeof obj.data === "object") {
+      const nested = obj.data as Record<string, unknown>;
+      if (Array.isArray(nested.data)) return nested.data as T[];
+    }
+  }
+  return [];
+};
+
 export const socialPostService = {
   getSocialPosts: async (tab: string): Promise<SocialPost[]> => {
     const response = await apiClient.get(`/v1/social-posts?tab=${tab}`);
-    return response.data.data || response.data;
+    return extractArray<SocialPost>(response.data);
   },
 
   createSocialPost: async (data: {
@@ -90,7 +105,7 @@ export const socialPostService = {
 
   getComments: async (postId: string): Promise<PostComment[]> => {
     const response = await apiClient.get(`/v1/social-posts/${postId}/comments`);
-    return response.data.data || response.data;
+    return extractArray<PostComment>(response.data);
   },
 
   shareSocialPost: async (postId: string): Promise<void> => {
@@ -102,9 +117,14 @@ export const socialPostService = {
     return response.data.data || response.data;
   },
 
+  reportPost: async (postId: string, reason: string): Promise<{ success: boolean; message: string }> => {
+    const response = await apiClient.post(`/v1/social-posts/${postId}/report`, { reason });
+    return response.data;
+  },
+
   getLeaderboard: async (): Promise<LeaderboardUser[]> => {
     const response = await apiClient.get("/v1/social-posts/leaderboard");
-    return response.data.data || response.data;
+    return extractArray<LeaderboardUser>(response.data);
   },
 
   uploadFile: async (file: File): Promise<string> => {
@@ -117,5 +137,10 @@ export const socialPostService = {
     });
     const resData = response.data.data || response.data;
     return resData.url;
+  },
+
+  getSidebarStats: async (): Promise<{ trendingTags: string[]; postingStreak: number }> => {
+    const response = await apiClient.get("/v1/social-posts/stats");
+    return response.data;
   },
 };

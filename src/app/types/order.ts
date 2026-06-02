@@ -87,6 +87,9 @@ export interface Order {
   };
   driver?: {
     id: string;
+    vehicleInfo?: string;
+    licensePlate?: string;
+    rating?: number | string;
     profile?: {
       fullName?: string;
       phone?: string;

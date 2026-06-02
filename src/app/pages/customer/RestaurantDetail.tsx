@@ -10,6 +10,9 @@ import { useAuthStore } from "../../stores/authStore";
 import { useCartStore } from "../../stores/cartStore";
 import { selectSelectedAddress } from "../../features/mapSelectors";
 import { calculateDistance, getStableCoords, calculateDeliveryFee, getDeliveryTimeText } from "../../utils/geo";
+import { favoriteService } from "../../services/favoriteService";
+import { restaurantService } from "../../services/restaurantService";
+import type { Promotion } from "../../types/order";
 
 
 const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
@@ -29,10 +32,45 @@ export default function RestaurantDetail() {
   const [customizeItem, setCustomizeItem] = useState<MenuItem | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, OptionChoice | OptionChoice[]>>({});
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [restaurantPromotions, setRestaurantPromotions] = useState<Promotion[]>([]);
 
   useEffect(() => {
     dispatch(fetchRestaurants());
   }, [dispatch]);
+
+  useEffect(() => {
+    if (isLoggedIn && id) {
+      favoriteService.listFavorites()
+        .then((favs) => {
+          const found = favs.some((f) => f.id === id);
+          setIsFavorited(found);
+        })
+        .catch((err) => console.error("Error loading favorites:", err));
+    }
+  }, [isLoggedIn, id]);
+
+  useEffect(() => {
+    if (id) {
+      restaurantService.listPromotions(id)
+        .then((data) => setRestaurantPromotions(data || []))
+        .catch((err) => console.error("Error loading promotions:", err));
+    }
+  }, [id]);
+
+  const handleToggleFavorite = async () => {
+    if (!isLoggedIn) {
+      setShowLoginModal(true);
+      return;
+    }
+    if (!id) return;
+    try {
+      const res = await favoriteService.toggleFavorite(id);
+      setIsFavorited(res.favorited);
+    } catch (err) {
+      console.error("Error toggling favorite:", err);
+    }
+  };
 
   const restaurantIndex = useMemo(
     () => restaurants.findIndex((item) => item.id === id),
@@ -349,8 +387,11 @@ export default function RestaurantDetail() {
         >
           <ArrowLeft className="w-5 h-5 text-gray-700" />
         </button>
-        <button className="absolute top-6 right-6 w-10 h-10 rounded-2xl bg-white/90 backdrop-blur flex items-center justify-center hover:bg-white transition-colors">
-          <Heart className="w-5 h-5 text-gray-700" />
+        <button
+          onClick={handleToggleFavorite}
+          className="absolute top-6 right-6 w-10 h-10 rounded-2xl bg-white/90 backdrop-blur flex items-center justify-center hover:bg-white transition-colors"
+        >
+          <Heart className={`w-5 h-5 transition-colors ${isFavorited ? "fill-red-500 text-red-500" : "text-gray-700"}`} />
         </button>
       </div>
 
@@ -390,13 +431,27 @@ export default function RestaurantDetail() {
               </div>
 
               {/* Promo banner */}
-              <div className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: "linear-gradient(135deg, #FFF5F0, #FFE8DC)" }}>
-                <Flame className="w-5 h-5 text-[#FF4500]" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">{t('restaurant.buy_2_get')} free fries</p>
-                  <p className="text-xs text-gray-500">{t('restaurant.use_code')} COMBO2 {t('restaurant.at_checkout')}</p>
+              {restaurantPromotions.length > 0 ? (
+                <div className="space-y-2 mb-4">
+                  {restaurantPromotions.map((promo) => (
+                    <div key={promo.id} className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: "linear-gradient(135deg, #FFF5F0, #FFE8DC)" }}>
+                      <Flame className="w-5 h-5 text-[#FF4500]" />
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">Mã: {promo.code}</p>
+                        <p className="text-xs text-gray-600">{promo.description || `Giảm giá khi đặt đơn tại cửa hàng. Đơn tối thiểu ${Number(promo.minOrderValue || 0).toLocaleString()}đ`}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-3 p-4 rounded-2xl mb-4" style={{ background: "linear-gradient(135deg, #FFF5F0, #FFE8DC)" }}>
+                  <Flame className="w-5 h-5 text-[#FF4500]" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Chào mừng bạn đến với {restaurant.name}!</p>
+                    <p className="text-xs text-gray-500">Đặt đơn ngay để nhận nhiều ưu đãi hấp dẫn.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Menu tabs */}
