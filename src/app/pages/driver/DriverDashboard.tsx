@@ -95,6 +95,7 @@ import {
   setDriverStatus,
   fetchOrderHistoryThunk,
   clearHistory,
+  upsertAvailableOrder,
 } from "../../features/driverSlice";
 import type { DeliveryStatus, EarningsPeriod, Order } from "../../types/driver";
 import React from "react";
@@ -228,20 +229,25 @@ function CountdownTimer({
   const [total, setTotal] = React.useState(0);
 
   React.useEffect(() => {
-    const initial = Math.max(
-      Math.floor(
-        (new Date(expiresAt).getTime() - Date.now()) / 1000
-      ),
-      0,
-    );
+    const targetTime = new Date(expiresAt).getTime();
+    const initial = Number.isFinite(targetTime)
+      ? Math.max(Math.floor((targetTime - Date.now()) / 1000), 0)
+      : 0;
 
-    setSecs(initial);
-    setTotal(initial);
+    const timer = setTimeout(() => {
+      setSecs(initial);
+      setTotal(initial);
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [expiresAt]);
 
   React.useEffect(() => {
     if (secs <= 0) {
-      onExpire();
+      const targetTime = new Date(expiresAt).getTime();
+      if (Number.isFinite(targetTime) && targetTime <= Date.now()) {
+        onExpire();
+      }
       return;
     }
 
@@ -258,7 +264,7 @@ function CountdownTimer({
     }, 1000);
 
     return () => clearInterval(id);
-  }, [secs, onExpire]);
+  }, [secs, onExpire, expiresAt]);
 
   const pct = total > 0 ? (secs / total) * 100 : 0;
 
@@ -310,7 +316,7 @@ function AvailableOrderCard({
   const itemCount = order.orderItems?.length ?? 0;
   return (
     <div className="group bg-white border border-neutral-100 rounded-xl overflow-hidden hover:border-orange-200 hover:shadow-md transition-all">
-      <div className="h-0.5 bg-gradient-to-r from-orange-500 via-amber-400 to-orange-300" />
+      <div className="h-0.5 bg-linear-to-r from-orange-500 via-amber-400 to-orange-300" />
       <div className="p-4">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex-1 min-w-0">
@@ -345,6 +351,7 @@ function AvailableOrderCard({
         </div>
         {order.assignmentExpiresAt && (
           <CountdownTimer
+            key={order.assignmentExpiresAt}
             expiresAt={order.assignmentExpiresAt}
             onExpire={onExpire}
           />
@@ -635,6 +642,8 @@ export default function DriverDashboard() {
     error,
     orderHistory,
   } = useAppSelector((s) => s.driver);
+  // eslint-disable-next-line no-console
+  console.log("[FRONTEND DEBUG] activeOrders state length:", activeOrders?.length, "list:", activeOrders, "profileId:", profile?.id);
   const token = useAppSelector(
     (s) => s.auth.token ?? localStorage.getItem("token") ?? "",
   );
@@ -692,18 +701,52 @@ export default function DriverDashboard() {
   ];
 
   // ── Socket callbacks ─────────────────────────────────────────────────────────
-  const handleNewOrder = useCallback(() => {
-    notify.info(t("driver_dashboard.new_order_received"));
-    dispatch(fetchAvailableOrdersThunk());
-  }, [dispatch, t, notify]);
+  const handleNewOrder = useCallback(
+    (order: Order) => {
+      notify.info(t("driver_dashboard.new_order_received"));
+
+      const socketOrder = order as Partial<Order> & {
+        expiresIn?: number;
+        assignmentExpiresAt?: string;
+        expiresAt?: string;
+        orderId?: string;
+      };
+      const id = socketOrder.id ?? socketOrder.orderId;
+      if (!id) {
+        console.warn("Driver new order payload missing id/orderId", socketOrder);
+        return;
+      }
+
+      const updatedOrder: Order = {
+        ...order,
+        id,
+        status: socketOrder.status ?? "ready",
+        assignmentExpiresAt:
+          socketOrder.assignmentExpiresAt ??
+          socketOrder.expiresAt ??
+          (socketOrder.expiresIn
+            ? new Date(Date.now() + socketOrder.expiresIn).toISOString()
+            : undefined),
+      } as Order;
+
+      dispatch(upsertAvailableOrder(updatedOrder));
+    },
+    [dispatch, t, notify],
+  );
 
   const handleOrderCancelled = useCallback((data?: { orderId?: string; message?: string }) => {
     const shortId = data?.orderId ? `#${data.orderId.slice(-6).toUpperCase()}` : "";
-    notify.warning(`Đơn ${shortId} đã bị huỷ bởi nhà hàng`);
+    notify.warning(data?.message ?? `Đơn ${shortId} đã bị huỷ bởi nhà hàng`);
     dispatch(fetchAvailableOrdersThunk());
     dispatch(fetchActiveOrdersThunk());
     dispatch(loadDriverDashboard()); // sync lại walletBalance + currentStatus
   }, [dispatch, notify]);
+
+  const handleOrderTaken = useCallback((data?: { orderId?: string }) => {
+    if (!data?.orderId) return;
+    dispatch(fetchAvailableOrdersThunk());
+    dispatch(fetchActiveOrdersThunk());
+  }, [dispatch]);
 
   const handleEarning = useCallback(
     (data: { amount: number; message: string }) => {
@@ -724,6 +767,22 @@ export default function DriverDashboard() {
     notify.error(data.message);
   }, [notify]);
 
+  const handleOrderStatusChanged = useCallback(
+    (data?: { orderId?: string; status?: string }) => {
+      if (data?.status === "accepted") {
+        // Khi nhà hàng vừa nhận đơn, đợi event driver:new_order để tránh race condition và mất offer.
+        return;
+      }
+
+      dispatch(fetchAvailableOrdersThunk());
+      dispatch(fetchActiveOrdersThunk());
+      if (data?.status === "ready") {
+        notify.info(t("driver_dashboard.new_order_received"));
+      }
+    },
+    [dispatch, notify, t],
+  );
+
   const {
     updateDriverStatus,
     updateOrderStatus,
@@ -734,12 +793,11 @@ export default function DriverDashboard() {
     token,
     onNewOrder: handleNewOrder,
     onOrderCancelled: handleOrderCancelled,
+    onOrderTaken: handleOrderTaken,
     onEarning: handleEarning,
     onStatusAck: handleStatusAck,
     onError: handleError,
-    onOrderStatusChanged: useCallback(() => {
-      dispatch(fetchActiveOrdersThunk());
-    }, [dispatch]),
+    onOrderStatusChanged: handleOrderStatusChanged,
     onDriverAssigned: useCallback(() => {
       dispatch(fetchActiveOrdersThunk());
       dispatch(fetchAvailableOrdersThunk());
@@ -939,6 +997,17 @@ export default function DriverDashboard() {
   }, [activeOrders, joinOrderRoom]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
+  function getErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error === "string") return error;
+    if (error && typeof error === "object") {
+      if ("message" in error && typeof (error as any).message === "string") {
+        return (error as any).message;
+      }
+    }
+    if (error instanceof Error) return error.message;
+    return fallback;
+  }
+
   async function refreshOrders() {
     try {
       await Promise.all([
@@ -960,6 +1029,20 @@ export default function DriverDashboard() {
   }
 
   async function handleAccept(orderId: string) {
+    if (!orderId) {
+      notify.error("Không xác định được mã đơn hàng.");
+      return;
+    }
+
+    const order = availableOrders.find((o) => o.id === orderId);
+    console.log("[handleAccept] Order state before accept:", {
+      orderId,
+      status: order?.status,
+      assignmentExpiresAt: order?.assignmentExpiresAt,
+      driverId: (order as any)?.driverId,
+      currentDriverId: (order as any)?.currentDriverId,
+    });
+
     try {
       await dispatch(
         respondOrderThunk({ orderId, action: "accepted" }),
@@ -968,12 +1051,20 @@ export default function DriverDashboard() {
       await refreshOrders();
       dispatch(loadDriverDashboard());
       notify.success("Đã nhận đơn hàng thành công!");
-    } catch (e) {
-      notify.error(e?.message || t("driver_dashboard.order_accept_failed"));
+    } catch (error) {
+      const message = getErrorMessage(error, t("driver_dashboard.order_accept_failed"));
+      console.error("[handleAccept] Error:", { orderId, message, error });
+      notify.error(message);
+      await refreshOrders();
     }
   }
 
   async function handleReject(orderId: string) {
+    if (!orderId) {
+      notify.error("Không xác định được mã đơn hàng.");
+      return;
+    }
+
     try {
       await dispatch(
         respondOrderThunk({ orderId, action: "rejected" }),
@@ -981,25 +1072,33 @@ export default function DriverDashboard() {
       await refreshOrders();
 
       notify.info("Đã từ chối đơn hàng.");
-    } catch (e) {
-      notify.error(e?.message || t("driver_dashboard.order_reject_failed"));
+    } catch (error) {
+      const message = getErrorMessage(error, t("driver_dashboard.order_reject_failed"));
+      notify.error(message);
     }
   }
+
   async function handleExpire(orderId: string) {
-  try {
-    await dispatch(
-      respondOrderThunk({ orderId, action: "rejected" }),
-    ).unwrap();
+    if (!orderId) {
+      notify.error("Không xác định được mã đơn hàng.");
+      return;
+    }
 
-    await refreshOrders();
+    try {
+      await dispatch(
+        respondOrderThunk({ orderId, action: "rejected" }),
+      ).unwrap();
 
-    dispatch(loadDriverDashboard());
+      await refreshOrders();
 
-    notify.info("Đơn hàng đã hết thời gian nhận!");
-  } catch (e) {
-    notify.error(e?.message || "Order expired handling failed");
+      dispatch(loadDriverDashboard());
+
+      notify.info("Đơn hàng đã hết thời gian nhận!");
+    } catch (error) {
+      const message = getErrorMessage(error, "Order expired handling failed");
+      notify.error(message);
+    }
   }
-}
 
   function handleUpdateDelivery(orderId: string, newStatus: string) {
     updateOrderStatus(orderId, newStatus as DeliveryStatus);
@@ -1020,8 +1119,9 @@ export default function DriverDashboard() {
       await dispatch(optimizeRouteThunk(ids)).unwrap();
 
       notify.success("Tuyến đường đã được tối ưu!");
-    } catch (e) {
-      notify.error(e?.message || t("driver_dashboard.route_optimize_failed"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("driver_dashboard.route_optimize_failed");
+      notify.error(message);
     }
   }
 
@@ -1036,10 +1136,9 @@ export default function DriverDashboard() {
           await dispatch(updateLocationThunk({ latitude, longitude })).unwrap();
 
           notify.success("Đã cập nhật vị trí!");
-        } catch (e) {
-          notify.error(
-            e?.message || t("driver_dashboard.location_update_failed"),
-          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : t("driver_dashboard.location_update_failed");
+          notify.error(message);
         }
       },
       () => notify.error(t("driver_dashboard.location_permission_denied")),
@@ -1245,7 +1344,7 @@ export default function DriverDashboard() {
                             </Popup>
                           </Marker>
                         )}
-                        {activeOrders.map((order) => {
+                        {activeOrders.map((order, index) => {
                           const restCoords = parseCoordinates(
                             order.restaurant?.latitude,
                             order.restaurant?.longitude,
@@ -1255,7 +1354,7 @@ export default function DriverDashboard() {
                             order.deliveryLongitude,
                           );
                           return (
-                            <Fragment key={order.id}>
+                            <React.Fragment key={order.id || index}>
                               {restCoords && (
                                 <Marker
                                   position={restCoords}
@@ -1297,7 +1396,7 @@ export default function DriverDashboard() {
                                   </Popup>
                                 </Marker>
                               )}
-                            </Fragment>
+                            </React.Fragment>
                           );
                         })}
                         {displayedRouteCoords.length > 0 && (
@@ -1310,6 +1409,25 @@ export default function DriverDashboard() {
                           />
                         )}
                       </MapView>
+                    </div>
+                    {/* Active deliveries list directly on Overview */}
+                    <div className="mt-5 space-y-3 border-t border-neutral-100 pt-5">
+                      <SectionDivider>
+                        {t("driver_dashboard.active_deliveries")}
+                      </SectionDivider>
+                      {activeOrders.map((o, idx) => {
+                        const orderRef = o as Order & { orderId?: string };
+                        const orderKey = orderRef.id ?? orderRef.orderId ?? String(idx);
+                        const orderId = orderRef.id ?? orderRef.orderId ?? "";
+                        return (
+                          <ActiveOrderCard
+                            key={orderKey}
+                            order={o}
+                            t={t}
+                            onUpdate={(s) => handleUpdateDelivery(orderId, s)}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1420,16 +1538,21 @@ export default function DriverDashboard() {
                   </SectionDivider>
                   <div className="space-y-3">
                     {availableOrders.length > 0 ? (
-                      availableOrders.map((o) => (
-                        <AvailableOrderCard
-                          key={o.id}
-                          order={o}
-                          t={t}
-                          onAccept={() => handleAccept(o.id)}
-                          onReject={() => handleReject(o.id)}
-                          onExpire={() => handleExpire(o.id)}
-                        />
-                      ))
+                      availableOrders.map((o, idx) => {
+                        const orderRef = o as Order & { orderId?: string };
+                        const orderKey = orderRef.id ?? orderRef.orderId ?? String(idx);
+                        const orderId = orderRef.id ?? orderRef.orderId ?? "";
+                        return (
+                          <AvailableOrderCard
+                            key={orderKey}
+                            order={o}
+                            t={t}
+                            onAccept={() => handleAccept(orderId)}
+                            onReject={() => handleReject(orderId)}
+                            onExpire={() => handleExpire(orderId)}
+                          />
+                        );
+                      })
                     ) : (
                       <EmptyState
                         icon={Package}
@@ -1444,14 +1567,19 @@ export default function DriverDashboard() {
                   </SectionDivider>
                   <div className="space-y-3">
                     {activeOrders.length > 0 ? (
-                      activeOrders.map((o) => (
-                        <ActiveOrderCard
-                          key={o.id}
-                          order={o}
-                          t={t}
-                          onUpdate={(s) => handleUpdateDelivery(o.id, s)}
-                        />
-                      ))
+                      activeOrders.map((o, idx) => {
+                        const orderRef = o as Order & { orderId?: string };
+                        const orderKey = orderRef.id ?? orderRef.orderId ?? String(idx);
+                        const orderId = orderRef.id ?? orderRef.orderId ?? "";
+                        return (
+                          <ActiveOrderCard
+                            key={orderKey}
+                            order={o}
+                            t={t}
+                            onUpdate={(s) => handleUpdateDelivery(orderId, s)}
+                          />
+                        );
+                      })
                     ) : (
                       <EmptyState
                         icon={Navigation}
@@ -1512,7 +1640,7 @@ export default function DriverDashboard() {
                           </div>
                           <div className="w-full bg-neutral-100 rounded-full h-1">
                             <div
-                              className="bg-gradient-to-r from-red-500 to-orange-400 h-full rounded-full transition-all"
+                              className="bg-linear-to-r from-red-500 to-orange-400 h-full rounded-full transition-all"
                               style={{
                                 width: `${Math.min(100, item.weight * 100)}%`,
                               }}

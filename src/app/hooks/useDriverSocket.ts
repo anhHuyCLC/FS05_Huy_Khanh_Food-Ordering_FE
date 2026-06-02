@@ -13,6 +13,7 @@ interface DriverConnectedData {
 type DriverSocketOptions = {
  onOrderStatusChanged?: (data: { orderId: string; status: string }) => void;
   onDriverAssigned?:     (data: { orderId: string }) => void;
+  onOrderTaken?:        (data: { orderId: string }) => void;
   token: string;
   onConnected?: (data: DriverConnectedData) => void;
   onNewOrder?: (order: Order) => void;
@@ -115,6 +116,7 @@ useEffect(() => {
     socket.on("order:status_changed",    (d) => optionsRef.current.onOrderStatusChanged?.(d));
     // MỚI: khi tài xế được assign đơn từ server
     socket.on("tracking:driver_assigned",(d) => optionsRef.current.onDriverAssigned?.(d));
+    socket.on("driver:order_taken",      (d) => optionsRef.current.onOrderTaken?.(d));
   socket.on("driver:error",          (data: { message: string })  => {
     console.error("[DriverSocket] Error:", data.message);
     optionsRef.current.onError?.(data);
