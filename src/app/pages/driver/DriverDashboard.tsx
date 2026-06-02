@@ -1095,7 +1095,7 @@ export default function DriverDashboard() {
                 {firstName ? (
                   <>
                     Xin chào,{" "}
-                    <span className="text-orange-400">{firstName}</span> 👋
+                    <span className="text-orange-400">{profile?.profile.fullName}</span> 👋
                   </>
                 ) : (
                   t("driver_dashboard.welcome_driver")
