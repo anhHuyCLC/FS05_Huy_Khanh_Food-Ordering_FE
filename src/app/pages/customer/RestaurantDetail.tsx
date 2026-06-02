@@ -52,7 +52,7 @@ export default function RestaurantDetail() {
 
   useEffect(() => {
     if (id) {
-      restaurantService.listPromotions(id)
+      restaurantService.listActivePromotions(id)
         .then((data) => setRestaurantPromotions(data || []))
         .catch((err) => console.error("Error loading promotions:", err));
     }

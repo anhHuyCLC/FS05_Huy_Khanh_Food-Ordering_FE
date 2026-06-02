@@ -28,6 +28,12 @@ export const restaurantService = {
     return response.data.data || [];
   },
 
+  /** Lấy danh sách khuyến mãi đang hoạt động của nhà hàng (public) */
+  listActivePromotions: async (restaurantId: string): Promise<Promotion[]> => {
+    const response = await apiClient.get(`/v1/restaurant/${restaurantId}/active-promotions`);
+    return response.data.data || [];
+  },
+
   /** Tạo chương trình khuyến mãi mới */
   createPromotion: async (restaurantId: string, data: {
     code: string;
@@ -134,6 +140,7 @@ export const updateMenuItem = restaurantService.updateMenuItem;
 export const toggleMenuItemAvailability = restaurantService.updateMenuItemAvailability;
 export const deleteMenuItem = restaurantService.deleteMenuItem;
 export const listPromotions = restaurantService.listPromotions;
+export const listActivePromotions = restaurantService.listActivePromotions;
 export const createPromotion = restaurantService.createPromotion;
 export const updatePromotion = restaurantService.updatePromotion;
 export const deletePromotion = restaurantService.deletePromotion;
