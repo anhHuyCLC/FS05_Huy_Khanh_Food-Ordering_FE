@@ -294,6 +294,11 @@ const driverSlice = createSlice({
       if (idx !== -1) s.activeOrders[idx] = a.payload;
       else s.activeOrders.unshift(a.payload);
     },
+    upsertAvailableOrder: (s, a: PayloadAction<Order>) => {
+      const idx = s.availableOrders.findIndex((o) => o.id === a.payload.id);
+      if (idx !== -1) s.availableOrders[idx] = a.payload;
+      else s.availableOrders.unshift(a.payload);
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -374,11 +379,12 @@ const driverSlice = createSlice({
         if (payload && isAccepted) {
           s.activeOrders = [payload, ...s.activeOrders];
         }
-        s.availableOrders = s.availableOrders.filter(o => o.id !== payload?.id);
+        const targetId = payload?.id || (payload as any)?.orderId || a.meta?.arg?.orderId;
+        s.availableOrders = s.availableOrders.filter(o => o.id !== targetId);
       })
       .addCase(respondOrderThunk.rejected, s => { s.actionLoading = false; })
   },
 });
 
-export const { setRoute, setDriverStatus, clearHistory } = driverSlice.actions;
+export const { setRoute, setDriverStatus, clearHistory, upsertAvailableOrder } = driverSlice.actions;
 export default driverSlice.reducer;

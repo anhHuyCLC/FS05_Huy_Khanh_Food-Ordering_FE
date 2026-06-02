@@ -552,7 +552,8 @@
       "earnings": "Earnings",
       "heatmap": "Heatmap",
       "performance": "Performance",
-      "settings": "Settings"
+      "settings": "Settings",
+      "history": "History"
     },
     "weekly_earnings": "Weekly Earnings",
     "this_week_earnings": "$991 this week",
