@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { IMGS } from "../../data/mock";
 import { getDeliveryTimeText } from "../../utils/geo";
-import type { Restaurant } from "../../features/restaurantSlice";
+import type { Restaurant } from "../../types/restaurant";
 
 interface RestaurantCardProps {
   restaurant: Restaurant & { distance?: number };

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search, MapPin, Brain, ChevronDown,
   RotateCcw, Gift, ArrowRight, Bell, ShoppingCart,
+  Copy, Check, Star, Crown, Zap,
 } from "lucide-react";
 import { Navbar } from "../../components/layout/Navbar";
 import { IMGS } from "../../data/mock";
@@ -15,15 +16,103 @@ import { Loader2 } from "lucide-react";
 import { orderService } from "../../services/orderService";
 import { mapService } from "../../services/mapService";
 import { useCartStore } from "../../stores/cartStore";
+import { useAuthStore } from "../../stores/authStore";
 import type { Promotion, Order } from "../../types/order";
 import { QuickCategoryBar } from "../../components/layout/QuickCategoryBar";
 import { RestaurantCard } from "../../components/layout/RestaurantCard";
+import { restaurantService } from "../../services/restaurantService";
+import type { Restaurant } from "../../types/restaurant";
+import { X } from "lucide-react";
+
+// ── Rank config ─────────────────────────────────────────────────────────────
+const RANK_CONFIG = [
+  {
+    level: "Newbie",
+    label: "Newbie",
+    emoji: "🌱",
+    minPoints: 0,
+    color: "from-gray-400 to-gray-500",
+    textColor: "text-gray-600",
+    bgColor: "bg-gray-50",
+    borderColor: "border-gray-200",
+    vouchers: [
+      { code: "WELCOME10", desc: "Giảm 10% cho đơn đầu tiên", minOrder: 50000 },
+    ],
+  },
+  {
+    level: "Bronze",
+    label: "Đồng",
+    emoji: "🥉",
+    minPoints: 100,
+    color: "from-amber-600 to-amber-700",
+    textColor: "text-amber-700",
+    bgColor: "bg-amber-50",
+    borderColor: "border-amber-200",
+    vouchers: [
+      { code: "BRONZE15", desc: "Giảm 15% tối đa 30K", minOrder: 80000 },
+      { code: "BSHIP", desc: "Freeship cho mọi đơn hàng", minOrder: 50000 },
+    ],
+  },
+  {
+    level: "Silver",
+    label: "Bạc",
+    emoji: "🥈",
+    minPoints: 300,
+    color: "from-slate-400 to-slate-500",
+    textColor: "text-slate-600",
+    bgColor: "bg-slate-50",
+    borderColor: "border-slate-200",
+    vouchers: [
+      { code: "SILVER20", desc: "Giảm 20% tối đa 50K", minOrder: 100000 },
+      { code: "SSHIP", desc: "Freeship mỗi ngày", minOrder: 0 },
+      { code: "SILVEX5", desc: "Tặng 5x điểm thưởng", minOrder: 120000 },
+    ],
+  },
+  {
+    level: "Gold",
+    label: "Vàng",
+    emoji: "🥇",
+    minPoints: 1000,
+    color: "from-yellow-400 to-amber-500",
+    textColor: "text-yellow-700",
+    bgColor: "bg-yellow-50",
+    borderColor: "border-yellow-300",
+    vouchers: [
+      { code: "GOLD25", desc: "Giảm 25% không giới hạn", minOrder: 150000 },
+      { code: "GSHIP", desc: "Freeship không giới hạn", minOrder: 0 },
+      { code: "GOLDX10", desc: "Tặng 10x điểm thưởng", minOrder: 200000 },
+      { code: "GOLDSUR", desc: "Quà bí ẩn mỗi tuần", minOrder: 0 },
+    ],
+  },
+  {
+    level: "Platinum",
+    label: "Bạch Kim",
+    emoji: "💎",
+    minPoints: 2500,
+    color: "from-cyan-400 to-indigo-500",
+    textColor: "text-indigo-700",
+    bgColor: "bg-indigo-50",
+    borderColor: "border-indigo-300",
+    vouchers: [
+      { code: "PLAT30", desc: "Giảm 30% không giới hạn", minOrder: 200000 },
+      { code: "PLATSHIP", desc: "Freeship vĩnh viễn", minOrder: 0 },
+      { code: "PLATX20", desc: "Tặng 20x điểm thưởng", minOrder: 0 },
+      { code: "PLATPRI", desc: "Ưu tiên hỗ trợ 24/7", minOrder: 0 },
+      { code: "PLATBD", desc: "Voucher sinh nhật 50%", minOrder: 0 },
+    ],
+  },
+];
 
 export default function Discovery() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { items } = useCartStore();
+  const user = useAuthStore((state) => state.user);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [aiRecommendations, setAiRecommendations] = useState<Restaurant[]>([]);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [selectedRankLevel, setSelectedRankLevel] = useState<string | null>(null);
 
   // ── URL-driven state (sync on mount) ────────────────────────────────────
   const categoryParam = searchParams.get("category") ?? "all";
@@ -46,6 +135,37 @@ export default function Discovery() {
 
   const { t } = useTranslation();
   const { restaurants, loading } = useAppSelector((state) => state.restaurants);
+
+  // Derived rank info
+  const userPoints = user?.profile?.rewardPoints ?? 0;
+  const userRank = useMemo(() => {
+    const sorted = [...RANK_CONFIG].sort((a, b) => b.minPoints - a.minPoints);
+    return sorted.find((r) => userPoints >= r.minPoints) ?? RANK_CONFIG[0];
+  }, [userPoints]);
+  const nextRank = useMemo(() => {
+    const idx = RANK_CONFIG.findIndex((r) => r.level === userRank.level);
+    return idx < RANK_CONFIG.length - 1 ? RANK_CONFIG[idx + 1] : null;
+  }, [userRank]);
+  const progressToNext = useMemo(() => {
+    if (!nextRank) return 100;
+    const range = nextRank.minPoints - userRank.minPoints;
+    const earned = userPoints - userRank.minPoints;
+    return Math.min(100, Math.round((earned / range) * 100));
+  }, [userPoints, userRank, nextRank]);
+
+  // Copy voucher code
+  const handleCopyCode = useCallback((code: string) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 2000);
+    });
+  }, []);
+
+  // Rank detail modal – show vouchers for selected rank
+  const selectedRankConfig = useMemo(
+    () => RANK_CONFIG.find((r) => r.level === selectedRankLevel) ?? null,
+    [selectedRankLevel]
+  );
 
   // ── Sync URL params → local state on navigation ──────────────────────────
   useEffect(() => {
@@ -96,6 +216,12 @@ export default function Discovery() {
 
   useEffect(() => {
     orderService.getMyOrders().then((data) => setRecentOrders(data || [])).catch((err) => console.error("Orders:", err));
+  }, []);
+
+  useEffect(() => {
+    restaurantService.getRecommendations()
+      .then((data) => setAiRecommendations(data || []))
+      .catch((err) => console.error("Recommendations:", err));
   }, []);
 
   const cartItemsCount = useMemo(() => items.reduce((acc, item) => acc + item.qty, 0), [items]);
@@ -198,14 +324,19 @@ export default function Discovery() {
   // ── Recent orders ───────────────────────────────────────────────────────
   const recommendedItemImages = useMemo(() => {
     const images: string[] = [];
-    for (const r of restaurants || []) {
+    const sourceList = aiRecommendations.length > 0 ? aiRecommendations : restaurants;
+    for (const r of sourceList || []) {
       if (r.imageUrl) images.push(r.imageUrl);
-      if (r.menuItems) for (const item of r.menuItems) { if (item.imageUrl) images.push(item.imageUrl); }
+      if (r.menuItems) {
+        for (const item of r.menuItems) {
+          if (item.imageUrl) images.push(item.imageUrl);
+        }
+      }
       if (images.length >= 3) break;
     }
     while (images.length < 3) images.push(IMGS.restaurant);
     return images.slice(0, 3);
-  }, [restaurants]);
+  }, [restaurants, aiRecommendations]);
 
   const recentDisplayList = useMemo(() => {
     const uniques = new Map<string, NonNullable<Order["restaurant"]>>();
@@ -373,7 +504,11 @@ export default function Discovery() {
                   const isFreeship = promo.promotionType === "shipping" || promo.code.includes("SHIP");
                   if (isVoucher) {
                     return (
-                      <div key={promo.id} className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-red-500 to-pink-600 shadow-md pointer-events-none select-none">
+                      <div
+                        key={promo.id}
+                        onClick={() => handleCopyCode(promo.code)}
+                        className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-red-500 to-pink-600 shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]"
+                      >
                         <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
                         <div className="h-full flex flex-col justify-between relative z-10">
                           <div>
@@ -384,13 +519,22 @@ export default function Discovery() {
                             <h3 className="text-2xl font-black mt-1.5">{promo.code}</h3>
                             <p className="text-xs text-red-50/90 mt-1 line-clamp-1">{promo.description || "Giảm ngay hóa đơn đồ ăn"}</p>
                           </div>
-                          <span className="px-3.5 py-1.5 bg-white text-red-600 text-xs font-black rounded-xl inline-block shadow-sm">Sao Chép Mã</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleCopyCode(promo.code); }}
+                            className="px-3.5 py-1.5 bg-white text-red-600 text-xs font-black rounded-xl inline-flex items-center gap-1.5 shadow-sm hover:bg-red-50 transition-colors w-fit"
+                          >
+                            {copiedCode === promo.code ? <><Check className="w-3 h-3" /> Đã sao chép!</> : <><Copy className="w-3 h-3" /> Sao Chép Mã</>}
+                          </button>
                         </div>
                       </div>
                     );
                   }
                   return (
-                    <div key={promo.id} className={`snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br ${isFreeship ? "from-orange-500 to-red-600" : "from-green-500 to-teal-600"} shadow-md pointer-events-none select-none`}>
+                    <div
+                      key={promo.id}
+                      onClick={() => navigate("/")}
+                      className={`snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br ${isFreeship ? "from-orange-500 to-red-600" : "from-green-500 to-teal-600"} shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]`}
+                    >
                       <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
                       <div className="h-full flex flex-col justify-between relative z-10">
                         <div>
@@ -398,14 +542,19 @@ export default function Discovery() {
                           <h3 className="text-xl font-black mt-2">{promo.code}</h3>
                           <p className="text-xs text-orange-50/90 mt-1 line-clamp-2">{promo.description || "Khuyến mãi hấp dẫn"}</p>
                         </div>
-                        <span className="px-3.5 py-1.5 bg-white text-gray-800 text-xs font-black rounded-lg inline-block shadow-sm">Xem Cửa Hàng</span>
+                        <button className="px-3.5 py-1.5 bg-white text-gray-800 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-gray-50 transition-colors w-fit">
+                          Xem Cửa Hàng <ArrowRight className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
                   );
                 })
               )}
-              {/* Hot Combo static card */}
-              <div className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 shadow-md pointer-events-none select-none">
+              {/* Hot Combo card – navigate to discovery */}
+              <div
+                onClick={() => setActiveCategory("combo")}
+                className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]"
+              >
                 <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
                 <div className="absolute right-4 top-4 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Hot Combo</div>
                 <div className="h-full flex flex-col justify-between relative z-10">
@@ -413,12 +562,113 @@ export default function Discovery() {
                     <h3 className="text-xl font-black">Combo Gà Giòn Độc Quyền</h3>
                     <p className="text-xs text-amber-50/90 mt-1">2 Gà Giòn + Pepsi mát lạnh chỉ 59K</p>
                   </div>
-                  <span className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm">
+                  <button className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-amber-50 transition-colors w-fit">
                     Đặt Ngay <ArrowRight className="w-3 h-3" />
-                  </span>
+                  </button>
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ── Member Rank & Exclusive Vouchers ── */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-gray-800 tracking-tight flex items-center gap-2">
+                <Crown className="w-5 h-5 text-yellow-500" />
+                Hạng thành viên &amp; Ưu đãi độc quyền
+              </h2>
+              {user && (
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${userRank.bgColor} ${userRank.borderColor} border`}>
+                  <span className="text-sm">{userRank.emoji}</span>
+                  <span className={`text-xs font-black ${userRank.textColor}`}>{userRank.label}</span>
+                  <span className={`text-[10px] font-bold ${userRank.textColor} opacity-70`}>· {userPoints} điểm</span>
+                </div>
+              )}
+            </div>
+
+            {/* Progress to next rank */}
+            {user && nextRank && (
+              <div className={`rounded-2xl p-4 ${userRank.bgColor} border ${userRank.borderColor} flex items-center gap-4`}>
+                <div className="shrink-0 text-2xl">{userRank.emoji}</div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-bold ${userRank.textColor}`}>
+                    Còn <span className="font-black">{nextRank.minPoints - userPoints} điểm</span> để lên hạng {nextRank.emoji} {nextRank.label}
+                  </p>
+                  <div className="mt-2 h-2 bg-white/60 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full bg-gradient-to-r ${userRank.color} rounded-full transition-all duration-700`}
+                      style={{ width: `${progressToNext}%` }}
+                    />
+                  </div>
+                </div>
+                <span className={`text-sm font-black ${userRank.textColor}`}>{progressToNext}%</span>
+              </div>
+            )}
+
+            {/* Rank tier cards */}
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory">
+              {RANK_CONFIG.map((rank) => {
+                const isUnlocked = !user || userPoints >= rank.minPoints;
+                const isCurrent = user && userRank.level === rank.level;
+                return (
+                  <div
+                    key={rank.level}
+                    onClick={() => setSelectedRankLevel(rank.level)}
+                    className={`snap-start shrink-0 w-48 rounded-2xl p-4 border cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] ${
+                      isCurrent
+                        ? `bg-gradient-to-br ${rank.color} text-white border-transparent shadow-lg`
+                        : isUnlocked
+                        ? `${rank.bgColor} ${rank.borderColor} hover:shadow-md`
+                        : "bg-gray-50 border-gray-100 opacity-60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-2xl">{rank.emoji}</span>
+                      {isCurrent && (
+                        <span className="px-2 py-0.5 bg-white/25 rounded-full text-[9px] font-black uppercase tracking-widest">Hạng của bạn</span>
+                      )}
+                      {!isUnlocked && <span className="text-[10px] text-gray-400">🔒 {rank.minPoints}đ</span>}
+                    </div>
+                    <h4 className={`font-black text-sm ${isCurrent ? "text-white" : userRank.textColor}`}>{rank.label}</h4>
+                    <p className={`text-[10px] mt-0.5 ${isCurrent ? "text-white/70" : "text-gray-400"}`}>
+                      {rank.vouchers.length} ưu đãi độc quyền
+                    </p>
+                    <div className="mt-3 flex items-center gap-1">
+                      <Zap className={`w-3 h-3 ${isCurrent ? "text-white/80" : "text-gray-400"}`} />
+                      <span className={`text-[10px] font-bold ${isCurrent ? "text-white/80" : "text-gray-400"}`}>Từ {rank.minPoints.toLocaleString()} điểm</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* My rank vouchers – always show current rank vouchers */}
+            {user && (
+              <div className="space-y-2">
+                <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Voucher độc quyền hạng {userRank.label} của bạn</p>
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                  {userRank.vouchers.map((v) => (
+                    <div
+                      key={v.code}
+                      className={`shrink-0 rounded-2xl border-2 border-dashed ${userRank.borderColor} ${userRank.bgColor} p-4 flex flex-col justify-between min-w-[180px] relative`}
+                    >
+                      <div>
+                        <span className={`text-[9px] font-black uppercase tracking-widest ${userRank.textColor} opacity-70`}>Voucher độc quyền</span>
+                        <h4 className={`font-black text-lg mt-1 ${userRank.textColor}`}>{v.code}</h4>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{v.desc}</p>
+                        {v.minOrder > 0 && <p className="text-[9px] text-gray-400 mt-0.5">Đơn từ {v.minOrder.toLocaleString()}đ</p>}
+                      </div>
+                      <button
+                        onClick={() => handleCopyCode(v.code)}
+                        className={`mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r ${userRank.color} text-white shadow-sm hover:opacity-90 transition-opacity w-fit`}
+                      >
+                        {copiedCode === v.code ? <><Check className="w-3 h-3" /> Đã sao chép!</> : <><Copy className="w-3 h-3" /> Sao chép</>}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Personalized / AI Section ── */}
@@ -479,7 +729,10 @@ export default function Discovery() {
                       <img key={i} src={img} alt="" className="w-8 h-8 rounded-full object-cover border-2 border-slate-900 shadow-md" />
                     ))}
                   </div>
-                  <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-lg shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] uppercase tracking-wider">
+                  <button
+                    onClick={() => setShowAiModal(true)}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-lg shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] uppercase tracking-wider"
+                  >
                     {t("discovery.view_picks")}
                   </button>
                 </div>
@@ -559,6 +812,154 @@ export default function Discovery() {
           </div>
         </div>
       </div>
+
+      {/* ── Rank Detail Modal ── */}
+      {selectedRankConfig && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+          onClick={() => setSelectedRankLevel(null)}
+        >
+          <div
+            className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className={`p-6 bg-gradient-to-br ${selectedRankConfig.color} text-white relative overflow-hidden`}>
+              <div className="absolute -right-8 -bottom-8 w-36 h-36 rounded-full bg-white/10" />
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl">{selectedRankConfig.emoji}</span>
+                  <div>
+                    <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Hạng thành viên</p>
+                    <h3 className="font-black text-2xl">{selectedRankConfig.label}</h3>
+                    <p className="text-white/70 text-[11px] mt-0.5">Từ {selectedRankConfig.minPoints.toLocaleString()} điểm</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedRankLevel(null)}
+                  className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {user && userRank.level === selectedRankConfig.level && (
+                <div className="mt-3 flex items-center gap-1.5 bg-white/20 rounded-xl px-3 py-1.5 w-fit relative z-10">
+                  <Star className="w-3.5 h-3.5 text-white fill-white" />
+                  <span className="text-[11px] font-black text-white">Hạng hiện tại của bạn</span>
+                </div>
+              )}
+            </div>
+
+            {/* Vouchers list */}
+            <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh]">
+              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+                {selectedRankConfig.vouchers.length} Voucher độc quyền
+              </p>
+              {selectedRankConfig.vouchers.map((v) => {
+                const isUnlocked = !user || userPoints >= selectedRankConfig.minPoints;
+                return (
+                  <div
+                    key={v.code}
+                    className={`rounded-2xl border-2 border-dashed p-4 flex items-center gap-4 ${
+                      isUnlocked
+                        ? `${selectedRankConfig.bgColor} ${selectedRankConfig.borderColor}`
+                        : "bg-gray-50 border-gray-200 opacity-60"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className={`font-black text-base ${isUnlocked ? selectedRankConfig.textColor : "text-gray-400"}`}>
+                          {v.code}
+                        </h4>
+                        {!isUnlocked && <span className="text-[10px] text-gray-400">🔒 Chưa mở khóa</span>}
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{v.desc}</p>
+                      {v.minOrder > 0 && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">Đơn từ {v.minOrder.toLocaleString()}đ</p>
+                      )}
+                    </div>
+                    {isUnlocked && (
+                      <button
+                        onClick={() => handleCopyCode(v.code)}
+                        className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r ${selectedRankConfig.color} text-white shadow-sm hover:opacity-90 transition-opacity`}
+                      >
+                        {copiedCode === v.code ? <><Check className="w-3 h-3" /> Đã sao!</> : <><Copy className="w-3 h-3" /> Sao chép</>}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── AI Picks Glassmorphism Modal ── */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white/90 backdrop-blur-lg border border-white/20 rounded-[2.5rem] w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl flex flex-col transform scale-100 transition-all duration-300">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center">
+                  <Brain className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-800 text-lg">AI Picks</h3>
+                  <p className="text-xs text-indigo-600 font-bold">Gợi ý dựa trên sở thích và đánh giá của bạn</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAiModal(false)}
+                className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {aiRecommendations.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="font-semibold text-sm">Chưa có gợi ý nào dành cho bạn.</p>
+                  <p className="text-xs mt-1">AI sẽ cập nhật sau khi bạn đặt hàng hoặc đánh giá nhà hàng.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {aiRecommendations.map((r) => (
+                    <div
+                      key={r.id}
+                      onClick={() => {
+                        setShowAiModal(false);
+                        navigate(`/restaurant/${r.id}`);
+                      }}
+                      className="group bg-white hover:bg-indigo-50/20 border border-gray-100 hover:border-indigo-100 rounded-2xl p-3 flex gap-3 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                    >
+                      <img
+                        src={r.imageUrl || IMGS.restaurant}
+                        alt={r.name}
+                        className="w-20 h-20 rounded-xl object-cover"
+                      />
+                      <div className="min-w-0 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="font-bold text-sm text-gray-800 truncate group-hover:text-indigo-600 transition-colors">
+                            {r.name}
+                          </h4>
+                          <p className="text-[10px] text-gray-400 font-semibold truncate mt-0.5">{r.address}</p>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">⭐ {Number(r.rating || 0).toFixed(1)}</span>
+                          <span className="text-[10px] font-black text-[#FF4500] hover:underline">Khám phá</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

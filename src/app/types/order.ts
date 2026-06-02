@@ -87,6 +87,9 @@ export interface Order {
   };
   driver?: {
     id: string;
+    vehicleInfo?: string;
+    licensePlate?: string;
+    rating?: number | string;
     profile?: {
       fullName?: string;
       phone?: string;
@@ -112,7 +115,7 @@ export interface OrderMeta {
   page: number;
   limit: number;
   total: number;
-  totalPages: number;
+  totalPages?: number;
 }
 export interface CancelOrderInput {
   reason?: string;

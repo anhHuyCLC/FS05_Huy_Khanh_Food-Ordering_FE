@@ -8,7 +8,10 @@ import { fetchRestaurants } from "../../features/restaurantSlice";
 import { addressService } from "../../services/addressService";
 import type { SavedAddress } from "../../types/address";
 import { useAuthStore } from "../../stores/authStore";
+import type { UserMission, UserBadge } from "../../types/auth";
 import { toast } from "sonner";
+import { favoriteService } from "../../services/favoriteService";
+import type { Restaurant } from "../../types/restaurant";
 
 import { orderService } from "../../services/orderService";
 import type { Order } from "../../types/order";
@@ -16,27 +19,64 @@ import dayjs from "dayjs";
 import { selectSelectedAddress } from "../../features/mapSelectors";
 import { calculateDistance, getStableCoords, getDeliveryTimeText } from "../../utils/geo";
 
-const badges = [
-  { icon: "🔥", name: "Food Fiend", desc: "Ordered 50+ times", earned: true },
-  { icon: "⭐", name: "Star Reviewer", desc: "Left 20+ reviews", earned: true },
-  { icon: "🤝", name: "Group Master", desc: "Used group order 10x", earned: true },
-  { icon: "🏆", name: "Leaderboard", desc: "Top 100 reviewer", earned: false },
-  { icon: "💎", name: "VIP Member", desc: "Spent $1000+", earned: false },
-  { icon: "🚀", name: "Speed Order", desc: "Ordered in < 60s", earned: false },
-];
+
 
 const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
 
 const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
+
+const getBadgeIcon = (name: string) => {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("bronze") || normalized.includes("đồng")) return "🥉";
+  if (normalized.includes("silver") || normalized.includes("bạc")) return "🥈";
+  if (normalized.includes("gold") || normalized.includes("vàng")) return "🥇";
+  if (normalized.includes("platinum") || normalized.includes("bạch kim")) return "💎";
+  return "🏅";
+};
 
 export default function Profile() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const [activeTab, setActiveTab] = useState("Orders");
   const { t } = useTranslation();
-  const { restaurants } = useAppSelector((state) => state.restaurants);
   const user = useAuthStore((state) => state.user);
   const selectedAddress = useAppSelector(selectSelectedAddress);
+
+  const currentPoints = user?.profile?.rewardPoints ?? 0;
+  let currentLevelName = "Newbie";
+  let nextLevelName = "Bronze";
+  let currentMin = 0;
+  let nextMin = 100;
+
+  if (currentPoints >= 2500) {
+    currentLevelName = "Platinum";
+    nextLevelName = "Max Level";
+    currentMin = 2500;
+    nextMin = 2500;
+  } else if (currentPoints >= 1000) {
+    currentLevelName = "Gold";
+    nextLevelName = "Platinum";
+    currentMin = 1000;
+    nextMin = 2500;
+  } else if (currentPoints >= 300) {
+    currentLevelName = "Silver";
+    nextLevelName = "Gold";
+    currentMin = 300;
+    nextMin = 1000;
+  } else if (currentPoints >= 100) {
+    currentLevelName = "Bronze";
+    nextLevelName = "Silver";
+    currentMin = 100;
+    nextMin = 300;
+  }
+
+  const progressRange = nextMin - currentMin;
+  const progressEarned = currentPoints - currentMin;
+  const progressPercentage = progressRange > 0 ? Math.min(100, Math.max(0, (progressEarned / progressRange) * 100)) : 100;
+  const pointsToNext = nextMin - currentPoints;
+
+  const userBadges = user?.profile?.achievedBadges || [];
+  const userMissions = user?.profile?.missionProgresses || [];
 
   // Order states
   const [orders, setOrders] = useState<Order[]>([]);
@@ -45,6 +85,8 @@ export default function Profile() {
   // Address states
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [favoriteRestaurants, setFavoriteRestaurants] = useState<Restaurant[]>([]);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<SavedAddress | null>(null);
   const [formLabel, setFormLabel] = useState("");
@@ -55,6 +97,19 @@ export default function Profile() {
   useEffect(() => {
     dispatch(fetchRestaurants());
   }, [dispatch]);
+
+  useEffect(() => {
+    const refreshUser = async () => {
+      try {
+        const { getMe } = await import("../../services/authService");
+        const updatedUser = await getMe();
+        useAuthStore.getState().setUser(updatedUser);
+      } catch (err) {
+        console.error("Failed to refresh user profile:", err);
+      }
+    };
+    refreshUser();
+  }, []);
 
   const fetchAddresses = useCallback(async () => {
     try {
@@ -91,6 +146,24 @@ export default function Profile() {
       fetchOrders();
     }
   }, [activeTab, t, fetchOrders]);
+
+  const fetchFavorites = useCallback(async () => {
+    try {
+      setIsLoadingFavorites(true);
+      const data = await favoriteService.listFavorites();
+      setFavoriteRestaurants(data || []);
+    } catch (error) {
+      console.error("Failed to fetch favorites:", error);
+    } finally {
+      setIsLoadingFavorites(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === t('profile.favorites')) {
+      fetchFavorites();
+    }
+  }, [activeTab, t, fetchFavorites]);
 
   const getAddressIcon = (label: string) => {
     const normalized = label.toLowerCase();
@@ -224,19 +297,19 @@ export default function Profile() {
               <p className="text-gray-400 text-sm">{user?.email || "sarah.chen@email.com"}</p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-yellow-400/20 text-yellow-300 border border-yellow-400/30">
-                  {t('profile.gold_member')}
+                  {user?.profile?.badgeLevel || "Newbie"}
                 </span>
                 <span className="text-xs text-gray-400">{t('profile.since')} 2024</span>
               </div>
             </div>
             <div className="ml-auto text-right">
-              <p className="text-3xl font-black text-white">2,840</p>
+              <p className="text-3xl font-black text-white">{(user?.profile?.rewardPoints ?? 0).toLocaleString()}</p>
               <p className="text-gray-400 text-sm">{t('profile.savour_points')}</p>
             </div>
           </div>
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-4 mt-6 pt-5 border-t border-white/10">
-            {[["84", t('profile.orders')], ["4.9★", t('profile.avg_rating')], ["12", t('profile.badges')]].map(([val, label]) => (
+            {[[orders.length > 0 ? orders.length.toString() : "84", t('profile.orders')], ["4.9★", t('profile.avg_rating')], [userBadges.length.toString(), t('profile.badges')]].map(([val, label]) => (
               <div key={label} className="text-center">
                 <p className="text-xl font-black text-white">{val}</p>
                 <p className="text-gray-500 text-xs">{label}</p>
@@ -357,32 +430,38 @@ export default function Profile() {
         )}
 
         {activeTab === t('profile.favorites') && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {restaurants.slice(0, 4).map((r, index) => {
-              let restLat = r.latitude ? parseFloat(r.latitude) : null;
-              let restLon = r.longitude ? parseFloat(r.longitude) : null;
-              if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
-                const stable = getStableCoords(r.id, r.name);
-                restLat = stable.latitude;
-                restLon = stable.longitude;
-              }
-              const dist = selectedAddress
-                ? calculateDistance(selectedAddress.lat, selectedAddress.lng, restLat, restLon)
-                : null;
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+            {isLoadingFavorites ? (
+              <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">Đang tải danh sách yêu thích...</div>
+            ) : favoriteRestaurants.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">Chưa có nhà hàng yêu thích nào.</div>
+            ) : (
+              favoriteRestaurants.map((r, index) => {
+                let restLat = r.latitude ? parseFloat(String(r.latitude)) : null;
+                let restLon = r.longitude ? parseFloat(String(r.longitude)) : null;
+                if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
+                  const stable = getStableCoords(r.id, r.name);
+                  restLat = stable.latitude;
+                  restLon = stable.longitude;
+                }
+                const dist = selectedAddress
+                  ? calculateDistance(selectedAddress.lat, selectedAddress.lng, restLat, restLon)
+                  : null;
 
-              return (
-                <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
-                  <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
-                  <div className="p-4">
-                    <p className="font-bold text-gray-900">{r.name}</p>
-                    <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
-                      <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
-                      <span><Clock className="w-3.5 h-3.5 inline mr-1" />{getDeliveryTimeText(dist)}</span>
+                return (
+                  <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
+                    <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
+                    <div className="p-4">
+                      <p className="font-bold text-gray-900">{r.name}</p>
+                      <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
+                        <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />{r.rating ?? "New"}</span>
+                        <span><Clock className="w-3.5 h-3.5 inline mr-1" />{getDeliveryTimeText(dist)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         )}
 
@@ -392,26 +471,88 @@ export default function Profile() {
             <div className="bg-white rounded-3xl p-6 mb-5 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="font-bold text-gray-900">{t('profile.gold_to_platinum')}</p>
-                  <p className="text-sm text-gray-400">{t('profile.points_progress')}</p>
+                  <p className="font-bold text-gray-900">
+                    Cấp độ {currentLevelName} &rarr; {nextLevelName}
+                  </p>
+                  <p className="text-sm text-gray-400">Tiến trình: {progressPercentage.toFixed(1)}%</p>
                 </div>
                 <Trophy className="w-6 h-6 text-yellow-400" />
               </div>
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: "56.8%", background: "linear-gradient(90deg, #FF4500, #FF6B35)" }} />
+                <div className="h-full rounded-full" style={{ width: `${progressPercentage}%`, background: "linear-gradient(90deg, #FF4500, #FF6B35)" }} />
               </div>
-              <p className="text-xs text-gray-400 mt-2">{t('profile.points_to_unlock')}</p>
+              <p className="text-xs text-gray-400 mt-2">
+                {pointsToNext > 0
+                  ? `Tích lũy thêm ${pointsToNext.toLocaleString()} điểm để đạt hạng ${nextLevelName}`
+                  : "Bạn đã đạt cấp độ cao nhất!"}
+              </p>
             </div>
-            {/* Badges */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {badges.map((b) => (
-                <div key={b.name} className={`bg-white rounded-2xl p-4 text-center border transition-all ${b.earned ? "border-orange-200 shadow-sm" : "border-gray-100 opacity-50"}`}>
-                  <div className={`text-4xl mb-2 ${b.earned ? "" : "grayscale"}`}>{b.icon}</div>
-                  <p className="font-semibold text-gray-900 text-sm">{b.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{b.desc}</p>
-                  {b.earned && <span className="inline-flex items-center gap-1 text-xs text-green-500 mt-2"><CheckCircle className="w-3 h-3" /> {t('profile.earned')}</span>}
+
+            {/* Missions List */}
+            <div className="bg-white rounded-3xl p-6 mb-5 border border-gray-100 shadow-sm">
+              <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2 text-base">
+                🎯 Nhiệm vụ tích điểm
+              </h3>
+              {userMissions.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Không có nhiệm vụ hoạt động nào.</p>
+              ) : (
+                <div className="space-y-4">
+                  {userMissions.map((um: UserMission) => {
+                    const missionPct = Math.min(100, (um.currentProgress / um.mission.targetCount) * 100);
+                    return (
+                      <div key={um.mission.id} className="border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                        <div className="flex justify-between items-start mb-1.5">
+                          <div>
+                            <p className="font-semibold text-sm text-gray-800">{um.mission.title}</p>
+                            <p className="text-xs text-gray-400">{um.mission.description}</p>
+                          </div>
+                          <span className="text-xs font-bold text-[#FF4500] bg-orange-50 px-2.5 py-1 rounded-full shrink-0">
+                            +{um.mission.pointsReward} Điểm
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-2">
+                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${missionPct}%`, background: "linear-gradient(90deg, #FF4500, #FF6B35)" }} />
+                          </div>
+                          <span className="text-xs font-bold text-gray-500 shrink-0">
+                            {um.currentProgress}/{um.mission.targetCount}
+                          </span>
+                          {um.isCompleted && (
+                            <span className="text-xs font-bold text-green-500 flex items-center gap-0.5 shrink-0">
+                              <CheckCircle className="w-3.5 h-3.5" /> Hoàn thành
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
+            </div>
+
+            {/* Badges Grid */}
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+              <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2 text-base">
+                🏆 Huy hiệu đã đạt
+              </h3>
+              {userBadges.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 text-sm">
+                  Bạn chưa đạt huy hiệu nào. Hãy hoàn thành các đơn hàng để tích điểm và mở khóa!
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {userBadges.map((ub: UserBadge) => (
+                    <div key={ub.badge.id} className="bg-white rounded-2xl p-4 text-center border border-orange-200 shadow-sm transition-all">
+                      <div className="text-4xl mb-2">{getBadgeIcon(ub.badge.name)}</div>
+                      <p className="font-semibold text-gray-900 text-sm">{ub.badge.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{ub.badge.description}</p>
+                      <span className="inline-flex items-center gap-1 text-xs text-green-500 mt-2">
+                        <CheckCircle className="w-3 h-3" /> Đã đạt
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

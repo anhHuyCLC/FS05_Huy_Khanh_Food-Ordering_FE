@@ -11,9 +11,41 @@ export interface UserPermission {
   feature?: string | null;
 }
 
+export interface UserMission {
+  profileId: string;
+  missionId: string;
+  currentProgress: number;
+  isCompleted: boolean;
+  completedAt?: string | null;
+  mission: {
+    id: string;
+    title: string;
+    description?: string | null;
+    pointsReward: number;
+    type: string;
+    targetCount: number;
+    isActive: boolean;
+  };
+}
+
+export interface UserBadge {
+  profileId: string;
+  badgeId: string;
+  awardedAt: string;
+  badge: {
+    id: string;
+    name: string;
+    description?: string | null;
+    imageUrl?: string | null;
+    pointsRequired: number;
+  };
+}
+
 export interface UserProfile {
   rewardPoints?: number;
   badgeLevel?: string;
+  achievedBadges?: UserBadge[];
+  missionProgresses?: UserMission[];
 }
 
 export interface User {

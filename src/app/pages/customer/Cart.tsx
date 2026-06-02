@@ -1,15 +1,15 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, Trash2, Users, Share2, LogIn, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useCartStore, type CartItem } from "../../stores/cartStore";
 import { useAuthStore } from "../../stores/authStore";
 import { cartService } from "../../services/cartService";
-import type { OptionChoice, OptionGroup } from "../../features/restaurantSlice";
+import type { OptionChoice, OptionGroup } from "../../types/restaurant";
 
 export default function Cart() {
   const navigate = useNavigate();
-  const { items, updateQty, getTotal, getItemCount, restaurantId, restaurantName } = useCartStore();
+  const { items, updateQty, getTotal, getItemCount, restaurantId, restaurantName, groupCartToken } = useCartStore();
   const user = useAuthStore((state) => state.user);
   
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
@@ -17,7 +17,63 @@ export default function Cart() {
   const [selectedItem, setSelectedItem] = useState<CartItem | null>(null);
   const [selectedOptionsState, setSelectedOptionsState] = useState<Record<string, OptionChoice | OptionChoice[]>>({});
   const [isSavingOptions, setIsSavingOptions] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const { t } = useTranslation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token && user) {
+      const joinGroupCart = async () => {
+        try {
+          const res = await cartService.getCartByToken(token);
+          if (res && res.success && res.data) {
+            const groupCart = res.data;
+            useCartStore.getState().setGroupCartSession(groupCart.id, token);
+            await useCartStore.getState().fetchCarts();
+            // Clear URL param without reloading
+            navigate(window.location.pathname, { replace: true });
+            alert("Bạn đã tham gia giỏ hàng nhóm thành công!");
+          }
+        } catch (err) {
+          console.error("Failed to join group cart:", err);
+          alert("Không thể tham gia giỏ hàng nhóm. Mã chia sẻ không hợp lệ hoặc đã hết hạn.");
+        }
+      };
+      joinGroupCart();
+    }
+  }, [user, navigate]);
+
+  const handleShare = async () => {
+    const currentGroupCartId = useCartStore.getState().groupCartId;
+    let cartIdToShare = currentGroupCartId;
+
+    if (!cartIdToShare) {
+      const firstItem = items[0];
+      if (!firstItem || !firstItem.cartId) {
+        alert("Giỏ hàng của bạn đang trống, không thể chia sẻ!");
+        return;
+      }
+      cartIdToShare = firstItem.cartId;
+    }
+
+    setSharing(true);
+    try {
+      const res = await cartService.shareCart(cartIdToShare);
+      if (res && res.success && res.data?.sessionToken) {
+        const token = res.data.sessionToken;
+        useCartStore.getState().setGroupCartSession(cartIdToShare, token);
+        const shareLink = `${window.location.origin}${window.location.pathname}?token=${token}`;
+        await navigator.clipboard.writeText(shareLink);
+        alert("Đã tạo và sao chép liên kết chia sẻ vào clipboard!");
+      }
+    } catch (err) {
+      console.error("Failed to share cart:", err);
+      alert("Không thể chia sẻ giỏ hàng lúc này.");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handleUpdateQty = useCallback(async (id: string, delta: number, itemRestaurantId?: string) => {
     if (loadingItemId) return;
@@ -131,12 +187,35 @@ export default function Cart() {
               <Users className="w-5 h-5 text-purple-500" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-900 text-sm">{t('cart.group_order')}</p>
-              <p className="text-xs text-gray-400">{t('cart.share_cart')}</p>
+              <p className="font-semibold text-gray-900 text-sm">
+                {groupCartToken ? "Đặt hàng nhóm (Đang hoạt động)" : t('cart.group_order')}
+              </p>
+              <p className="text-xs text-gray-400">
+                {groupCartToken ? "Người khác có thể thêm món vào giỏ hàng này" : t('cart.share_cart')}
+              </p>
             </div>
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-purple-500 bg-purple-50 hover:bg-purple-100 transition-colors">
-              <Share2 className="w-4 h-4" /> {t('cart.share')}
-            </button>
+            <div className="flex gap-2">
+              {groupCartToken && (
+                <button
+                  onClick={async () => {
+                    useCartStore.getState().setGroupCartSession(null, null);
+                    await useCartStore.getState().fetchCarts();
+                    alert("Đã rời giỏ hàng nhóm!");
+                  }}
+                  className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+                >
+                  Rời nhóm
+                </button>
+              )}
+              <button
+                onClick={handleShare}
+                disabled={sharing}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-purple-500 bg-purple-50 hover:bg-purple-100 transition-colors disabled:opacity-50"
+              >
+                {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                {groupCartToken ? "Copy Link" : t('cart.share')}
+              </button>
+            </div>
           </div>
 
           {/* Items */}

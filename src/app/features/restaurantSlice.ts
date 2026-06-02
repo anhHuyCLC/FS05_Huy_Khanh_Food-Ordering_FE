@@ -58,7 +58,7 @@ export const fetchRestaurants = createAsyncThunk(
     "restaurants/fetchAll",
     async (_, { rejectWithValue }) => {
         try { return await listRestaurants(); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -67,7 +67,7 @@ export const fetchMyRestaurant = createAsyncThunk(
     "restaurants/fetchMine",
     async (_, { rejectWithValue }) => {
         try { return await getMyRestaurant(); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -76,7 +76,7 @@ export const fetchMenuItems = createAsyncThunk(
     "restaurants/fetchMenuItems",
     async (restaurantId: string, { rejectWithValue }) => {
         try { return await getMenuItems(restaurantId); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -85,7 +85,7 @@ export const addMenuItem = createAsyncThunk(
     "restaurants/addMenuItem",
     async ({ restaurantId, data }: { restaurantId: string; data: CreateMenuItemInput }, { rejectWithValue }) => {
         try { return await createMenuItem(restaurantId, data); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -94,7 +94,7 @@ export const editMenuItem = createAsyncThunk(
     "restaurants/editMenuItem",
     async ({ menuItemId, data }: { menuItemId: string; data: UpdateMenuItemInput }, { rejectWithValue }) => {
         try { return await updateMenuItem(menuItemId, data); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -103,7 +103,7 @@ export const toggleMenuItem = createAsyncThunk(
     "restaurants/toggleMenuItem",
     async ({ menuItemId, input }: { menuItemId: string; input: ToggleAvailabilityInput }, { rejectWithValue }) => {
         try { return await toggleMenuItemAvailability(menuItemId, input.isAvailable, input.reason); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -112,7 +112,7 @@ export const removeMenuItem = createAsyncThunk(
     "restaurants/removeMenuItem",
     async (menuItemId: string, { rejectWithValue }) => {
         try { await deleteMenuItem(menuItemId); return menuItemId; }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -121,7 +121,7 @@ export const fetchPromotions = createAsyncThunk(
     "restaurants/fetchPromotions",
     async (restaurantId: string, { rejectWithValue }) => {
         try { return await listPromotions(restaurantId); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -130,7 +130,7 @@ export const addPromotion = createAsyncThunk(
     "restaurants/addPromotion",
     async ({ restaurantId, data }: { restaurantId: string; data: CreatePromotionInput }, { rejectWithValue }) => {
         try { return await createPromotion(restaurantId, data); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -139,7 +139,7 @@ export const editPromotion = createAsyncThunk(
     "restaurants/editPromotion",
     async ({ promotionId, data }: { promotionId: string; data: UpdatePromotionInput }, { rejectWithValue }) => {
         try { return await updatePromotion(promotionId, data); }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 
@@ -148,7 +148,7 @@ export const removePromotion = createAsyncThunk(
     "restaurants/removePromotion",
     async (promotionId: string, { rejectWithValue }) => {
         try { await deletePromotion(promotionId); return promotionId; }
-        catch (e: any) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+        catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
     }
 );
 

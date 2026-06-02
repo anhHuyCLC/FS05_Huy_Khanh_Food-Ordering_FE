@@ -105,7 +105,7 @@ export interface CreateMenuItemInput {
     isAvailable?: boolean;
 }
 
-export interface UpdateMenuItemInput extends Partial<CreateMenuItemInput> { }
+export type UpdateMenuItemInput = Partial<CreateMenuItemInput>;
 
 export interface CreatePromotionInput {
     code: string;
@@ -119,9 +119,9 @@ export interface CreatePromotionInput {
     menuItemIds?: string[];
 }
 
-export interface UpdatePromotionInput extends Partial<CreatePromotionInput> { }
+export type UpdatePromotionInput = Partial<CreatePromotionInput>;
 
-export interface ToggleAvailabilityInput {
+export type ToggleAvailabilityInput = {
     isAvailable: boolean;
     reason?: string;
 }

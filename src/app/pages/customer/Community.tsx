@@ -9,7 +9,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { toast } from "sonner";
 import { socialPostService } from "../../services/socialPostService";
 import type { SocialPost, PostComment, LeaderboardUser } from "../../services/socialPostService";
-import type { Restaurant, MenuItem } from "../../features/restaurantSlice";
+import type { Restaurant, MenuItem } from "../../types/restaurant";
 
 const viLocale = {
   name: "vi",
@@ -83,6 +83,9 @@ export default function Community() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  const [trendingTags, setTrendingTags] = useState<string[]>([]);
+  const [postingStreak, setPostingStreak] = useState<number>(0);
+  const [loadingStats, setLoadingStats] = useState(true);
 
   // Comments state
   const [openedCommentsPostId, setOpenedCommentsPostId] = useState<string | null>(null);
@@ -102,6 +105,12 @@ export default function Community() {
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
+  // Report Post Modal states
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
   // Restaurants & Dishes database cache for tagging
   const [restaurantsList, setRestaurantsList] = useState<Restaurant[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,6 +147,18 @@ export default function Community() {
     fetchPosts(TAB_VALUES[activeTabIdx]);
     fetchLeaderboard();
   }, [activeTabIdx, fetchPosts, fetchLeaderboard]);
+
+  // Fetch sidebar stats (trending tags + posting streak)
+  useEffect(() => {
+    setLoadingStats(true);
+    socialPostService.getSidebarStats()
+      .then((data) => {
+        if (data.trendingTags) setTrendingTags(data.trendingTags);
+        if (typeof data.postingStreak === "number") setPostingStreak(data.postingStreak);
+      })
+      .catch((err) => console.error("Error loading sidebar stats:", err))
+      .finally(() => setLoadingStats(false));
+  }, []);
 
   // Load restaurants for tagging
   useEffect(() => {
@@ -345,6 +366,43 @@ export default function Community() {
     }
   };
 
+  const handleOpenReportModal = (postId: string) => {
+    setReportingPostId(postId);
+    setReportReason("");
+    setShowReportModal(true);
+  };
+
+  const handleCloseReportModal = () => {
+    setShowReportModal(false);
+    setReportingPostId(null);
+    setReportReason("");
+  };
+
+  const handleReportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportingPostId) return;
+    if (!reportReason.trim()) {
+      toast.warning("Vui lòng nhập lý do báo cáo bài viết!");
+      return;
+    }
+
+    setIsSubmittingReport(true);
+    try {
+      const res = await socialPostService.reportPost(reportingPostId, reportReason);
+      if (res.success || res.message) {
+        toast.success(res.message || "Đã gửi báo cáo bài viết thành công!");
+      } else {
+        toast.success("Báo cáo bài viết thành công!");
+      }
+      handleCloseReportModal();
+    } catch (err) {
+      console.error(err);
+      toast.error("Gửi báo cáo thất bại. Hãy thử lại!");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // Create/Update social post submission
   const handleCreatePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -397,16 +455,15 @@ export default function Community() {
   };
 
   // Filter posts locally by search query
-  const filteredPosts = posts.filter((post) => {
-    const query = searchQuery.toLowerCase();
+  const filteredPosts = Array.isArray(posts) ? posts.filter((post) => {
+    const query = searchQuery.toLowerCase().trim();
     if (!query) return true;
-    return (
-      post.content.toLowerCase().includes(query) ||
-      post.user.name.toLowerCase().includes(query) ||
-      (post.restaurant && post.restaurant.name.toLowerCase().includes(query)) ||
-      (post.taggedItems && post.taggedItems.some((dish) => dish.name.toLowerCase().includes(query)))
-    );
-  });
+    const contentMatch = post.content ? post.content.toLowerCase().includes(query) : false;
+    const userMatch = post.user?.name ? post.user.name.toLowerCase().includes(query) : false;
+    const restMatch = post.restaurant?.name ? post.restaurant.name.toLowerCase().includes(query) : false;
+    const dishMatch = post.taggedItems ? post.taggedItems.some((dish) => dish.name && dish.name.toLowerCase().includes(query)) : false;
+    return contentMatch || userMatch || restMatch || dishMatch;
+  }) : [];
 
   // Selected restaurant menu items for tagging
   const selectedRestaurantMenuItems = newPostRestaurantId
@@ -563,7 +620,7 @@ export default function Community() {
                       </p>
                     </div>
                     
-                    {isOwnPost && (
+                    {isLoggedIn && (
                       <div className="relative">
                         <button 
                           onClick={() => setActiveMenuPostId(activeMenuPostId === post.id ? null : post.id)}
@@ -577,24 +634,39 @@ export default function Community() {
                               className="fixed inset-0 z-10" 
                               onClick={() => setActiveMenuPostId(null)}
                             />
-                            <div className="absolute right-0 mt-1 w-40 bg-white rounded-2xl border border-gray-100 shadow-xl py-2 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
-                              <button
-                                onClick={() => handleEditClick(post)}
-                                className="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-orange-500 transition-colors flex items-center gap-2"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                                Chỉnh sửa
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveMenuPostId(null);
-                                  handleDeletePost(post.id);
-                                }}
-                                className="w-full px-4 py-2.5 text-left text-xs font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Xóa bài viết
-                              </button>
+                            <div className="absolute right-0 mt-1 w-44 bg-white rounded-2xl border border-gray-100 shadow-xl py-2 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
+                              {isOwnPost ? (
+                                <>
+                                  <button
+                                    onClick={() => handleEditClick(post)}
+                                    className="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-orange-500 transition-colors flex items-center gap-2"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                    Chỉnh sửa
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setActiveMenuPostId(null);
+                                      handleDeletePost(post.id);
+                                    }}
+                                    className="w-full px-4 py-2.5 text-left text-xs font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Xóa bài viết
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setActiveMenuPostId(null);
+                                    handleOpenReportModal(post.id);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-red-500 transition-colors flex items-center gap-2"
+                                >
+                                  <span className="text-red-500 font-normal">🚨</span>
+                                  Báo cáo bài viết
+                                </button>
+                              )}
                             </div>
                           </>
                         )}
@@ -820,32 +892,52 @@ export default function Community() {
               <TrendingUp className="w-5 h-5 text-[#FF4500]" />
               <h2 className="font-bold text-gray-900 text-sm">Từ khóa thịnh hành</h2>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {["#RamenNgon", "#BurgerRepublic", "#BuddhaBowl", "#TiramisuLovers", "#PhoGiaTruyen", "#BunBoHue", "#DessertDreams", "#HealthyEats"].map((tag) => (
-                <span 
-                  key={tag} 
-                  onClick={() => setSearchQuery(tag)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-orange-50 text-[#FF4500] cursor-pointer hover:bg-orange-100 transition-colors"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
+            {loadingStats ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-4 h-4 animate-spin text-[#FF4500]" />
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {(trendingTags.length > 0 ? trendingTags : ["#RamenNgon", "#BurgerRepublic", "#BuddhaBowl", "#TiramisuLovers", "#PhoGiaTruyen", "#BunBoHue", "#DessertDreams", "#HealthyEats"]).map((tag) => (
+                  <span
+                    key={tag}
+                    onClick={() => setSearchQuery(tag)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-orange-50 text-[#FF4500] cursor-pointer hover:bg-orange-100 transition-colors"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Posting Streak Card */}
           <div className="rounded-3xl p-5 text-white shadow-lg" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255, 69, 0, 0.25)" }}>
-            <p className="text-orange-100 text-xs font-medium mb-1">Chuỗi đăng bài tuần này</p>
-            <p className="text-3xl font-black">7 {t('common.days')}</p>
-            <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">Đăng bài liên tục mỗi ngày để nhận danh hiệu "Chiến thần Review"!</p>
-            <div className="flex gap-1 mt-4">
-              {[...Array(7)].map((_, i) => (
-                <div key={i} className="flex-1 h-1.5 rounded-full bg-white/60" />
-              ))}
-              {[...Array(7)].map((_, i) => (
-                <div key={i} className="flex-1 h-1.5 rounded-full bg-white/20" />
-              ))}
-            </div>
+            <p className="text-orange-100 text-xs font-medium mb-1">Chuỗi đăng bài của bạn</p>
+            {loadingStats ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin text-white/70" />
+                <span className="text-white/70 text-sm">Đang tải...</span>
+              </div>
+            ) : postingStreak === 0 ? (
+              <>
+                <p className="text-2xl font-black">Chưa có chuỗi</p>
+                <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">Hãy đăng bài hôm nay để bắt đầu chuỗi review của bạn!</p>
+              </>
+            ) : (
+              <>
+                <p className="text-3xl font-black">{postingStreak} {t('common.days')}</p>
+                <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">Đăng bài liên tục mỗi ngày để nhận danh hiệu "Chiến thần Review"!</p>
+                <div className="flex gap-1 mt-4">
+                  {[...Array(Math.min(postingStreak, 7))].map((_, i) => (
+                    <div key={i} className="flex-1 h-1.5 rounded-full bg-white/80" />
+                  ))}
+                  {[...Array(Math.max(0, 7 - postingStreak))].map((_, i) => (
+                    <div key={i} className="flex-1 h-1.5 rounded-full bg-white/20" />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1014,6 +1106,88 @@ export default function Community() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     editingPost ? "Lưu thay đổi" : "Đăng bài viết"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* REPORT POST MODAL */}
+      {showReportModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={handleCloseReportModal}
+        >
+          <div 
+            className="bg-white rounded-3xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="font-extrabold text-gray-900 text-base">
+                Báo cáo bài viết vi phạm
+              </h2>
+              <button 
+                disabled={isSubmittingReport}
+                onClick={handleCloseReportModal}
+                className="p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleReportSubmit} className="p-5 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-600 block">Nhập lý lý do báo cáo bài viết</label>
+                <textarea
+                  placeholder="Nhập lý do chi tiết ví dụ: thông tin sai sự thật, xúc phạm người khác, spam..."
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  rows={4}
+                  required
+                  className="w-full text-sm p-4 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:bg-white focus:border-[#FF4500] transition-all resize-none"
+                />
+                
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {[
+                    "Nội dung phản cảm",
+                    "Quảng cáo / Spam",
+                    "Xúc phạm / Vu khống",
+                    "Thông tin sai sự thật"
+                  ].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setReportReason(tag)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Submit buttons */}
+              <div className="pt-4 flex gap-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  disabled={isSubmittingReport}
+                  onClick={handleCloseReportModal}
+                  className="flex-1 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReport || !reportReason.trim()}
+                  className="flex-1 py-3 text-sm font-bold text-white rounded-xl hover:opacity-95 transition-opacity disabled:opacity-50 flex items-center justify-center gap-1.5 bg-red-600"
+                >
+                  {isSubmittingReport ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Gửi báo cáo"
                   )}
                 </button>
               </div>
