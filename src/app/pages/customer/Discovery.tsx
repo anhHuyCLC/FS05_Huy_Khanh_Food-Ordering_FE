@@ -395,15 +395,33 @@ export default function Discovery() {
   }, [restaurants, aiRecommendations]);
 
   const recentDisplayList = useMemo(() => {
-    const uniques = new Map<string, NonNullable<Order["restaurant"]>>();
+    const uniques = new Map<string, {
+      id: string;
+      name: string;
+      logo?: string;
+      address?: string;
+      rating?: string | number | null;
+    }>();
     for (const order of recentOrders || []) {
       if (order.restaurant && !uniques.has(order.restaurant.id)) {
-        uniques.set(order.restaurant.id, order.restaurant);
+        uniques.set(order.restaurant.id, {
+          id: order.restaurant.id,
+          name: order.restaurant.name,
+          logo: order.restaurant.logo,
+          address: order.restaurant.address,
+          rating: restaurants?.find((res) => res.id === order.restaurant?.id)?.rating || null,
+        });
       }
     }
     const list = Array.from(uniques.values());
     if (list.length > 0) return list.slice(0, 4);
-    return (restaurants || []).slice(0, 3);
+    return (restaurants || []).slice(0, 3).map((r) => ({
+      id: r.id,
+      name: r.name,
+      logo: r.imageUrl || undefined,
+      address: r.address,
+      rating: r.rating,
+    }));
   }, [recentOrders, restaurants]);
 
   const sortOptions = [
