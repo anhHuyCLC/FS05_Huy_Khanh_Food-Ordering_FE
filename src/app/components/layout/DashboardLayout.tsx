@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Flame, ChevronLeft, ChevronRight, Bell, Search } from "lucide-react";
+import { Flame, ChevronLeft, ChevronRight } from "lucide-react";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useAuthStore } from "../../stores/authStore";
 
@@ -133,42 +133,22 @@ export function DashboardLayout({
             )}
           </button>
           <button
-            onClick={() => navigate("/")}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors ${
+            onClick={() => {
+              useAuthStore.getState().logout();
+              navigate("/login");
+            }}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors ${
               collapsed ? "justify-center" : ""
             }`}
           >
-            <span>🏠</span>
-            {!collapsed && "Back to Home"}
+            <span>🚪</span>
+            {!collapsed && "Đăng xuất"}
           </button>
         </div>
       </aside>
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Top bar */}
-        <header className="h-16 bg-white border-b border-gray-100 flex items-center px-6 gap-4 shrink-0">
-          <div className="flex-1 flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-2.5 max-w-md">
-            <Search className="w-4 h-4 text-gray-400 shrink-0" />
-            <input
-              placeholder="Search..."
-              className="bg-transparent text-sm outline-none flex-1 text-gray-600 placeholder-gray-400"
-            />
-          </div>
-          <div className="flex items-center gap-3 ml-auto">
-            <button className="relative p-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-              <Bell className="w-5 h-5 text-gray-500" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
-            </button>
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
-              style={{ background: colors.gradient }}
-            >
-              {displayAvatar}
-            </div>
-          </div>
-        </header>
-
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>

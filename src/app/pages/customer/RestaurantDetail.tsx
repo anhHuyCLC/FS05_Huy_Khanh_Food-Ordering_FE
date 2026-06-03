@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Star, Clock, MapPin, Heart, Plus, Minus, ShoppingCart, Flame, LogIn, X, Loader2, ChevronRight } from "lucide-react";
 import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
 import type { MenuItem, OptionGroup, OptionChoice } from "../../types/restaurant";
@@ -158,7 +159,7 @@ export default function RestaurantDetail() {
       if (group.isRequired) {
         const val = selectedOptions[group.name];
         if (!val || (Array.isArray(val) && val.length === 0)) {
-          alert(`Vui lòng chọn ${group.name}`);
+          toast.warning(`Vui lòng chọn ${group.name}`);
           return;
         }
       }
@@ -255,7 +256,7 @@ export default function RestaurantDetail() {
             {/* Modal Header */}
             <div className="flex items-center gap-4 p-5 border-b border-gray-100">
               <img
-                src={customizeItem.imageUrl}
+                src={customizeItem.imageUrl || undefined}
                 alt={customizeItem.name}
                 className="w-14 h-14 rounded-2xl object-cover shrink-0"
               />
@@ -405,7 +406,7 @@ export default function RestaurantDetail() {
                 <div className="flex-1 min-w-0">
                   <h1 className="text-2xl font-black text-gray-900 mb-1">{restaurant.name}</h1>
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {restaurant.categories.map((category) => (
+                    {restaurant.categories?.map((category) => (
                       <span key={category.id} className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{category.name}</span>
                     ))}
                   </div>
@@ -463,7 +464,7 @@ export default function RestaurantDetail() {
               >
                 {t('common.all')}
               </button>
-              {restaurant.categories.map((cat) => (
+              {restaurant.categories?.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setActiveTab(cat.name)}
@@ -480,12 +481,12 @@ export default function RestaurantDetail() {
               {restaurant.menuItems
                 ?.filter((item) => {
                   if (activeTab === "All") return true;
-                  const activeCat = restaurant.categories.find((c) => c.name === activeTab);
+                  const activeCat = restaurant.categories?.find((c) => c.name === activeTab);
                   return activeCat ? item.categoryId === activeCat.id : false;
                 })
                 .map((item) => (
                   <div key={item.id} className="bg-white rounded-2xl p-4 flex gap-4 border border-gray-100 hover:border-orange-200 transition-all group">
-                    <img src={item.imageUrl} alt={item.name} className="w-24 h-24 rounded-2xl object-cover shrink-0" />
+                    <img src={item.imageUrl || undefined} alt={item.name} className="w-24 h-24 rounded-2xl object-cover shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">

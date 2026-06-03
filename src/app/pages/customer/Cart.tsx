@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, Trash2, Users, Share2, LogIn, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useCartStore, type CartItem } from "../../stores/cartStore";
 import { useAuthStore } from "../../stores/authStore";
 import { cartService } from "../../services/cartService";
@@ -27,31 +28,69 @@ export default function Cart() {
       const joinGroupCart = async () => {
         try {
           const res = await cartService.getCartByToken(token);
-          if (res && res.success && res.data) {
-            const groupCart = res.data;
+          if (res && res.id) {
+            const groupCart = res;
             useCartStore.getState().setGroupCartSession(groupCart.id, token);
             await useCartStore.getState().fetchCarts();
             // Clear URL param without reloading
             navigate(window.location.pathname, { replace: true });
-            alert("Bạn đã tham gia giỏ hàng nhóm thành công!");
+            toast.success("Bạn đã tham gia giỏ hàng nhóm thành công!");
           }
         } catch (err) {
           console.error("Failed to join group cart:", err);
-          alert("Không thể tham gia giỏ hàng nhóm. Mã chia sẻ không hợp lệ hoặc đã hết hạn.");
+          toast.error("Không thể tham gia giỏ hàng nhóm. Mã chia sẻ không hợp lệ hoặc đã hết hạn.");
         }
       };
       joinGroupCart();
     }
   }, [user, navigate]);
 
+  const copyToClipboard = async (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        console.warn("navigator.clipboard failed, trying fallback...", e);
+      }
+    }
+    // Fallback using temporary textarea
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed"; // Keep it out of view and prevent scrolling
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return true;
+    } catch (err) {
+      console.error("Fallback copy to clipboard failed:", err);
+      document.body.removeChild(textarea);
+      return false;
+    }
+  };
+
   const handleShare = async () => {
+    if (groupCartToken) {
+      const shareLink = `${window.location.origin}${window.location.pathname}?token=${groupCartToken}`;
+      const copied = await copyToClipboard(shareLink);
+      if (copied) {
+        toast.success("Đã sao chép liên kết chia sẻ vào clipboard!");
+      } else {
+        toast.error("Không thể sao chép liên kết. Vui lòng thử sao chép thủ công.");
+      }
+      return;
+    }
+
     const currentGroupCartId = useCartStore.getState().groupCartId;
     let cartIdToShare = currentGroupCartId;
 
     if (!cartIdToShare) {
       const firstItem = items[0];
       if (!firstItem || !firstItem.cartId) {
-        alert("Giỏ hàng của bạn đang trống, không thể chia sẻ!");
+        toast.warning("Giỏ hàng của bạn đang trống, không thể chia sẻ!");
         return;
       }
       cartIdToShare = firstItem.cartId;
@@ -60,20 +99,25 @@ export default function Cart() {
     setSharing(true);
     try {
       const res = await cartService.shareCart(cartIdToShare);
-      if (res && res.success && res.data?.sessionToken) {
-        const token = res.data.sessionToken;
+      if (res && res.sessionToken) {
+        const token = res.sessionToken;
         useCartStore.getState().setGroupCartSession(cartIdToShare, token);
         const shareLink = `${window.location.origin}${window.location.pathname}?token=${token}`;
-        await navigator.clipboard.writeText(shareLink);
-        alert("Đã tạo và sao chép liên kết chia sẻ vào clipboard!");
+        const copied = await copyToClipboard(shareLink);
+        if (copied) {
+          toast.success("Đã tạo và sao chép liên kết chia sẻ vào clipboard!");
+        } else {
+          toast.success(`Đã tạo liên kết chia sẻ: ${shareLink}`);
+        }
       }
     } catch (err) {
       console.error("Failed to share cart:", err);
-      alert("Không thể chia sẻ giỏ hàng lúc này.");
+      toast.error("Không thể chia sẻ giỏ hàng lúc này.");
     } finally {
       setSharing(false);
     }
   };
+
 
   const handleUpdateQty = useCallback(async (id: string, delta: number, itemRestaurantId?: string) => {
     if (loadingItemId) return;
@@ -91,7 +135,7 @@ export default function Cart() {
       if (group.isRequired) {
         const val = selectedOptionsState[group.name];
         if (!val || (Array.isArray(val) && val.length === 0)) {
-          alert(`Vui lòng chọn ${group.name}`);
+          toast.warning(`Vui lòng chọn ${group.name}`);
           return;
         }
       }
@@ -107,7 +151,7 @@ export default function Cart() {
       setIsModalOpen(false);
     } catch (err) {
       console.error("Failed to save options:", err);
-      alert("Không thể lưu tùy chỉnh món ăn");
+      toast.error("Không thể lưu tuỳ chỉnh món ăn");
     } finally {
       setIsSavingOptions(false);
     }
@@ -163,6 +207,22 @@ export default function Cart() {
     return acc;
   }, {} as Record<string, { restaurantName: string, items: typeof items }>);
 
+  const itemsByRestaurantKeys = Object.keys(itemsByRestaurant);
+  const isMultiRestaurant = itemsByRestaurantKeys.length > 1;
+
+  const handleProceedCheckout = () => {
+    if (isMultiRestaurant) {
+      toast.warning("Vui lòng thanh toán riêng từng quán ăn");
+      return;
+    }
+    const rId = itemsByRestaurantKeys[0] || restaurantId || (items[0]?.restaurantId);
+    if (rId && rId !== 'unknown') {
+      navigate(`/checkout?restaurantId=${rId}`);
+    } else {
+      navigate("/checkout");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -182,7 +242,10 @@ export default function Cart() {
         {/* Cart items */}
         <div className="lg:col-span-2 space-y-4">
           {/* Group order banner */}
-          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
+          <div 
+            onClick={handleShare}
+            className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm flex items-center gap-4 cursor-pointer hover:border-purple-200 hover:shadow-md transition-all duration-200"
+          >
             <div className="w-10 h-10 rounded-2xl bg-purple-100 flex items-center justify-center">
               <Users className="w-5 h-5 text-purple-500" />
             </div>
@@ -197,10 +260,11 @@ export default function Cart() {
             <div className="flex gap-2">
               {groupCartToken && (
                 <button
-                  onClick={async () => {
+                  onClick={async (e) => {
+                    e.stopPropagation();
                     useCartStore.getState().setGroupCartSession(null, null);
                     await useCartStore.getState().fetchCarts();
-                    alert("Đã rời giỏ hàng nhóm!");
+                    toast.success("Đã rời giỏ hàng nhóm!");
                   }}
                   className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
                 >
@@ -208,7 +272,10 @@ export default function Cart() {
                 </button>
               )}
               <button
-                onClick={handleShare}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShare();
+                }}
                 disabled={sharing}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-purple-500 bg-purple-50 hover:bg-purple-100 transition-colors disabled:opacity-50"
               >
@@ -218,7 +285,6 @@ export default function Cart() {
             </div>
           </div>
 
-          {/* Items */}
           {items.length === 0 ? (
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-5 text-center text-gray-500 text-sm">
@@ -227,7 +293,7 @@ export default function Cart() {
             </div>
           ) : (
             Object.entries(itemsByRestaurant).map(([rId, group]) => (
-              <div key={rId} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={rId} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden mb-6">
                 <div className="p-5 border-b border-gray-50">
                   <p className="font-bold text-gray-900">{group.restaurantName}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{t('cart.estimated_delivery')}</p>
@@ -272,16 +338,31 @@ export default function Cart() {
                         <p className="font-bold text-gray-900 mt-1">{(item.price * item.qty).toLocaleString()}đ</p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <button onClick={() => handleUpdateQty(item.cartItemId ?? item.id, -1, item.restaurantId)} disabled={loadingItemId === (item.cartItemId ?? item.id)} className="w-8 h-8 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-500 hover:border-red-300 hover:text-red-400 transition-colors disabled:opacity-50">
+                        <button onClick={() => handleUpdateQty(item.cartItemId ?? item.id, -1, item.restaurantId)} disabled={loadingItemId === (item.cartItemId ?? item.id)} aria-label={item.qty === 1 ? "Xoá" : "Giảm"} className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-500 hover:border-red-300 hover:text-red-400 transition-colors disabled:opacity-50">
                           {loadingItemId === (item.cartItemId ?? item.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : item.qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
                         </button>
                         <span className="w-5 text-center font-bold text-gray-900">{item.qty}</span>
-                        <button onClick={() => handleUpdateQty(item.cartItemId ?? item.id, 1, item.restaurantId)} disabled={loadingItemId === (item.cartItemId ?? item.id)} className="w-8 h-8 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 disabled:opacity-50" style={{ background: "#FF4500" }}>
+                        <button onClick={() => handleUpdateQty(item.cartItemId ?? item.id, 1, item.restaurantId)} disabled={loadingItemId === (item.cartItemId ?? item.id)} aria-label="Tăng" className="w-10 h-10 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 disabled:opacity-50 brand-gradient-bg">
                           {loadingItemId === (item.cartItemId ?? item.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="p-5 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Tổng tiền quán này</span>
+                    <p className="text-lg font-black text-gray-900">
+                      {group.items.reduce((sum, item) => sum + item.price * item.qty, 0).toLocaleString()}đ
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/checkout?restaurantId=${rId}`)}
+                    className="px-6 py-3 rounded-2xl text-white font-bold text-sm transition-all hover:opacity-90 hover:scale-[1.02] shadow-sm flex items-center gap-1.5"
+                    style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
+                  >
+                    Thanh toán quán này
+                  </button>
                 </div>
               </div>
             ))
@@ -315,12 +396,27 @@ export default function Cart() {
               </p>
             </div>
 
+            {isMultiRestaurant ? (
+              <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+                Giỏ hàng của bạn chứa các món từ nhiều quán khác nhau. Vui lòng nhấn <strong>"Thanh toán quán này"</strong> ở từng phần giỏ hàng tương ứng để đặt hàng.
+              </div>
+            ) : null}
+
             <button
-              onClick={() => navigate("/checkout")}
-              className="w-full py-4 rounded-2xl text-white font-bold text-base transition-all hover:opacity-90 hover:scale-[1.01]"
-              style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }}
+              onClick={handleProceedCheckout}
+              disabled={isMultiRestaurant}
+              className={`w-full py-4 rounded-2xl text-white font-bold text-base transition-all ${
+                isMultiRestaurant
+                  ? "bg-gray-300 cursor-not-allowed opacity-60"
+                  : "hover:opacity-90 hover:scale-[1.01]"
+              }`}
+              style={
+                isMultiRestaurant
+                  ? {}
+                  : { background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }
+              }
             >
-              {t('cart.proceed_checkout')}
+              {isMultiRestaurant ? "Thanh toán riêng theo quán" : t('cart.proceed_checkout')}
             </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">{t('cart.secure_payment')}</p>

@@ -2,6 +2,18 @@
   --font-size: 16px;
   --background: #ffffff;
   --foreground: oklch(0.145 0 0);
+
+  /* ── Brand colors ── */
+  --brand: #FF4500;
+  --brand-hover: #E03E00;
+  --brand-secondary: #FF6B35;
+  --brand-light: #FFF5F0;
+  --brand-light-2: #FFE8DC;
+  --brand-border: #FFE0D0;
+  --brand-gradient: linear-gradient(135deg, #FF4500, #FF6B35);
+  --brand-gradient-hover: linear-gradient(135deg, #E03E00, #FF551A);
+  --brand-shadow: 0 8px 32px rgba(255, 69, 0, 0.3);
+  --brand-shadow-lg: 0 8px 32px rgba(255, 69, 0, 0.4);
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -175,5 +187,48 @@
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+  }
+}
+
+/* ── Hide scrollbar for horizontal scroll rows ── */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Skeleton shimmer animation ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Brand gradient utilities ── */
+.brand-gradient-bg {
+  background: var(--brand-gradient);
+}
+.brand-gradient-bg:hover {
+  background: var(--brand-gradient-hover);
+}
+
+/* ── Cursor pointer for interactive elements ── */
+@layer base {
+  button:not(:disabled),
+  [role="button"],
+  a[href],
+  select,
+  label[for],
+  input[type="checkbox"],
+  input[type="radio"],
+  summary {
+    cursor: pointer;
   }
 }

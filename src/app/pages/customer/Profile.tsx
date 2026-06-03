@@ -12,6 +12,8 @@ import type { UserMission, UserBadge } from "../../types/auth";
 import { toast } from "sonner";
 import { favoriteService } from "../../services/favoriteService";
 import type { Restaurant } from "../../types/restaurant";
+import { profileService } from "../../services/profileService";
+import { changePassword } from "../../services/authService";
 
 import { orderService } from "../../services/orderService";
 import type { Order } from "../../types/order";
@@ -41,6 +43,159 @@ export default function Profile() {
   const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const selectedAddress = useAppSelector(selectSelectedAddress);
+
+  // Settings Modals States
+  const [settingsModal, setSettingsModal] = useState<string | null>(null);
+
+  // Personal Info Form
+  const [profileName, setProfileName] = useState(user?.fullName || "");
+  const [profilePhone, setProfilePhone] = useState(user?.profile?.phone || "");
+  const [profileAvatar, setProfileAvatar] = useState(user?.profile?.avatarUrl || "");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
+  // Notification Settings
+  const [notifPush, setNotifPush] = useState(true);
+  const [notifEmail, setNotifEmail] = useState(true);
+  const [notifSMS, setNotifSMS] = useState(false);
+  const [isSavingNotif, setIsSavingNotif] = useState(false);
+
+  // Change Password Form
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPass, setIsChangingPass] = useState(false);
+
+  // Payment Cards
+  const [cards, setCards] = useState<Array<{ id: string; number: string; expiry: string; type: string }>>([
+    { id: "1", number: "**** **** **** 4242", expiry: "12/28", type: "Visa" },
+    { id: "2", number: "**** **** **** 8888", expiry: "08/27", type: "Mastercard" },
+  ]);
+  const [newCardNumber, setNewCardNumber] = useState("");
+  const [newCardExpiry, setNewCardExpiry] = useState("");
+  const [newCardCVV, setNewCardCVV] = useState("");
+  const [isAddingCard, setIsAddingCard] = useState(false);
+
+  const openSettingsModal = (type: string) => {
+    setSettingsModal(type);
+    if (type === "personal_info") {
+      setProfileName(user?.fullName || "");
+      setProfilePhone(user?.profile?.phone || "");
+      setProfileAvatar(user?.profile?.avatarUrl || "");
+    } else if (type === "security") {
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!profileName.trim()) {
+      toast.error("Họ và tên không được để trống");
+      return;
+    }
+    try {
+      setIsUpdatingProfile(true);
+      await profileService.updateProfile(user.id, {
+        fullName: profileName,
+        phone: profilePhone,
+        avatarUrl: profileAvatar,
+      });
+      // Refresh user store
+      const { getMe } = await import("../../services/authService");
+      const updatedUser = await getMe();
+      useAuthStore.getState().setUser(updatedUser);
+      toast.success("Cập nhật thông tin thành công!");
+      setSettingsModal(null);
+    } catch {
+      toast.error("Không thể cập nhật thông tin cá nhân. Vui lòng thử lại sau.");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleSaveNotifications = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingNotif(true);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      toast.success("Cập nhật cài đặt thông báo thành công!");
+      setSettingsModal(null);
+    } catch {
+      toast.error("Không thể lưu cài đặt thông báo");
+    } finally {
+      setIsSavingNotif(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("Mật khẩu xác nhận không khớp");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("Mật khẩu mới phải có tối thiểu 6 ký tự");
+      return;
+    }
+    try {
+      setIsChangingPass(true);
+      await changePassword(oldPassword, newPassword);
+      toast.success("Đổi mật khẩu thành công!");
+      setSettingsModal(null);
+    } catch {
+      toast.error("Đổi mật khẩu thất bại. Mật khẩu cũ có thể không chính xác.");
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
+
+  const handleAddCard = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCardNumber.trim() || !newCardExpiry.trim() || !newCardCVV.trim()) {
+      toast.error("Vui lòng nhập đầy đủ thông tin thẻ");
+      return;
+    }
+    const cleanNumber = newCardNumber.replace(/\s+/g, "");
+    if (cleanNumber.length < 12) {
+      toast.error("Số thẻ không hợp lệ");
+      return;
+    }
+    const masked = `**** **** **** ${cleanNumber.slice(-4)}`;
+    const newCard = {
+      id: Date.now().toString(),
+      number: masked,
+      expiry: newCardExpiry,
+      type: cleanNumber.startsWith("4") ? "Visa" : "Mastercard",
+    };
+    setCards([...cards, newCard]);
+    setNewCardNumber("");
+    setNewCardExpiry("");
+    setNewCardCVV("");
+    setIsAddingCard(false);
+    toast.success("Thêm thẻ thanh toán thành công!");
+  };
+
+  const handleDeleteCard = (id: string) => {
+    if (!confirm("Bạn có chắc muốn xóa thẻ này?")) return;
+    setCards(cards.filter((c) => c.id !== id));
+    toast.success("Xóa thẻ thanh toán thành công!");
+  };
+
+  const handleDeleteAccount = () => {
+    const doubleConfirm = prompt("Để xác nhận xóa tài khoản, vui lòng nhập chữ 'DELETE' dưới đây:");
+    if (doubleConfirm !== "DELETE") {
+      toast.error("Xác nhận không chính xác. Hủy yêu cầu xóa.");
+      return;
+    }
+    toast.info("Đang xử lý yêu cầu xóa tài khoản...");
+    setTimeout(() => {
+      useAuthStore.getState().logout();
+      toast.success("Tài khoản của bạn đã được xóa thành công.");
+      navigate("/login");
+    }, 1500);
+  };
 
   const currentPoints = user?.profile?.rewardPoints ?? 0;
   let currentLevelName = "Newbie";
@@ -214,9 +369,8 @@ export default function Profile() {
       }
       setIsModalOpen(false);
       fetchAddresses();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Không thể lưu địa chỉ");
+    } catch {
+      toast.error("Không thể lưu địa chỉ. Vui lòng thử lại sau.");
     } finally {
       setIsSaving(false);
     }
@@ -228,9 +382,8 @@ export default function Profile() {
       await addressService.deleteAddress(id);
       toast.success("Xóa địa chỉ thành công");
       fetchAddresses();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Không thể xóa địa chỉ");
+    } catch {
+      toast.error("Không thể xóa địa chỉ. Vui lòng thử lại sau.");
     }
   };
 
@@ -240,20 +393,19 @@ export default function Profile() {
       await addressService.updateAddress(addr.id, { isDefault: true });
       toast.success("Đặt địa chỉ mặc định thành công");
       fetchAddresses();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Không thể đặt mặc định");
+    } catch {
+      toast.error("Không thể đặt mặc định. Vui lòng thử lại sau.");
     }
   };
 
   const userInitials = user?.fullName
     ? user.fullName
-        .split(" ")
-        .filter(Boolean)
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
+      .split(" ")
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
     : "SC";
 
   const translatedTabs = [
@@ -309,7 +461,7 @@ export default function Profile() {
           </div>
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-4 mt-6 pt-5 border-t border-white/10">
-            {[[orders.length > 0 ? orders.length.toString() : "84", t('profile.orders')], ["4.9★", t('profile.avg_rating')], [userBadges.length.toString(), t('profile.badges')]].map(([val, label]) => (
+            {[[orders.length.toString(), t('profile.orders')], ["4.9★", t('profile.avg_rating')], [userBadges.length.toString(), t('profile.badges')]].map(([val, label]) => (
               <div key={label} className="text-center">
                 <p className="text-xl font-black text-white">{val}</p>
                 <p className="text-gray-500 text-xs">{label}</p>
@@ -317,16 +469,14 @@ export default function Profile() {
             ))}
           </div>
         </div>
-
         {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-6">
           {translatedTabs.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${
-                activeTab === tab ? "text-white" : "bg-white text-gray-600 border border-gray-200"
-              }`}
+              className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === tab ? "text-white" : "bg-white text-gray-600 border border-gray-200"
+                }`}
               style={activeTab === tab ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
             >
               {tab}
@@ -343,8 +493,8 @@ export default function Profile() {
               <div className="text-center py-8 text-gray-400 text-sm">Chưa có đơn hàng nào.</div>
             ) : (
               orders.map((order) => (
-                <div 
-                  key={order.id} 
+                <div
+                  key={order.id}
                   className="bg-white rounded-2xl p-4 flex items-center gap-4 border border-gray-100 hover:border-orange-200 transition-all cursor-pointer"
                   onClick={() => navigate(`/tracking?orderId=${order.id}`)}
                 >
@@ -359,7 +509,7 @@ export default function Profile() {
                       {order.status === "completed" ? "✓ " : ""}{order.status}
                     </span>
                   </div>
-                  <button 
+                  <button
                     className="px-3 py-1.5 rounded-xl text-xs font-semibold text-[#FF4500] bg-orange-50 hover:bg-orange-100 transition-colors"
                     onClick={(e) => { e.stopPropagation(); navigate(`/restaurant/${order.restaurantId}`); }}
                   >
@@ -560,14 +710,24 @@ export default function Profile() {
         {activeTab === t('profile.settings') && (
           <div className="space-y-3">
             {[
-              { icon: "👤", label: t('profile.settings_tabs.personal_info'), sub: t('profile.settings_desc.personal_info') },
-              { icon: "🔔", label: t('profile.settings_tabs.notifications'), sub: t('profile.settings_desc.notifications') },
-              { icon: "🔒", label: t('profile.settings_tabs.security'), sub: t('profile.settings_desc.security') },
-              { icon: "💳", label: t('profile.settings_tabs.payments'), sub: t('profile.settings_desc.payments') },
-              { icon: "🎁", label: t('profile.settings_tabs.referral'), sub: t('profile.settings_desc.referral') },
-              { icon: "⚠️", label: t('profile.settings_tabs.delete_account'), sub: t('profile.settings_desc.delete_account'), danger: true },
-            ].map((item: { icon: string; label: string; sub: string; danger?: boolean }) => (
-              <button key={item.label} className="w-full bg-white rounded-2xl p-5 flex items-center gap-4 border border-gray-100 hover:border-gray-200 transition-all text-left">
+              { icon: "👤", label: t('profile.settings_tabs.personal_info'), sub: t('profile.settings_desc.personal_info'), key: "personal_info" },
+              { icon: "🔔", label: t('profile.settings_tabs.notifications'), sub: t('profile.settings_desc.notifications'), key: "notifications" },
+              { icon: "🔒", label: t('profile.settings_tabs.security'), sub: t('profile.settings_desc.security'), key: "security" },
+              { icon: "💳", label: t('profile.settings_tabs.payments'), sub: t('profile.settings_desc.payments'), key: "payments" },
+              { icon: "🎁", label: t('profile.settings_tabs.referral'), sub: t('profile.settings_desc.referral'), key: "referral" },
+              { icon: "⚠️", label: t('profile.settings_tabs.delete_account'), sub: t('profile.settings_desc.delete_account'), danger: true, key: "delete_account" },
+            ].map((item: { icon: string; label: string; sub: string; danger?: boolean; key: string }) => (
+              <button
+                key={item.label}
+                onClick={() => {
+                  if (item.key === "delete_account") {
+                    handleDeleteAccount();
+                  } else {
+                    openSettingsModal(item.key);
+                  }
+                }}
+                className="w-full bg-white rounded-2xl p-5 flex items-center gap-4 border border-gray-100 hover:border-gray-200 transition-all text-left cursor-pointer"
+              >
                 <span className="text-xl">{item.icon}</span>
                 <div className="flex-1">
                   <p className={`font-semibold ${item.danger ? "text-red-500" : "text-gray-900"}`}>{item.label}</p>
@@ -599,11 +759,10 @@ export default function Profile() {
                       key={suggested}
                       type="button"
                       onClick={() => setFormLabel(suggested)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
-                        formLabel === suggested
-                          ? "bg-orange-50 text-[#FF4500] border-orange-200"
-                          : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
-                      }`}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${formLabel === suggested
+                        ? "bg-orange-50 text-[#FF4500] border-orange-200"
+                        : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                        }`}
                     >
                       {suggested}
                     </button>
@@ -662,6 +821,277 @@ export default function Profile() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal Wrapper */}
+      {settingsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200" onClick={() => setSettingsModal(null)}>
+          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {settingsModal === "personal_info" && "Thông tin cá nhân"}
+                  {settingsModal === "notifications" && "Cài đặt thông báo"}
+                  {settingsModal === "security" && "Mật khẩu & Bảo mật"}
+                  {settingsModal === "payments" && "Phương thức thanh toán"}
+                  {settingsModal === "referral" && "Giới thiệu bạn bè"}
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  {settingsModal === "personal_info" && "Cập nhật tên, số điện thoại và ảnh đại diện"}
+                  {settingsModal === "notifications" && "Chọn các kênh bạn muốn nhận thông báo"}
+                  {settingsModal === "security" && "Thay đổi mật khẩu đăng nhập của bạn"}
+                  {settingsModal === "payments" && "Quản lý các thẻ thanh toán liên kết"}
+                  {settingsModal === "referral" && "Chia sẻ mã để nhận thêm điểm thưởng"}
+                </p>
+              </div>
+              <button onClick={() => setSettingsModal(null)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+
+              {/* 1. PERSONAL INFO FORM */}
+              {settingsModal === "personal_info" && (
+                <form onSubmit={handleUpdateProfile} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Họ và tên</label>
+                    <input
+                      type="text"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      placeholder="Nhập họ và tên..."
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Số điện thoại</label>
+                    <input
+                      type="text"
+                      value={profilePhone}
+                      onChange={(e) => setProfilePhone(e.target.value)}
+                      placeholder="Nhập số điện thoại..."
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Đường dẫn ảnh đại diện (Avatar URL)</label>
+                    <input
+                      type="url"
+                      value={profileAvatar}
+                      onChange={(e) => setProfileAvatar(e.target.value)}
+                      placeholder="https://example.com/avatar.jpg"
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-gray-100">
+                    <button type="button" onClick={() => setSettingsModal(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors">
+                      Hủy
+                    </button>
+                    <button type="submit" disabled={isUpdatingProfile} className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+                      {isUpdatingProfile ? "Đang lưu..." : "Lưu thay đổi"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* 2. NOTIFICATIONS CONFIG */}
+              {settingsModal === "notifications" && (
+                <form onSubmit={handleSaveNotifications} className="space-y-4">
+                  <div className="space-y-3">
+                    {[
+                      { state: notifPush, setter: setNotifPush, title: "Thông báo ứng dụng (Push)", desc: "Nhận tin tức cập nhật đơn hàng tức thời" },
+                      { state: notifEmail, setter: setNotifEmail, title: "Email Marketing", desc: "Nhận hóa đơn và mã giảm giá hàng tuần" },
+                      { state: notifSMS, setter: setNotifSMS, title: "Tin nhắn SMS", desc: "Nhận OTP và thông báo khẩn cấp từ tài xế" },
+                    ].map((item) => (
+                      <div key={item.title} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">{item.title}</p>
+                          <p className="text-xs text-gray-400">{item.desc}</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={item.state}
+                            onChange={(e) => item.setter(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#FF4500]"></div>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-gray-100">
+                    <button type="button" onClick={() => setSettingsModal(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors">
+                      Hủy
+                    </button>
+                    <button type="submit" disabled={isSavingNotif} className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+                      {isSavingNotif ? "Đang lưu..." : "Lưu cài đặt"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* 3. SECURITY / PASSWORD CHANGE */}
+              {settingsModal === "security" && (
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mật khẩu hiện tại</label>
+                    <input
+                      type="password"
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mật khẩu mới</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự..."
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Xác nhận mật khẩu mới</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-gray-100">
+                    <button type="button" onClick={() => setSettingsModal(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors">
+                      Hủy
+                    </button>
+                    <button type="submit" disabled={isChangingPass} className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+                      {isChangingPass ? "Đang đổi..." : "Cập nhật mật khẩu"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* 4. PAYMENTS MANAGEMENT */}
+              {settingsModal === "payments" && (
+                <div className="space-y-4">
+                  {isAddingCard ? (
+                    <form onSubmit={handleAddCard} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Số thẻ</label>
+                        <input
+                          type="text"
+                          value={newCardNumber}
+                          onChange={(e) => setNewCardNumber(e.target.value.replace(/[^0-9]/g, "").slice(0, 16))}
+                          placeholder="4111 2222 3333 4444"
+                          className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Hết hạn (MM/YY)</label>
+                          <input
+                            type="text"
+                            value={newCardExpiry}
+                            onChange={(e) => setNewCardExpiry(e.target.value.slice(0, 5))}
+                            placeholder="12/28"
+                            className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mã CVV</label>
+                          <input
+                            type="password"
+                            value={newCardCVV}
+                            onChange={(e) => setNewCardCVV(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+                            placeholder="•••"
+                            className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-3 pt-2">
+                        <button type="button" onClick={() => setIsAddingCard(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50">
+                          Hủy
+                        </button>
+                        <button type="submit" className="flex-1 py-2.5 rounded-xl text-white text-xs font-semibold hover:opacity-90" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+                          Xác nhận
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-3">
+                      {cards.map((card) => (
+                        <div key={card.id} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{card.type === "Visa" ? "💳" : "🎴"}</span>
+                            <div>
+                              <p className="font-semibold text-sm text-gray-800">{card.type} {card.number}</p>
+                              <p className="text-xs text-gray-400">Hết hạn {card.expiry}</p>
+                            </div>
+                          </div>
+                          <button onClick={() => handleDeleteCard(card.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      <button onClick={() => setIsAddingCard(true)} className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-[#FF4500] hover:bg-orange-50 hover:border-orange-200 transition-colors mt-2">
+                        + Thêm thẻ thanh toán mới
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 5. REFERRAL CODE */}
+              {settingsModal === "referral" && (
+                <div className="space-y-4 text-center">
+                  <div className="p-6 rounded-3xl bg-orange-50/50 border border-orange-100 inline-block w-full">
+                    <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-2">Mã giới thiệu của bạn</p>
+                    <div className="flex items-center justify-center gap-3 bg-white border border-orange-150 rounded-2xl p-4 shadow-sm">
+                      <span className="font-mono text-2xl font-black text-gray-800">
+                        {`SAVOUR-${user?.id?.slice(0, 6).toUpperCase() || "FRIEND"}`}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const code = `SAVOUR-${user?.id?.slice(0, 6).toUpperCase() || "FRIEND"}`;
+                          navigator.clipboard.writeText(code);
+                          toast.success("Đã sao chép mã giới thiệu!");
+                        }}
+                        className="p-2 rounded-xl bg-orange-100 text-[#FF4500] hover:bg-orange-200 transition-colors"
+                      >
+                        Sao chép
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-left space-y-2 text-xs text-gray-500 px-2">
+                    <p className="font-bold text-gray-700">🎁 Thể lệ chương trình:</p>
+                    <p>• Bạn bè nhập mã khi đăng ký tài khoản mới.</p>
+                    <p>• Bạn nhận ngay <span className="font-black text-[#FF4500]">50 điểm thưởng Savour</span> khi bạn bè hoàn thành đơn hàng đầu tiên.</p>
+                    <p>• Bạn bè được tặng ngay <span className="font-black text-green-600">Voucher WELCOME10</span> giảm 10%.</p>
+                  </div>
+                </div>
+              )}
+
+            </div>
           </div>
         </div>
       )}

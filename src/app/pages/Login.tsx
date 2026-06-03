@@ -31,9 +31,8 @@ export default function Login() {
     try {
       const auth = await login(form);
       navigate(getRedirectPath(auth.user));
-    } catch (error) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      setError(err.response?.data?.message || err.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+    } catch{
+      setError("Đăng nhập thất bại. Vui lòng kiểm tra email và mật khẩu rồi thử lại.");
     } finally {
       setLoading(false);
     }

@@ -94,12 +94,9 @@ export default function Register() {
           successMessage: "Đăng ký tài khoản thành công! Vui lòng đăng nhập.",
         },
       });
-    } catch (error) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
+    } catch (_error) {
       setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Đăng ký thất bại. Vui lòng thử lại."
+        "Đăng ký thất bại. Email có thể đã được sử dụng hoặc thông tin không hợp lệ."
       );
     } finally {
       setLoading(false);

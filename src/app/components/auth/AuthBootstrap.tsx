@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAuthActions } from "../../hooks/useAuth";
 import { useAuthStore } from "../../stores/authStore";
 import { useCartStore } from "../../stores/cartStore";
+import { useFavoriteStore } from "../../stores/favoriteStore";
 
 interface AuthBootstrapProps {
   children: ReactNode;
@@ -22,6 +23,15 @@ export function AuthBootstrap({ children }: AuthBootstrapProps) {
     };
     sync();
   }, [userId, syncUser]);
+
+  // Đồng bộ danh sách yêu thích mỗi khi user thay đổi (đăng nhập / logout / đổi tài khoản)
+  useEffect(() => {
+    if (userId) {
+      useFavoriteStore.getState().fetchFavorites();
+    } else {
+      useFavoriteStore.getState().clearFavorites();
+    }
+  }, [userId]);
 
   useEffect(() => {
     let active = true;

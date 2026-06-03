@@ -198,12 +198,9 @@ export default function RegisterRestaurant() {
             "Đăng ký nhà hàng thành công! Tài khoản đang chờ được phê duyệt.",
         },
       });
-    } catch (err) {
-      const error = err as { response?: { data?: { message?: string } }; message?: string };
+    } catch{
       setError(
-        error.response?.data?.message ||
-          error.message ||
-          "Đăng ký thất bại. Vui lòng thử lại."
+        "Đăng ký nhà hàng thất bại. Email có thể đã được sử dụng hoặc thông tin không hợp lệ."
       );
       setStep(1);
     } finally {

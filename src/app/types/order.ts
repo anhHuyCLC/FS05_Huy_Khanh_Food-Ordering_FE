@@ -76,6 +76,7 @@ export interface Order {
     logo?: string;
     latitude?: number;
     longitude?: number;
+    address?: string;
   };
   customer?: {
     id: string;

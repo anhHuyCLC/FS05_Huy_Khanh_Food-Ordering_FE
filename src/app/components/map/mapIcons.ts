@@ -49,3 +49,27 @@ export const userIcon = L.divIcon({
   iconAnchor: [17, 17],
   popupAnchor: [0, -17],
 });
+
+export const driverIcon = L.divIcon({
+  className: "custom-driver-marker",
+  html: `
+    <div style="
+      background-color: #32CD32;
+      color: white;
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(50, 205, 50, 0.45);
+      border: 2px solid white;
+      font-size: 16px;
+    ">
+      🛵
+    </div>
+  `,
+  iconSize: [34, 34],
+  iconAnchor: [17, 17],
+  popupAnchor: [0, -17],
+});

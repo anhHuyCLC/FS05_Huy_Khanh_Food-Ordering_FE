@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   MapPin, Star, Zap, Brain, CreditCard, Gift, Users, Heart, Trophy,
   ChevronRight, Play, ArrowRight, CheckCircle, Smartphone,
-  Search, Bell, ShoppingCart, Navigation, Loader2,
+  Search,
 } from "lucide-react";
 import { Navbar } from "../components/layout/Navbar";
 import { Footer } from "../components/layout/Footer";
@@ -14,17 +14,15 @@ import { fetchRestaurants} from "../features/restaurantSlice";
 import AddressAutocomplete from "../components/map/AddressAutocomplete";
 import MapView from "../components/map/MapView";
 import RestaurantMarkers from "../components/map/RestaurantMarkers";
+import type { RestaurantMarkerData } from "../components/map/RestaurantMarkers";
 import UserMarker from "../components/map/UserMarker";
 import { reverseGeocodeCoords } from "../features/mapThunk";
 import { selectSelectedAddress } from "../features/mapSelectors";
 
-import { getDeliveryTimeText } from "../utils/geo";
-import type{ Restaurant } from "../types/restaurant";
+import type { Restaurant, MenuItem } from "../types/restaurant";
 
-import { calculateDistance } from "../utils/geo";
+import { calculateDistance, getStableCoords } from "../utils/geo";
 import { orderService } from "../services/orderService";
-import { mapService } from "../services/mapService";
-import { useCartStore } from "../stores/cartStore";
 import type { Promotion } from "../types/order";
 
 
@@ -50,13 +48,13 @@ const steps = [
   { num: "03", icon: "🚀", title: "Track & Enjoy", desc: "Watch your driver live on the map. Rate your experience and earn rewards." },
 ];
 
-const collections = [
-  { icon: "🏷️", label: "Giảm tới 50%", gradient: "from-red-500 to-rose-600", slug: "all" },
-  { icon: "🧋", label: "Trà sữa hot", gradient: "from-purple-500 to-violet-600", slug: "milk-tea" },
-  { icon: "🍕", label: "Pizza deal", gradient: "from-orange-500 to-amber-500", slug: "pizza-burger" },
-  { icon: "🌙", label: "Ăn khuya", gradient: "from-slate-700 to-slate-900", slug: "all" },
-  { icon: "🥗", label: "Healthy picks", gradient: "from-emerald-500 to-teal-600", slug: "healthy" },
-  { icon: "⭐", label: "Best seller", gradient: "from-yellow-400 to-orange-500", slug: "all" },
+const collectionDefs = [
+  { icon: "🏷️", key: "discount_50", gradient: "from-red-500 to-rose-600", slug: "all" },
+  { icon: "🧋", key: "milk_tea", gradient: "from-purple-500 to-violet-600", slug: "milk-tea" },
+  { icon: "🍕", key: "pizza_deal", gradient: "from-orange-500 to-amber-500", slug: "pizza-burger" },
+  { icon: "🌙", key: "late_night", gradient: "from-slate-700 to-slate-900", slug: "all" },
+  { icon: "🥗", key: "healthy", gradient: "from-emerald-500 to-teal-600", slug: "healthy" },
+  { icon: "⭐", key: "best_seller", gradient: "from-yellow-400 to-orange-500", slug: "all" },
 ];
 
 export default function Home() {
@@ -70,18 +68,14 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [scrolled, setScrolled] = useState(false);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [userAddress, setUserAddress] = useState("");
-  const [isLocating, setIsLocating] = useState(false);
 
   // Legacy map state (for restaurant map section)
   const [distanceFilter, setDistanceFilter] = useState<number>(999);
   const [activeCategory, setActiveCategory] = useState("All");
 
   // ── Redux ──────────────────────────────────────────────────────────────────
-  const { restaurants } = useAppSelector((state) => state.restaurants);
+  const { restaurants, loading } = useAppSelector((state) => state.restaurants);
   const selectedAddress = useAppSelector(selectSelectedAddress);
-  const cartCount = useCartStore((state) => state.getItemCount());
 
   // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -93,47 +87,27 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 10);
+    const handleScroll = () => setScrolled(window.scrollY > 300);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // ── Geolocation ───────────────────────────────────────────────────────────
-  const handleLocate = () => {
-    if (!navigator.geolocation) return;
-    setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setUserLocation({ lat, lng });
-        try {
-          const addr = await mapService.reverseGeocode(lat, lng);
-          setUserAddress(addr);
-        } catch {
-          setUserAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        } finally {
-          setIsLocating(false);
-        }
-      },
-      () => setIsLocating(false)
-    );
-  };
+  // ── Geolocation ──
 
-  // ── Distance helper ────────────────────────────────────────────────────────
   const withDistance = useMemo(() => {
     return (restaurants ?? []).map((r) => {
       let dist: number = Infinity;
-      if (userLocation && r.latitude && r.longitude) {
+      if (selectedAddress && r.latitude && r.longitude) {
         dist = calculateDistance(
-          userLocation.lat,
-          userLocation.lng,
+          selectedAddress.lat,
+          selectedAddress.lng,
           Number(r.latitude),
           Number(r.longitude)
         );
       }
       return { ...r, distance: dist };
     });
-  }, [restaurants, userLocation]);
+  }, [restaurants, selectedAddress]);
 
   // ── Section derivations ───────────────────────────────────────────────────
   const nearbyRestaurants = useMemo(
@@ -165,47 +139,95 @@ export default function Home() {
     [withDistance]
   );
 
+  const todaysPicks = useMemo(() => {
+    const list: Array<{
+      label: string;
+      img: string;
+      name: string;
+      rest: string;
+      restId: string;
+      price: string;
+      badge: string;
+    }> = [];
+
+    const itemsWithImages: Array<{ item: MenuItem; r: Restaurant }> = [];
+    (restaurants ?? []).forEach((r) => {
+      (r.menuItems ?? []).forEach((item) => {
+        if (item.imageUrl && item.isAvailable) {
+          itemsWithImages.push({ item, r });
+        }
+      });
+    });
+
+    const picks = itemsWithImages.slice(0, 3);
+    const labels = [t("home.trending_now"), t("home.ai_pick"), `⚡ ${t("home.flash_sale")}`];
+    const badges = [t("home.trending"), t("home.ai_recommended"), t("home.discount_30_off")];
+
+    picks.forEach(({ item, r }, index) => {
+      list.push({
+        label: labels[index] || t("home.fallback_specialty"),
+        img: item.imageUrl || "",
+        name: item.name,
+        rest: r.name,
+        restId: r.id,
+        price: `${Number(item.basePrice).toLocaleString("vi-VN")}đ`,
+        badge: badges[index] || t("home.fallback_loved"),
+      });
+    });
+
+    if (list.length === 0) {
+      return [
+        { label: t("home.trending_now"), img: IMGS.ramen, name: "Tonkotsu Ramen", rest: "Ramen House", restId: "", price: "$14.99", badge: t("home.trending") },
+        { label: t("home.ai_pick"), img: IMGS.pizza, name: "Margherita Pizza", rest: "Pizza Palazzo", restId: "", price: "$18.99", badge: t("home.ai_recommended") },
+        { label: `⚡ ${t("home.flash_sale")}`, img: IMGS.sushi, name: "Sashimi Deluxe", rest: "Sushi Zen", restId: "", price: "$22.40", badge: t("home.discount_30_off") },
+      ];
+    }
+    return list;
+  }, [restaurants, t]);
+
   // ── Legacy (map section) ──────────────────────────────────────────────────
   const getRestaurantCoords = (r: Restaurant): [number, number] => {
-    const lat = r.latitude ? parseFloat(r.latitude) : null;
-    const lng = r.longitude ? parseFloat(r.longitude) : null;
+    const lat = r.latitude ? parseFloat(String(r.latitude)) : null;
+    const lng = r.longitude ? parseFloat(String(r.longitude)) : null;
     if (lat && lng && !isNaN(lat) && !isNaN(lng)) return [lat, lng];
-    const input = `${r.id}-${r.name || ""}`;
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) hash = input.charCodeAt(i) + ((hash << 5) - hash);
-    return [16.054404 + ((hash % 100) / 1000), 108.202167 + (((hash >> 2) % 100) / 1000)];
-  };
-
-  const calculateHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const coords = getStableCoords(r.id, r.name || "");
+    return [coords.latitude, coords.longitude];
   };
 
   const apiCategories = useMemo(() => {
-    const names = restaurants.flatMap((r) => r.categories.map((c) => c.name));
+    const names = restaurants.flatMap((r) => r.categories?.map((c) => c.name) || []);
     return Array.from(new Set(names));
   }, [restaurants]);
 
   const visibleRestaurants = useMemo(() => {
     let filtered = restaurants;
     if (activeCategory !== "All" && activeCategory !== t("common.all")) {
-      filtered = filtered.filter((r) => r.categories.some((c) => c.name === activeCategory));
+      filtered = filtered.filter((r) => r.categories?.some((c) => c.name === activeCategory));
     }
     if (selectedAddress && distanceFilter !== 999) {
       filtered = filtered.filter((r) => {
         const coords = getRestaurantCoords(r);
-        return calculateHaversineDistance(selectedAddress.lat, selectedAddress.lng, coords[0], coords[1]) <= distanceFilter;
+        return calculateDistance(selectedAddress.lat, selectedAddress.lng, coords[0], coords[1]) <= distanceFilter;
       });
     }
     return filtered;
   }, [activeCategory, restaurants, t, selectedAddress, distanceFilter]);
 
+  const mappedMarkers = useMemo<RestaurantMarkerData[]>(() => {
+    return visibleRestaurants.map((r) => ({
+      id: r.id,
+      name: r.name,
+      address: r.address || null,
+      latitude: r.latitude != null ? String(r.latitude) : null,
+      longitude: r.longitude != null ? String(r.longitude) : null,
+      description: r.description || null,
+    }));
+  }, [visibleRestaurants]);
+
   const featureKeys = ["tracking", "ai", "payments", "promos", "group", "fast", "community", "rewards"];
   const featuresWithTranslations = features.map((f, i) => ({
     ...f,
+    key: featureKeys[i],
     title: t(`home.features.${featureKeys[i]}.title`),
     desc: t(`home.features.${featureKeys[i]}.desc`),
   }));
@@ -218,7 +240,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar transparent />
+      <Navbar />
 
       {/* ═══════════════════════════════════════════════════════════════
           HERO — Dark gradient (unchanged from original)
@@ -265,7 +287,7 @@ export default function Home() {
             {/* Trust badges */}
             <div className="flex gap-6 mt-10">
               {[
-                [t("home.restaurants_count"), t("home.restaurants_label")],
+                [restaurants.length > 0 ? `${restaurants.length}+` : t("home.restaurants_count"), t("home.restaurants_label")],
                 [t("home.orders_count"), t("home.orders_label")],
                 [t("home.rating_value"), t("home.rating_label")],
               ].map(([val, label]) => (
@@ -314,58 +336,27 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Wave divider for smooth hero-to-content transition ── */}
+      <div className="relative -mt-1" style={{ background: 'linear-gradient(180deg, #0F172A 0%, transparent 100%)' }}>
+        <svg viewBox="0 0 1440 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-12 sm:h-16 md:h-20" preserveAspectRatio="none">
+          <path d="M0,0 C360,80 1080,0 1440,60 L1440,80 L0,80 Z" fill="white" />
+        </svg>
+      </div>
+
       {/* ═══════════════════════════════════════════════════════════════
           SHOPEEFOOD-STYLE STICKY TOP BAR
       ═══════════════════════════════════════════════════════════════ */}
       <div
         ref={searchRef}
-        className={`bg-white/97 backdrop-blur-md border-b border-gray-100 sticky top-16 z-40 transition-shadow duration-300 ${scrolled ? "shadow-lg" : ""}`}
+        className={`bg-white/97 backdrop-blur-md border-b border-gray-100 sticky top-16 z-40 transition-all duration-500 ease-in-out origin-top ${
+          scrolled
+            ? "shadow-lg translate-y-0 opacity-100 scale-y-100 max-h-96 py-3"
+            : "pointer-events-none -translate-y-4 opacity-0 scale-y-95 max-h-0 overflow-hidden py-0"
+        }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 space-y-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-3">
 
-          {/* Row 1: Location + Cart + Notification */}
-          <div className="flex items-center justify-between">
-            <div
-              className="flex items-center gap-2 cursor-pointer group"
-              onClick={handleLocate}
-            >
-              <div className="w-8 h-8 rounded-full bg-orange-50 group-hover:bg-orange-100 flex items-center justify-center shrink-0 transition-colors">
-                {isLocating
-                  ? <Loader2 className="w-4 h-4 text-[#FF4500] animate-spin" />
-                  : <MapPin className="w-4 h-4 text-[#FF4500]" />
-                }
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Giao đến</p>
-                <p className="text-xs font-bold text-gray-800 truncate max-w-[200px] mt-0.5 group-hover:text-[#FF4500] transition-colors">
-                  {userLocation
-                    ? (userAddress || `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`)
-                    : "Nhấn để định vị"}
-                </p>
-              </div>
-              <Navigation className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#FF4500] transition-colors" />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button className="relative p-2 rounded-2xl bg-gray-50 hover:bg-gray-100 text-gray-500 transition-all active:scale-95">
-                <Bell className="w-4 h-4" />
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-              </button>
-              <button
-                onClick={() => navigate("/cart")}
-                className="relative p-2 rounded-2xl bg-orange-50 hover:bg-orange-100 text-[#FF4500] transition-all active:scale-95"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-gradient-to-r from-[#FF4500] to-[#FF6B35] text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 border border-white shadow-sm">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Row 2: Search bar */}
+          {/* Row 1: Search bar */}
           <form onSubmit={handleSearchSubmit}>
             <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100 focus-within:bg-white transition-all">
               <Search className="w-5 h-5 text-gray-400 shrink-0" />
@@ -373,7 +364,7 @@ export default function Home() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Bạn muốn ăn gì hôm nay?"
+                placeholder={t("home.sticky_search_placeholder")}
                 className="flex-1 bg-transparent text-sm font-semibold outline-none text-gray-800 placeholder-gray-400"
               />
               {searchQuery && (
@@ -381,13 +372,13 @@ export default function Home() {
                   type="submit"
                   className="shrink-0 px-3 py-1 bg-gradient-to-r from-[#FF4500] to-[#FF6B35] text-white text-xs font-black rounded-xl"
                 >
-                  Tìm
+                  {t("home.sticky_search_button")}
                 </button>
               )}
             </div>
           </form>
 
-          {/* Row 3: Quick category pills */}
+          {/* Row 2: Quick category pills */}
           <QuickCategoryBar />
 
         </div>
@@ -405,17 +396,17 @@ export default function Home() {
         <div className="space-y-3.5">
           <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
             <span className="text-xl">🗂️</span>
-            Bộ sưu tập
+            {t("home.collections_title")}
           </h2>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-            {collections.map((col) => (
+            {collectionDefs.map((col) => (
               <button
-                key={col.label}
+                key={col.key}
                 onClick={() => navigate(col.slug === "all" ? "/explore" : `/explore?category=${col.slug}`)}
-                className={`group flex-shrink-0 flex flex-col items-center justify-center gap-2 w-28 h-24 rounded-2xl bg-gradient-to-br ${col.gradient} text-white shadow-md hover:shadow-lg hover:scale-[1.03] active:scale-95 transition-all`}
+                className={`group flex-shrink-0 flex flex-col items-center justify-center gap-2 w-28 h-24 rounded-2xl bg-gradient-to-br ${col.gradient} text-white shadow-md hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 border-2 border-transparent hover:border-white/30`}
               >
-                <span className="text-2xl">{col.icon}</span>
-                <span className="text-xs font-bold text-center px-2 leading-tight">{col.label}</span>
+                <span className="text-2xl group-hover:scale-110 transition-transform duration-300">{col.icon}</span>
+                <span className="text-xs font-bold text-center px-2 leading-tight">{t(`home.collections.${col.key}`)}</span>
               </button>
             ))}
           </div>
@@ -423,42 +414,47 @@ export default function Home() {
 
         {/* C. Nearby Restaurants */}
         <RestaurantRow
-          title="Gần bạn"
+          title={t("home.nearby_title")}
           icon="📍"
           restaurants={nearbyRestaurants.length > 0 ? nearbyRestaurants : withDistance}
           viewAllHref="/explore"
+          loading={loading}
         />
 
         {/* D. Top Rated */}
         <RestaurantRow
-          title="Đánh giá cao"
+          title={t("home.top_rated_title")}
           icon="⭐"
           restaurants={topRated.length > 0 ? topRated : trending}
           viewAllHref="/explore"
+          loading={loading}
         />
 
         {/* E. Fast Delivery */}
         <RestaurantRow
-          title="Giao nhanh"
+          title={t("home.fast_delivery_title")}
           icon="⚡"
           restaurants={fastDelivery.length > 0 ? fastDelivery : withDistance}
           viewAllHref="/explore"
+          loading={loading}
         />
 
         {/* F. Trending */}
         <RestaurantRow
-          title="Đang hot 🔥"
+          title={t("home.trending_title")}
           icon="🔥"
           restaurants={trending}
           viewAllHref="/explore"
+          loading={loading}
         />
 
         {/* G. Free Delivery */}
         <RestaurantRow
-          title="Freeship"
+          title={t("home.free_delivery_title")}
           icon="🚚"
           restaurants={freeDelivery.length > 0 ? freeDelivery : withDistance}
           viewAllHref="/explore"
+          loading={loading}
         />
 
       </div>
@@ -471,19 +467,19 @@ export default function Home() {
           <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black text-gray-900 mb-1">
-                {t("home.restaurant_map_title", "Bản đồ nhà hàng")}
+                {t("home.restaurant_map_title")}
               </h2>
               <p className="text-sm text-gray-500">
                 {selectedAddress
-                  ? `${t("home.showing_restaurants_near", "Đang hiển thị nhà hàng gần:")} ${selectedAddress.address}`
-                  : t("home.select_location_map", "Chọn vị trí giao hàng để xem khoảng cách")}
+                  ? `${t("home.showing_restaurants_near")} ${selectedAddress.address}`
+                  : t("home.select_location_map")}
               </p>
             </div>
             {selectedAddress && (
               <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-gray-200 shadow-sm self-start">
-                <span className="text-xs font-semibold text-gray-500 px-3">{t("home.radius", "Bán kính:")}</span>
+                <span className="text-xs font-semibold text-gray-500 px-3">{t("home.radius_label")}</span>
                 {[
-                  { label: t("home.radius_all", "Tất cả"), value: 999 },
+                  { label: t("home.radius_all"), value: 999 },
                   { label: "2 km", value: 2 },
                   { label: "5 km", value: 5 },
                   { label: "10 km", value: 10 },
@@ -518,11 +514,11 @@ export default function Home() {
             center={selectedAddress ? [selectedAddress.lat, selectedAddress.lng] : [16.054404, 108.202167]}
             zoom={selectedAddress ? 15 : 13}
             onMapClick={(lat, lng) => dispatch(reverseGeocodeCoords({ lat, lng }))}
-            className="h-96 w-full rounded-3xl overflow-hidden shadow-md border border-gray-200"
+            className="h-64 sm:h-80 md:h-96 w-full rounded-3xl overflow-hidden shadow-md border border-gray-200"
           >
             <UserMarker position={selectedAddress} addressName={selectedAddress?.address} />
             <RestaurantMarkers
-              restaurants={visibleRestaurants}
+              restaurants={mappedMarkers}
               onSelectRestaurant={(rest) => navigate(`/restaurant/${rest.id}`)}
             />
           </MapView>
@@ -539,12 +535,12 @@ export default function Home() {
             <p className="text-gray-500">{t("home.curated_by_ai")}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { label: t("home.trending_now"), img: IMGS.ramen, name: "Tonkotsu Ramen", rest: "Ramen House", price: "$14.99", badge: t("home.trending") },
-              { label: t("home.ai_pick"), img: IMGS.pizza, name: "Margherita Pizza", rest: "Pizza Palazzo", price: "$18.99", badge: t("home.ai_recommended") },
-              { label: `⚡ ${t("home.flash_sale")}`, img: IMGS.sushi, name: "Sashimi Deluxe", rest: "Sushi Zen", price: "~~$32.00~~ $22.40", badge: t("home.discount_30_off") },
-            ].map((item) => (
-              <div key={item.name} className="relative group cursor-pointer" onClick={() => navigate("/explore")}>
+            {todaysPicks.map((item) => (
+              <div
+                key={item.name}
+                className="relative group cursor-pointer"
+                onClick={() => item.restId ? navigate(`/restaurant/${item.restId}`) : navigate("/explore")}
+              >
                 <div className="relative h-56 rounded-3xl overflow-hidden mb-4">
                   <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
@@ -571,11 +567,22 @@ export default function Home() {
             <h2 className="text-4xl font-black text-gray-900 mb-3">{t("home.everything_need")}</h2>
             <p className="text-gray-500 max-w-xl mx-auto">{t("home.platform_built")}</p>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {featuresWithTranslations.map((f, i) => (
               <div
                 key={i}
-                className={`relative overflow-hidden rounded-3xl p-6 border border-gray-100 hover:shadow-lg transition-all group ${f.large ? "col-span-2" : ""}`}
+                onClick={() => {
+                  if (f.key === "group") {
+                    navigate("/cart");
+                  } else if (f.key === "tracking" || f.key === "rewards" || f.key === "payments") {
+                    navigate("/profile");
+                  } else if (f.key === "community") {
+                    navigate("/community");
+                  } else {
+                    navigate("/explore");
+                  }
+                }}
+                className={`relative overflow-hidden rounded-3xl p-6 border border-gray-100 hover:shadow-lg hover:-translate-y-1 transition-all group cursor-pointer ${f.large ? "sm:col-span-2" : ""}`}
                 style={{ background: `${f.color}08` }}
               >
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4 text-white" style={{ background: `${f.color}20`, color: f.color }}>
@@ -769,7 +776,7 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map((t, i) => (
-              <div key={i} className="bg-gray-50 rounded-3xl p-7 hover:shadow-lg transition-all">
+              <div key={i} className="bg-gray-50 rounded-3xl p-7 hover:shadow-lg transition-all cursor-pointer">
                 <div className="flex gap-0.5 mb-4">
                   {[...Array(t.rating)].map((_, j) => <Star key={j} className="w-4 h-4 fill-yellow-400 text-yellow-400" />)}
                 </div>
@@ -801,7 +808,7 @@ export default function Home() {
           <div className="space-y-3">
             {faqItems.map((item, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                <button className="w-full flex items-center justify-between p-6 text-left" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                <button className="w-full flex items-center justify-between p-6 text-left cursor-pointer" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
                   <span className="font-semibold text-gray-900">{item.q}</span>
                   <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${openFaq === i ? "rotate-90" : ""}`} />
                 </button>

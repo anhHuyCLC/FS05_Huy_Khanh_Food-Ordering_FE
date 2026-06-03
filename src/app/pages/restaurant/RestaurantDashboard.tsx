@@ -49,36 +49,13 @@
   import { Can } from "../../components/auth/Can";
   import { PERMISSIONS } from "../../constants/permissions";
 
-  const statusConfig: Record<
-    string,
-    { label: string; color: string; bg: string }
-  > = {
-    pending: { label: "New Order", color: "#6366F1", bg: "#EEF2FF" },
-    accepted: { label: "Accepted", color: "#F59E0B", bg: "#FFFBEB" },
-    preparing: { label: "Preparing", color: "#F59E0B", bg: "#FFFBEB" },
-    ready: { label: "Ready", color: "#10B981", bg: "#F0FDF4" },
-    delivering: { label: "Delivering", color: "#10B981", bg: "#F0FDF4" },
-    completed: { label: "Completed", color: "#10B981", bg: "#F0FDF4" },
-    cancelled: { label: "Cancelled", color: "#EF4444", bg: "#FEF2F2" },
-  };
-
-  /** Tính thời gian tương đối (vd: "5 phút trước") */
-  function timeAgo(dateStr: string, t: (key: string) => string): string {
-    const now = new Date();
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "";
-    const diffMs = now.getTime() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-
-    if (diffMin < 1) return t("common.just_now") || "Vừa xong";
-    if (diffMin < 60)
-      return `${diffMin} ${t("restaurant_dashboard.minutes_ago") || "phút trước"}`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24)
-      return `${diffHour} ${t("restaurant_dashboard.hours_ago") || "giờ trước"}`;
-    const diffDay = Math.floor(diffHour / 24);
-    return `${diffDay} ${t("restaurant_dashboard.days_ago") || "ngày trước"}`;
-  }
+  import {
+    ComboSuggestionsWidget,
+  } from "../../components/restaurant/RestaurantComponents";
+  import {
+    statusConfig,
+    timeAgo,
+  } from "../../components/restaurant/RestaurantUtils";
   // const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
   //   pending: { dot: "bg-gray-400", label: "Chờ xác nhận" },
   //   accepted: { dot: "bg-blue-500", label: "Đã nhận đơn" },
@@ -195,6 +172,24 @@
         active = false;
       };
     }, [t]);
+
+    const handleToggleStatus = async () => {
+      if (!myRestaurant) return;
+      const newStatus = !myRestaurant.isActive;
+      try {
+        const updated = await restaurantService.updateRestaurantStatus(newStatus);
+        setMyRestaurant(updated);
+        toast.success(
+          newStatus
+            ? "Đã mở cửa nhận đơn hàng!"
+            : "Đã đóng cửa ngưng nhận đơn!"
+        );
+      } catch (error) {
+        console.error("Lỗi khi cập nhật trạng thái hoạt động:", error);
+        toast.error("Không thể cập nhật trạng thái hoạt động");
+      }
+    };
+
     // ── Lấy đơn hàng ──────────────────────────────────────────────────────
 
     const fetchOrders = useCallback(
@@ -517,11 +512,6 @@
         path: "/restaurant-dashboard/menu",
       },
       {
-        icon: "💰",
-        label: t("restaurant_dashboard.nav.pricing") || "Định giá",
-        path: "/restaurant-dashboard/pricing",
-      },
-      {
         icon: "🎯",
         label: t("restaurant_dashboard.nav.promotions") || "Khuyến mãi",
         path: "/restaurant-dashboard/promotions",
@@ -542,7 +532,6 @@
       "/restaurant-dashboard": PERMISSIONS.RESTAURANT_PROFILE.READ,
       "/restaurant-dashboard/orders": PERMISSIONS.ORDER.READ,
       "/restaurant-dashboard/menu": PERMISSIONS.MENU.READ,
-      "/restaurant-dashboard/pricing": PERMISSIONS.MENU.READ,
       "/restaurant-dashboard/promotions": PERMISSIONS.MENU.READ,
       "/restaurant-dashboard/analytics": PERMISSIONS.RESTAURANT_PROFILE.READ,
       "/restaurant-dashboard/settings": PERMISSIONS.RESTAURANT_PROFILE.UPDATE,
@@ -1462,97 +1451,22 @@
               </div>
 
               {/* AI Combo Suggestions Section */}
-              <div className="mt-8 border-t border-gray-100 pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xl">🤖</span>
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-base">
-                      Gợi ý Combo từ Trí tuệ Nhân tạo (AI)
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      Hệ thống phân tích lịch sử đơn hàng của khách hàng để tự
-                      động đề xuất kết hợp các món ăn bán chạy cùng nhau.
-                    </p>
-                  </div>
-                </div>
-
-                {loadingCombos ? (
-                  <div className="flex items-center justify-center h-32 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                    <div className="animate-spin w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full" />
-                  </div>
-                ) : comboSuggestions.length === 0 ? (
-                  <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 text-xs shadow-sm">
-                    Chưa có đủ dữ liệu lịch sử đơn hàng để phân tích gợi ý combo.
-                  </div>
-                ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {comboSuggestions.map((combo, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between h-52 hover:shadow-md transition-all"
-                      >
-                        <div>
-                          <div className="flex justify-between items-start gap-2 mb-2">
-                            <h4 className="font-bold text-sm text-gray-800 line-clamp-1">
-                              {combo.name}
-                            </h4>
-                            <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold border border-blue-100 shrink-0 capitalize">
-                              {combo.reason}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2 mt-3">
-                            {combo.items?.map((item, itemIdx) => (
-                              <div
-                                key={item.id || itemIdx}
-                                className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-xl border border-gray-100 text-xs"
-                              >
-                                {item.imageUrl && (
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.name}
-                                    className="w-5 h-5 rounded-md object-cover shrink-0"
-                                  />
-                                )}
-                                <span className="font-medium text-gray-700 truncate max-w-20">
-                                  {item.name}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="border-t border-gray-50 pt-3 flex justify-between items-center mt-3">
-                          <div>
-                            <p className="text-[10px] text-gray-400 font-semibold uppercase">
-                              Tổng giá trị combo
-                            </p>
-                            <p className="text-sm font-black text-orange-500 mt-0.5">
-                              {formatMoney(combo.totalPrice)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setPromoForm({
-                                ...promoForm,
-                                code: `COMBO${String(combo.totalPrice).split(".")[0].slice(0, 4)}`,
-                                description: `Khuyến mãi đặc biệt cho Combo ${combo.items?.map((i) => i.name).join(" + ")}`,
-                                discountType: "percentage",
-                                discountValue: "10",
-                                minOrderValue: String(combo.totalPrice),
-                              });
-                              setShowAddPromoModal(true);
-                            }}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded-xl text-xs font-semibold border border-orange-100 transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" /> Tạo khuyến mãi
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ComboSuggestionsWidget
+                loadingCombos={loadingCombos}
+                comboSuggestions={comboSuggestions}
+                formatMoney={formatMoney}
+                onSelectCombo={(combo) => {
+                  setPromoForm({
+                    ...promoForm,
+                    code: `COMBO${String(combo.totalPrice).split(".")[0].slice(0, 4)}`,
+                    description: `Khuyến mãi đặc biệt cho Combo ${combo.items?.map((i) => i.name).join(" + ")}`,
+                    discountType: "percentage",
+                    discountValue: "10",
+                    minOrderValue: String(combo.totalPrice),
+                  });
+                  setShowAddPromoModal(true);
+                }}
+              />
             </div>
           );
         }
@@ -1727,9 +1641,19 @@
                       {myRestaurant?.address || "Địa chỉ chưa cập nhật"}
                     </p>
                     <div className="flex items-center justify-center sm:justify-start gap-3 mt-3">
-                      <span className="px-2.5 py-0.5 bg-green-50 text-green-600 rounded-lg text-xs font-bold border border-green-100 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />{" "}
-                        Đang mở cửa
+                      <span
+                        className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border flex items-center gap-1 ${
+                          myRestaurant?.isActive
+                            ? "bg-green-50 text-green-600 border-green-100"
+                            : "bg-gray-50 text-gray-500 border-gray-200"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            myRestaurant?.isActive ? "bg-green-500" : "bg-gray-400"
+                          }`}
+                        />{" "}
+                        {myRestaurant?.isActive ? "Đang mở cửa" : "Đã đóng cửa"}
                       </span>
                       <span className="text-sm text-yellow-500 font-bold flex items-center gap-1">
                         ★{" "}
@@ -2100,12 +2024,26 @@
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-55 bg-opacity-10 border border-green-200">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-sm font-semibold text-green-600">
-                {t("restaurant_dashboard.restaurant_open") || "Đang mở cửa"}
+            <button
+              onClick={handleToggleStatus}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all duration-300 ${
+                myRestaurant?.isActive
+                  ? "bg-green-55 border-green-200 hover:bg-green-100 text-green-700"
+                  : "bg-gray-50 border-gray-200 hover:bg-gray-200 text-gray-600"
+              }`}
+              title={myRestaurant?.isActive ? "Click để đóng cửa" : "Click để mở cửa"}
+            >
+              <div
+                className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  myRestaurant?.isActive ? "bg-green-500 animate-pulse" : "bg-gray-400"
+                }`}
+              />
+              <span className="text-sm font-semibold">
+                {myRestaurant?.isActive
+                  ? (t("restaurant_dashboard.restaurant_open") || "Đang mở cửa")
+                  : (t("restaurant_dashboard.restaurant_closed") || "Đã đóng cửa")}
               </span>
-            </div>
+            </button>
             <button
               onClick={() => {
                 fetchOrders();

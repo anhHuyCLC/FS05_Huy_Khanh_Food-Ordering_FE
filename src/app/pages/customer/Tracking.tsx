@@ -1,11 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Phone, MessageCircle, Star, CheckCircle, Clock, MapPin, Navigation, ArrowLeft } from "lucide-react";
+import { Phone, MessageCircle, Star, CheckCircle, Clock, ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { orderService } from "../../services/orderService";
 import type { Order } from "../../types/order";
 import { toast } from "sonner";
-import { calculateDistance, getDeliveryTimeText } from "../../utils/geo";
+import { calculateDistance, getDeliveryTimeText, getStableCoords } from "../../utils/geo";
+import { getDriverLocation } from "../../services/driverService";
+import { useAppDispatch, useAppSelector } from "../../stores/store";
+import { fetchRouteInfo } from "../../features/mapThunk";
+import { selectRoute } from "../../features/mapSelectors";
+import MapView from "../../components/map/MapView";
+import UserMarker from "../../components/map/UserMarker";
+import RestaurantMarkers from "../../components/map/RestaurantMarkers";
+import DeliveryRoute from "../../components/map/DeliveryRoute";
+import { Marker, Popup } from "react-leaflet";
+import { driverIcon } from "../../components/map/mapIcons";
 
 export default function Tracking() {
   const navigate = useNavigate();
@@ -15,6 +25,9 @@ export default function Tracking() {
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { t } = useTranslation();
+
+  const dispatch = useAppDispatch();
+  const routeState = useAppSelector(selectRoute);
 
   // Cancel order state
   const [isCancelling, setIsCancelling] = useState(false);
@@ -28,6 +41,81 @@ export default function Tracking() {
   const [driverComment, setDriverComment] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
+  // Real-time driver location
+  const [driverLoc, setDriverLoc] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Resolve restaurant coords
+  const restaurantCoords = useMemo(() => {
+    if (!order?.restaurant) return null;
+    const lat = order.restaurant.latitude ? Number(order.restaurant.latitude) : null;
+    const lon = order.restaurant.longitude ? Number(order.restaurant.longitude) : null;
+    if (lat && lon) return { latitude: lat, longitude: lon };
+    
+    const coords = getStableCoords(order.restaurantId || "restaurant", order.restaurant.name || "Restaurant");
+    return { latitude: coords.latitude, longitude: coords.longitude };
+  }, [order]);
+
+  // Resolve delivery coords
+  const deliveryCoords = useMemo(() => {
+    if (!order) return null;
+    const lat = order.deliveryLatitude ? Number(order.deliveryLatitude) : null;
+    const lon = order.deliveryLongitude ? Number(order.deliveryLongitude) : null;
+    if (lat && lon) return { latitude: lat, longitude: lon };
+    
+    const coords = getStableCoords("delivery", order.deliveryAddress || "Vị trí giao hàng");
+    return { latitude: coords.latitude, longitude: coords.longitude };
+  }, [order]);
+
+  // Poll driver location when order status is delivering or ready
+  useEffect(() => {
+    if (!orderId || !order?.driverId || (order.status !== "delivering" && order.status !== "ready")) {
+      setDriverLoc(null);
+      return;
+    }
+
+    const fetchDriverLocation = async () => {
+      try {
+        const res = await getDriverLocation(order.driverId!);
+        if (res && res.success && res.data) {
+          setDriverLoc(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch driver location:", err);
+      }
+    };
+
+    fetchDriverLocation();
+    const interval = setInterval(fetchDriverLocation, 5000);
+    return () => clearInterval(interval);
+  }, [orderId, order?.driverId, order?.status]);
+
+  // Fetch route info dynamically
+  useEffect(() => {
+    if (restaurantCoords && deliveryCoords) {
+      const startLat = driverLoc ? driverLoc.latitude : restaurantCoords.latitude;
+      const startLon = driverLoc ? driverLoc.longitude : restaurantCoords.longitude;
+      
+      dispatch(
+        fetchRouteInfo({
+          startLat,
+          startLon,
+          endLat: deliveryCoords.latitude,
+          endLon: deliveryCoords.longitude,
+        })
+      );
+    }
+  }, [restaurantCoords, deliveryCoords, driverLoc, dispatch]);
+
+  const mapCenter = useMemo(() => {
+    if (driverLoc && deliveryCoords) {
+      return [(driverLoc.latitude + deliveryCoords.latitude) / 2, (driverLoc.longitude + deliveryCoords.longitude) / 2] as [number, number];
+    }
+    if (restaurantCoords && deliveryCoords) {
+      return [(restaurantCoords.latitude + deliveryCoords.latitude) / 2, (restaurantCoords.longitude + deliveryCoords.longitude) / 2] as [number, number];
+    }
+    return [16.054404, 108.202167] as [number, number]; // default Da Nang center
+  }, [restaurantCoords, deliveryCoords, driverLoc]);
 
   // Calculate dynamic delivery ETA and status description
   const distance = (order?.restaurant?.latitude && order?.restaurant?.longitude && order?.deliveryLatitude && order?.deliveryLongitude)
@@ -99,10 +187,8 @@ export default function Tracking() {
       setOrder(updatedOrder);
       toast.success("Hủy đơn hàng thành công!");
       setShowCancelPrompt(false);
-    } catch (err: unknown) {
-      console.error(err);
-      const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || "Không thể hủy đơn hàng");
+    } catch{
+      toast.error("Không thể hủy đơn hàng. Vui lòng thử lại sau.");
     } finally {
       setIsCancelling(false);
     }
@@ -120,10 +206,8 @@ export default function Tracking() {
       });
       toast.success("Đánh giá của bạn đã được ghi nhận. Cảm ơn bạn!");
       setReviewSubmitted(true);
-    } catch (err: unknown) {
-      console.error(err);
-      const error = err as { response?: { data?: { message?: string } } };
-      toast.error(error.response?.data?.message || "Gửi đánh giá thất bại");
+    } catch {
+      toast.error("Gửi đánh giá thất bại. Vui lòng thử lại sau.");
     } finally {
       setIsSubmittingReview(false);
     }
@@ -331,42 +415,65 @@ export default function Tracking() {
 
         {/* Right: Map + Order Summary */}
         <div className="lg:col-span-2 space-y-5">
-          {/* Map placeholder */}
-          <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm h-64 relative">
-            <div className="w-full h-full" style={{ background: "linear-gradient(135deg, #E8F4FD, #D1EBF6)" }}>
-              {/* Fake map grid */}
-              <div className="absolute inset-0 opacity-20">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="border-b border-blue-300" style={{ height: "12.5%" }} />
-                ))}
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="border-r border-blue-300 absolute top-0 bottom-0" style={{ left: `${(i + 1) * 16.67}%` }} />
-                ))}
+          {/* Real Leaflet Map */}
+          <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm h-64 relative z-10">
+            {restaurantCoords && deliveryCoords ? (
+              <MapView
+                center={mapCenter}
+                zoom={14}
+                className="h-full w-full"
+              >
+                <UserMarker
+                  position={{
+                    lat: deliveryCoords.latitude,
+                    lng: deliveryCoords.longitude,
+                  }}
+                  addressName={order?.deliveryAddress || "Vị trí giao hàng"}
+                />
+                <RestaurantMarkers
+                  restaurants={[
+                    {
+                      id: order?.restaurantId || "restaurant",
+                      name: order?.restaurant?.name || "Restaurant",
+                      address: order?.restaurant?.address || "Restaurant Address",
+                      latitude: restaurantCoords.latitude.toString(),
+                      longitude: restaurantCoords.longitude.toString(),
+                      description: "Điểm lấy hàng",
+                    },
+                  ]}
+                />
+                {driverLoc && (
+                  <Marker position={[driverLoc.latitude, driverLoc.longitude]} icon={driverIcon}>
+                    <Popup>
+                      <div className="p-1">
+                        <p className="font-bold text-xs text-gray-900">Tài xế của bạn</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Đang di chuyển...</p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                )}
+                <DeliveryRoute coordinates={routeState?.coordinates || null} />
+              </MapView>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-50 text-sm text-gray-400">
+                Đang tải bản đồ...
               </div>
-              {/* Route line */}
-              <svg className="absolute inset-0 w-full h-full">
-                <path d="M 30 200 Q 150 100 240 80 Q 280 60 300 40" stroke="#FF4500" strokeWidth="3" fill="none" strokeDasharray="8 4" className="animate-pulse" />
-              </svg>
-              {/* Driver pin */}
-              <div className="absolute" style={{ left: "55%", top: "40%" }}>
-                <div className="w-10 h-10 rounded-full bg-[#FF4500] flex items-center justify-center shadow-lg border-2 border-white">
-                  <Navigation className="w-5 h-5 text-white" />
-                </div>
-              </div>
-              {/* Destination pin */}
-              <div className="absolute" style={{ left: "15%", top: "70%" }}>
-                <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shadow-lg border-2 border-white">
-                  <MapPin className="w-4 h-4 text-white" />
-                </div>
-              </div>
-            </div>
-            <div className="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-2 flex items-center gap-2">
+            )}
+            <div className="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-2 flex items-center gap-2 z-[1000]">
               <Clock className="w-4 h-4 text-[#FF4500]" />
               <span className="text-sm font-semibold text-gray-700">
-                {distance !== null ? `${Math.round(distance * 2 + 10)} phút` : `15-25 phút`}
+                {routeState
+                  ? `${routeState.eta} phút`
+                  : distance !== null
+                    ? `${Math.round(distance * 2 + 10)} phút`
+                    : `15-25 phút`}
               </span>
               <span className="text-xs text-gray-400 ml-auto">
-                {distance !== null ? `${distance.toFixed(1)} km` : ""}
+                {routeState
+                  ? `${(routeState.distance / 1000).toFixed(1)} km`
+                  : distance !== null
+                    ? `${distance.toFixed(1)} km`
+                    : ""}
               </span>
             </div>
           </div>

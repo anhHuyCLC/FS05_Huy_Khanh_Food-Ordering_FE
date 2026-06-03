@@ -39,7 +39,7 @@ interface CartStoreState {
   ) => Promise<void>;
   removeItem: (id: string, restaurantId?: string) => Promise<void>;
   updateQty: (id: string, delta: number, restaurantId?: string) => Promise<void>;
-  clearCart: () => Promise<void>;
+  clearCart: (restaurantId?: string | null) => Promise<void>;
   getTotal: () => number;
   getItemCount: () => number;
   fetchCarts: () => Promise<void>;
@@ -74,12 +74,12 @@ export const useCartStore = create<CartStoreState>()(
 
           if (groupCartToken) {
             const res = await cartService.getCartByToken(groupCartToken);
-            if (res && res.success && res.data) {
-              carts = [res.data];
+            if (res) {
+              carts = [res];
             }
           } else {
             const res = await cartService.getMyCarts();
-            carts = res.data || [];
+            carts = res || [];
           }
 
           const items: CartItem[] = [];
@@ -161,18 +161,10 @@ export const useCartStore = create<CartStoreState>()(
 
           if (!targetCartId) {
             // 1. Get or create the cart for this restaurant
-            const cartRes = await cartService.getOrCreateCart(restaurantId);
-            console.log("cartRes from API:", cartRes);
-            
-            // Safely extract cart supporting nested structure if backend changes
-            type CartOrNested = CartResponse & { cart?: CartResponse };
-            const cartData = cartRes?.data as CartOrNested;
-            const cart = cartData?.cart ?? cartData;
-              
-            console.log("cart object:", cart);
+            const cart = await cartService.getOrCreateCart(restaurantId);
 
             if (!cart || !cart.id) {
-              console.error("Cart or Cart ID is missing in response", cartRes);
+              console.error("Cart or Cart ID is missing in response", cart);
               return;
             }
             targetCartId = cart.id;
@@ -242,7 +234,7 @@ export const useCartStore = create<CartStoreState>()(
         }
       },
 
-      clearCart: async () => {
+      clearCart: async (targetRestaurantId?: string | null) => {
         const currentUser = useAuthStore.getState().user;
         if (!currentUser) return;
 
@@ -252,6 +244,22 @@ export const useCartStore = create<CartStoreState>()(
           if (groupCartToken) {
             // If in a group cart session, just clear it locally and clear items
             set({ items: [], restaurantId: null, restaurantName: null, groupCartId: null, groupCartToken: null });
+          } else if (targetRestaurantId) {
+            // Filter out items of this restaurant
+            const itemsToKeep = get().items.filter(item => item.restaurantId !== targetRestaurantId);
+            const itemsToDelete = get().items.filter(item => item.restaurantId === targetRestaurantId);
+            
+            const uniqueCartIds = Array.from(new Set(itemsToDelete.map((item) => item.cartId).filter(Boolean))) as string[];
+            for (const cartId of uniqueCartIds) {
+              await cartService.deleteCart(cartId);
+            }
+            
+            const firstItem = itemsToKeep[0];
+            set({
+              items: itemsToKeep,
+              restaurantId: firstItem ? (firstItem.restaurantId ?? null) : null,
+              restaurantName: firstItem ? (firstItem.restaurantName ?? null) : null,
+            });
           } else {
             const uniqueCartIds = Array.from(new Set(get().items.map((item) => item.cartId).filter(Boolean))) as string[];
             for (const cartId of uniqueCartIds) {

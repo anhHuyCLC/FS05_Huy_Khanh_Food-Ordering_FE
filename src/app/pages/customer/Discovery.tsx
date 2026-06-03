@@ -2,19 +2,21 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search, MapPin, Brain, ChevronDown,
-  RotateCcw, Gift, ArrowRight, Bell, ShoppingCart,
+  RotateCcw, Gift, ArrowRight,
   Copy, Check, Star, Crown, Zap,
 } from "lucide-react";
 import { Navbar } from "../../components/layout/Navbar";
 import { IMGS } from "../../data/mock";
 import { quickCategories, resolveSlugToKeywords } from "../../data/categories";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
+import { selectSelectedAddress } from "../../features/mapSelectors";
+import { detectCurrentLocation } from "../../features/mapThunk";
 import { calculateDistance } from "../../utils/geo";
 import { Loader2 } from "lucide-react";
 import { orderService } from "../../services/orderService";
-import { mapService } from "../../services/mapService";
 import { useCartStore } from "../../stores/cartStore";
 import { useAuthStore } from "../../stores/authStore";
 import type { Promotion, Order } from "../../types/order";
@@ -106,7 +108,6 @@ const RANK_CONFIG = [
 export default function Discovery() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { items } = useCartStore();
   const user = useAuthStore((state) => state.user);
   const [searchParams, setSearchParams] = useSearchParams();
   const [aiRecommendations, setAiRecommendations] = useState<Restaurant[]>([]);
@@ -121,8 +122,7 @@ export default function Discovery() {
   const [search, setSearch] = useState(qParam);
   const [activeCategory, setActiveCategory] = useState(categoryParam); // slug or "all"
   const [activeFilter, setActiveFilter] = useState("All");
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [userAddress, setUserAddress] = useState<string>("");
+  const selectedAddress = useAppSelector(selectSelectedAddress);
   const [isLocating, setIsLocating] = useState(false);
   const [maxDistance, setMaxDistance] = useState<number>(Infinity);
   const [minRating, setMinRating] = useState<number>(0);
@@ -223,28 +223,84 @@ export default function Discovery() {
       .then((data) => setAiRecommendations(data || []))
       .catch((err) => console.error("Recommendations:", err));
   }, []);
-
-  const cartItemsCount = useMemo(() => items.reduce((acc, item) => acc + item.qty, 0), [items]);
-
-  const handleLocate = () => {
-    if (!navigator.geolocation) { alert("Trình duyệt không hỗ trợ định vị"); return; }
+  const handleLocate = async () => {
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setUserLocation({ lat, lng });
-        try {
-          const addr = await mapService.reverseGeocode(lat, lng);
-          setUserAddress(addr);
-        } catch {
-          setUserAddress(`Tọa độ: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        } finally {
-          setIsLocating(false);
+    try {
+      await dispatch(detectCurrentLocation()).unwrap();
+    } catch (error) {
+      console.error("Failed to locate user:", error);
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const comboItems = useMemo(() => {
+    const list: Array<{
+      id: string;
+      name: string;
+      desc: string;
+      price: number;
+      img: string;
+      restaurantId: string;
+      restaurantName: string;
+    }> = [];
+
+    for (const r of restaurants || []) {
+      if (r.menuItems) {
+        for (const item of r.menuItems) {
+          const isCombo = item.name.toLowerCase().includes("combo") ||
+            (item.category && item.category.name.toLowerCase().includes("combo"));
+          if (isCombo) {
+            list.push({
+              id: item.id,
+              name: item.name,
+              desc: item.description || "",
+              price: Number(item.basePrice),
+              img: item.imageUrl || IMGS.restaurant,
+              restaurantId: r.id,
+              restaurantName: r.name,
+            });
+          }
         }
-      },
-      () => { alert("Không thể lấy vị trí"); setIsLocating(false); }
-    );
+      }
+    }
+    return list;
+  }, [restaurants]);
+
+  const handleOrderCombo = async (combo: {
+    id: string;
+    name: string;
+    desc: string;
+    price: number;
+    img: string;
+    restaurantId: string;
+    restaurantName: string;
+  }) => {
+    const user = useAuthStore.getState().user;
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để đặt hàng!");
+      navigate("/login");
+      return;
+    }
+    try {
+      await useCartStore.getState().addItem(
+        {
+          id: combo.id,
+          name: combo.name,
+          price: combo.price,
+          image: combo.img,
+          desc: combo.desc,
+          selectedOptions: {},
+          optionGroups: [],
+        },
+        combo.restaurantId,
+        combo.restaurantName
+      );
+      toast.success(`Đã thêm ${combo.name} vào giỏ hàng thành công!`);
+      navigate("/cart");
+    } catch (error) {
+      console.error("Lỗi đặt combo:", error);
+    }
   };
 
   // ── Filtering (keyword-based for slugs, name-based for legacy) ───────────
@@ -257,7 +313,7 @@ export default function Discovery() {
       baseResult = baseResult.filter(
         (r) =>
           r.name.toLowerCase().includes(keyword) ||
-          r.categories.some((c) => c.name.toLowerCase().includes(keyword)) ||
+          r.categories?.some((c) => c.name.toLowerCase().includes(keyword)) ||
           r.menuItems?.some((m) => m.name.toLowerCase().includes(keyword))
       );
     }
@@ -267,7 +323,7 @@ export default function Discovery() {
       const keywords = resolveSlugToKeywords(activeCategory);
       if (keywords.length > 0) {
         baseResult = baseResult.filter((r) =>
-          r.categories.some((c) =>
+          r.categories?.some((c) =>
             keywords.some((kw) => c.name.toLowerCase().includes(kw.toLowerCase()))
           )
         );
@@ -287,8 +343,8 @@ export default function Discovery() {
     } else if (activeFilter === t("discovery.under_30_min")) {
       baseResult = baseResult.filter((r) => {
         let dist = Infinity;
-        if (userLocation && r.latitude && r.longitude) {
-          dist = calculateDistance(userLocation.lat, userLocation.lng, Number(r.latitude), Number(r.longitude));
+        if (selectedAddress && r.latitude && r.longitude) {
+          dist = calculateDistance(selectedAddress.lat, selectedAddress.lng, Number(r.latitude), Number(r.longitude));
         }
         return dist < 4;
       });
@@ -297,8 +353,8 @@ export default function Discovery() {
     // Attach distance
     const withDistance = baseResult.map((r) => {
       let dist = Infinity;
-      if (userLocation && r.latitude && r.longitude) {
-        dist = calculateDistance(userLocation.lat, userLocation.lng, Number(r.latitude), Number(r.longitude));
+      if (selectedAddress && r.latitude && r.longitude) {
+        dist = calculateDistance(selectedAddress.lat, selectedAddress.lng, Number(r.latitude), Number(r.longitude));
       }
       return { ...r, distance: dist };
     });
@@ -314,7 +370,7 @@ export default function Discovery() {
     }
 
     return result;
-  }, [activeCategory, restaurants, search, t, minRating, activeFilter, userLocation, maxDistance, sortBy]);
+  }, [activeCategory, restaurants, search, t, minRating, activeFilter, selectedAddress, maxDistance, sortBy]);
 
   const displayedRestaurants = useMemo(
     () => (showAllRestaurants ? filtered : filtered.slice(0, 8)),
@@ -385,33 +441,18 @@ export default function Discovery() {
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 space-y-3">
 
-            {/* Row 1: Address + Cart/Bell */}
+            {/* Row 1: Address */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 max-w-[70%] cursor-pointer group" onClick={handleLocate}>
+              <div className="flex items-center gap-2 max-w-full cursor-pointer group" onClick={handleLocate}>
                 <div className="w-9 h-9 rounded-full bg-orange-50 group-hover:bg-orange-100 flex items-center justify-center shrink-0 transition-colors">
                   {isLocating ? <Loader2 className="w-4 h-4 text-[#FF4500] animate-spin" /> : <MapPin className="w-4 h-4 text-[#FF4500]" />}
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Địa chỉ giao hàng</p>
                   <p className="text-xs sm:text-sm font-bold text-gray-800 truncate mt-1 group-hover:text-[#FF4500] transition-colors">
-                    {userLocation ? (userAddress || `Đã định vị (${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)})`) : "Nhấp định vị vị trí của tôi"}
+                    {selectedAddress ? (selectedAddress.address || `Đã định vị (${selectedAddress.lat.toFixed(4)}, ${selectedAddress.lng.toFixed(4)})`) : "Nhấp định vị vị trí của tôi"}
                   </p>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <button className="relative p-2.5 rounded-2xl bg-gray-50 hover:bg-gray-100 text-gray-500 transition-all active:scale-95">
-                  <Bell className="w-4 h-4" />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white animate-pulse" />
-                </button>
-                <button onClick={() => navigate("/cart")} className="relative p-2.5 rounded-2xl bg-orange-50 hover:bg-orange-100 text-[#FF4500] transition-all active:scale-95">
-                  <ShoppingCart className="w-4 h-4" />
-                  {cartItemsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-5 h-5 bg-gradient-to-r from-[#FF4500] to-[#FF6B35] text-white text-[9px] font-black rounded-full flex items-center justify-center px-1.5 border-2 border-white shadow-sm">
-                      {cartItemsCount}
-                    </span>
-                  )}
-                </button>
               </div>
             </div>
 
@@ -532,7 +573,13 @@ export default function Discovery() {
                   return (
                     <div
                       key={promo.id}
-                      onClick={() => navigate("/")}
+                      onClick={() => {
+                        if (promo.restaurantId) {
+                          navigate(`/restaurant/${promo.restaurantId}`);
+                        } else {
+                          handleCopyCode(promo.code);
+                        }
+                      }}
                       className={`snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br ${isFreeship ? "from-orange-500 to-red-600" : "from-green-500 to-teal-600"} shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]`}
                     >
                       <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
@@ -550,23 +597,51 @@ export default function Discovery() {
                   );
                 })
               )}
-              {/* Hot Combo card – navigate to discovery */}
-              <div
-                onClick={() => setActiveCategory("combo")}
-                className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]"
-              >
-                <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
-                <div className="absolute right-4 top-4 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Hot Combo</div>
-                <div className="h-full flex flex-col justify-between relative z-10">
-                  <div>
-                    <h3 className="text-xl font-black">Combo Gà Giòn Độc Quyền</h3>
-                    <p className="text-xs text-amber-50/90 mt-1">2 Gà Giòn + Pepsi mát lạnh chỉ 59K</p>
+              {/* Dynamic Combo cards */}
+              {comboItems.length === 0 ? (
+                <div
+                  onClick={() => setActiveCategory("combo")}
+                  className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]"
+                >
+                  <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
+                  <div className="absolute right-4 top-4 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Hot Combo</div>
+                  <div className="h-full flex flex-col justify-between relative z-10">
+                    <div>
+                      <h3 className="text-xl font-black">Combo Gà Giòn Độc Quyền</h3>
+                      <p className="text-xs text-amber-50/90 mt-1">2 Gà Giòn + Pepsi mát lạnh chỉ 59K</p>
+                    </div>
+                    <button className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-amber-50 transition-colors w-fit">
+                      Đặt Ngay <ArrowRight className="w-3 h-3" />
+                    </button>
                   </div>
-                  <button className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-amber-50 transition-colors w-fit">
-                    Đặt Ngay <ArrowRight className="w-3 h-3" />
-                  </button>
                 </div>
-              </div>
+              ) : (
+                comboItems.map((combo) => (
+                  <div
+                    key={combo.id}
+                    onClick={() => handleOrderCombo(combo)}
+                    className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]"
+                  >
+                    <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
+                    <div className="absolute right-4 top-4 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Hot Combo</div>
+                    <div className="h-full flex flex-col justify-between relative z-10">
+                      <div>
+                        <h3 className="text-xl font-black truncate">{combo.name}</h3>
+                        <p className="text-xs text-amber-50/90 mt-1 line-clamp-2">{combo.desc}</p>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold bg-white/25 px-2.5 py-1 rounded-xl">{combo.price.toLocaleString("vi-VN")}đ</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOrderCombo(combo); }}
+                          className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-amber-50 transition-colors w-fit"
+                        >
+                          Đặt Ngay <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -614,13 +689,12 @@ export default function Discovery() {
                   <div
                     key={rank.level}
                     onClick={() => setSelectedRankLevel(rank.level)}
-                    className={`snap-start shrink-0 w-48 rounded-2xl p-4 border cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] ${
-                      isCurrent
-                        ? `bg-gradient-to-br ${rank.color} text-white border-transparent shadow-lg`
-                        : isUnlocked
+                    className={`snap-start shrink-0 w-48 rounded-2xl p-4 border cursor-pointer transition-all hover:scale-[1.03] active:scale-[0.98] ${isCurrent
+                      ? `bg-gradient-to-br ${rank.color} text-white border-transparent shadow-lg`
+                      : isUnlocked
                         ? `${rank.bgColor} ${rank.borderColor} hover:shadow-md`
                         : "bg-gray-50 border-gray-100 opacity-60"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-2xl">{rank.emoji}</span>
@@ -687,7 +761,7 @@ export default function Discovery() {
                     onClick={() => navigate(`/restaurant/${r.id}`)}
                     className="flex-shrink-0 w-64 bg-white border border-gray-100 rounded-2xl p-4 flex gap-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-orange-200"
                   >
-                    <img src={r.imageUrl || IMGS.restaurant} alt={r.name} className="w-14 h-14 rounded-xl object-cover" />
+                    <img src={r.logo || IMGS.restaurant} alt={r.name} className="w-14 h-14 rounded-xl object-cover" />
                     <div className="min-w-0 flex-1 flex flex-col justify-between">
                       <div>
                         <h4 className="font-bold text-sm text-gray-800 truncate">{r.name}</h4>
@@ -860,11 +934,10 @@ export default function Discovery() {
                 return (
                   <div
                     key={v.code}
-                    className={`rounded-2xl border-2 border-dashed p-4 flex items-center gap-4 ${
-                      isUnlocked
-                        ? `${selectedRankConfig.bgColor} ${selectedRankConfig.borderColor}`
-                        : "bg-gray-50 border-gray-200 opacity-60"
-                    }`}
+                    className={`rounded-2xl border-2 border-dashed p-4 flex items-center gap-4 ${isUnlocked
+                      ? `${selectedRankConfig.bgColor} ${selectedRankConfig.borderColor}`
+                      : "bg-gray-50 border-gray-200 opacity-60"
+                      }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">

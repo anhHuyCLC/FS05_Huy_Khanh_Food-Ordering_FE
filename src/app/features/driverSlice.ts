@@ -379,7 +379,7 @@ const driverSlice = createSlice({
         if (payload && isAccepted) {
           s.activeOrders = [payload, ...s.activeOrders];
         }
-        const targetId = payload?.id || (payload as any)?.orderId || a.meta?.arg?.orderId;
+        const targetId = payload?.id || a.meta?.arg?.orderId;
         s.availableOrders = s.availableOrders.filter(o => o.id !== targetId);
       })
       .addCase(respondOrderThunk.rejected, s => { s.actionLoading = false; })

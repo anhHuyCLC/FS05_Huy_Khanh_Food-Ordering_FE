@@ -41,6 +41,8 @@ export interface Order {
   createdAt: string;
   completedAt?: string;
   assignmentExpiresAt?: string; // MỚI: countdown timer
+  driverId?: string;
+  currentDriverId?: string | null;
   deliveryAddress?: string;
   deliveryLatitude?: number;
   deliveryLongitude?: number;

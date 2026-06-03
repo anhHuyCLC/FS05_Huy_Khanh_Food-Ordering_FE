@@ -27,10 +27,18 @@ const payMethods = [
 export default function Checkout() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { items, getTotal, clearCart } = useCartStore();
+  const { items, clearCart } = useCartStore();
 
-  // Get restaurantId from items (each item has its own restaurantId from backend)
-  const restaurantId = items.length > 0 ? items[0].restaurantId : null;
+  // Get restaurantId from URL parameter or fall back to first item
+  const queryParams = new URLSearchParams(window.location.search);
+  const queryRestaurantId = queryParams.get("restaurantId");
+
+  const filteredItems = useMemo(() => {
+    if (!queryRestaurantId) return items;
+    return items.filter((item) => item.restaurantId === queryRestaurantId);
+  }, [items, queryRestaurantId]);
+
+  const restaurantId = queryRestaurantId || (filteredItems.length > 0 ? filteredItems[0].restaurantId : null);
 
   const [payMethod, setPayMethod] = useState("card");
   const [promoCode, setPromoCode] = useState("");
@@ -165,8 +173,8 @@ export default function Checkout() {
 
   // Resolve restaurant coords
   const restaurantCoords = useMemo(() => {
-    if (items.length === 0 || !restaurantId) return null;
-    const item = items[0];
+    if (filteredItems.length === 0 || !restaurantId) return null;
+    const item = filteredItems[0];
     let lat = item.restaurantLatitude;
     let lon = item.restaurantLongitude;
     if (!lat || !lon) {
@@ -175,7 +183,7 @@ export default function Checkout() {
       lon = coords.longitude;
     }
     return { latitude: lat, longitude: lon };
-  }, [items, restaurantId]);
+  }, [filteredItems, restaurantId]);
 
   // Resolve delivery coords
   const selectedAddr = useMemo(() => {
@@ -280,9 +288,8 @@ export default function Checkout() {
           setSelectedAddressId(matched.id);
         }
       }
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Không thể lưu địa chỉ");
+    } catch {
+      toast.error("Không thể lưu địa chỉ. Vui lòng thử lại sau.");
     } finally {
       setIsSaving(false);
     }
@@ -317,9 +324,9 @@ export default function Checkout() {
   };
 
   const deliveryFee = useMemo(() => {
-    if (items.length === 0) return 0;
+    if (filteredItems.length === 0) return 0;
 
-    const itemsByRestaurant = items.reduce((acc, item) => {
+    const itemsByRestaurant = filteredItems.reduce((acc, item) => {
       const rId = item.restaurantId || restaurantId || 'unknown';
       const rName = item.restaurantName || 'Restaurant';
       if (!acc[rId]) {
@@ -365,12 +372,12 @@ export default function Checkout() {
     });
 
     return calculatedTotalFee;
-  }, [items, addresses, selectedAddressId, restaurantId]);
+  }, [filteredItems, addresses, selectedAddressId, restaurantId]);
 
   const handlePlaceOrder = async () => {
     try {
       setIsLoading(true);
-      if (items.length === 0 || !restaurantId) {
+      if (filteredItems.length === 0 || !restaurantId) {
         toast.error("Cart is empty or restaurant is missing.");
         setIsLoading(false);
         return;
@@ -402,7 +409,7 @@ export default function Checkout() {
         promotionCode: promoApplied ? promoCode : undefined,
         paymentMethod: payMethod === "vnpay" ? "bank_transfer" : payMethod === "card" ? "e_wallet" : "cash",
         paymentProvider: payMethod === "vnpay" ? "vnpay" : undefined,
-        items: items.map((item) => ({
+        items: filteredItems.map((item) => ({
           menuItemId: item.id,
           quantity: item.qty,
           selectedOptions: item.selectedOptions,
@@ -412,22 +419,23 @@ export default function Checkout() {
 
       const order = await orderService.createOrder(payload);
       toast.success(t('checkout.place_order_success') || "Order placed successfully!");
-      await clearCart();
+      await clearCart(restaurantId);
       
       if (payMethod === "vnpay" && order.paymentUrl) {
         window.location.href = order.paymentUrl;
       } else {
         navigate(`/tracking?orderId=${order.id}`);
       }
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Failed to place order. Note: dummy data is used.");
+    } catch {
+      toast.error("Đặt hàng thất bại. Vui lòng kiểm tra lại thông tin và thử lại.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const subtotal = getTotal();
+  const subtotal = useMemo(() => {
+    return filteredItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  }, [filteredItems]);
   const delivery = routeState ? calculateDeliveryFee(routeState.distance / 1000) : deliveryFee;
 
   const handleApplyPromo = async (codeToApply: string) => {
@@ -451,9 +459,8 @@ export default function Checkout() {
         toast.success("Áp dụng mã giảm giá thành công!");
         setIsPromoModalOpen(false);
       }
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Mã không hợp lệ");
+    } catch {
+      toast.error("Mã giảm giá không hợp lệ hoặc đã hết hạn.");
       setPromoApplied(false);
       setDiscountAmount(0);
     } finally {
@@ -587,8 +594,8 @@ export default function Checkout() {
                     restaurants={[
                       {
                         id: restaurantId || "restaurant",
-                        name: items[0]?.restaurantName || "Restaurant",
-                        address: items[0]?.restaurantAddress || "Restaurant Address",
+                        name: filteredItems[0]?.restaurantName || "Restaurant",
+                        address: filteredItems[0]?.restaurantAddress || "Restaurant Address",
                         latitude: restaurantCoords.latitude.toString(),
                         longitude: restaurantCoords.longitude.toString(),
                         description: "Điểm lấy hàng",
@@ -688,7 +695,7 @@ export default function Checkout() {
             <h2 className="font-bold text-gray-900 mb-5">{t('cart.order_summary')}</h2>
             {/* Items */}
             <div className="space-y-3 mb-5">
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <div key={item.cartItemId || item.id} className="flex items-center gap-3">
                   <img src={item.image} alt={item.name} className="w-10 h-10 rounded-xl object-cover" />
                   <div className="flex-1 min-w-0">
@@ -702,7 +709,7 @@ export default function Checkout() {
 
             {/* Promo code */}
             <div className="flex flex-col gap-2 mb-5">
-              <div className="flex gap-2">
+              <div className="flex items-stretch gap-2">
                 <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
                   <Tag className="w-4 h-4 text-gray-400" />
                   <input
@@ -713,9 +720,10 @@ export default function Checkout() {
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleApplyPromo(promoCode)}
                   disabled={isCheckingPromo}
-                  className="px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+                  className="flex items-center justify-center px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 shrink-0 whitespace-nowrap cursor-pointer"
                   style={{ background: "#FF4500" }}
                 >
                   {isCheckingPromo ? "..." : t('cart.apply')}

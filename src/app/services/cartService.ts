@@ -35,33 +35,41 @@ export interface CartResponse {
   items: CartItemResponse[];
 }
 
+const parseResponse = <T>(response: unknown): T => {
+  const resObj = response as { data?: { success?: boolean; data?: T } };
+  if (resObj && resObj.data && typeof resObj.data === "object" && "success" in resObj.data) {
+    return resObj.data.data !== undefined ? resObj.data.data : (resObj.data as unknown as T);
+  }
+  return resObj?.data as unknown as T;
+};
+
 export const cartService = {
-  getMyCarts: async (): Promise<{ success: boolean; data: CartResponse[]; count: number }> => {
+  getMyCarts: async (): Promise<CartResponse[]> => {
     const response = await apiClient.get("/v1/carts");
-    return response.data.data;
+    return parseResponse<CartResponse[]>(response);
   },
 
-  getCart: async (cartId: string): Promise<{ success: boolean; data: CartResponse }> => {
+  getCart: async (cartId: string): Promise<CartResponse> => {
     const response = await apiClient.get(`/v1/carts/${cartId}`);
-    return response.data.data;
+    return parseResponse<CartResponse>(response);
   },
 
   getOrCreateCart: async (
     restaurantId: string,
     isGroupCart = false
-  ): Promise<{ success: boolean; data: CartResponse; message: string }> => {
+  ): Promise<CartResponse> => {
     const response = await apiClient.post("/v1/carts", { restaurantId, isGroupCart });
-    return response.data.data;
+    return parseResponse<CartResponse>(response);
   },
 
-  deleteCart: async (cartId: string): Promise<{ success: boolean; message: string }> => {
+  deleteCart: async (cartId: string): Promise<{ message: string }> => {
     const response = await apiClient.delete(`/v1/carts/${cartId}`);
-    return response.data.data;
+    return parseResponse<{ message: string }>(response);
   },
 
-  clearCart: async (cartId: string): Promise<{ success: boolean; message: string }> => {
+  clearCart: async (cartId: string): Promise<{ message: string }> => {
     const response = await apiClient.delete(`/v1/carts/${cartId}/clear`);
-    return response.data.data;
+    return parseResponse<{ message: string }>(response);
   },
 
   addItemToCart: async (
@@ -70,44 +78,44 @@ export const cartService = {
     quantity: number,
     selectedOptions?: Record<string, OptionChoice | OptionChoice[]>,
     note?: string
-  ): Promise<{ success: boolean; data: CartItemResponse; message: string }> => {
+  ): Promise<CartItemResponse> => {
     const response = await apiClient.post(`/v1/carts/${cartId}/items`, {
       menuItemId,
       quantity,
       selectedOptions,
       note,
     });
-    return response.data.data;
+    return parseResponse<CartItemResponse>(response);
   },
 
   updateCartItem: async (
     cartId: string,
     cartItemId: string,
     data: { quantity?: number; selectedOptions?: Record<string, OptionChoice | OptionChoice[]>; note?: string }
-  ): Promise<{ success: boolean; data: CartItemResponse; message: string }> => {
+  ): Promise<CartItemResponse> => {
     const response = await apiClient.patch(`/v1/carts/${cartId}/items/${cartItemId}`, data);
-    return response.data.data;
+    return parseResponse<CartItemResponse>(response);
   },
 
   removeCartItem: async (
     cartId: string,
     cartItemId: string
-  ): Promise<{ success: boolean; message: string }> => {
+  ): Promise<{ message: string }> => {
     const response = await apiClient.delete(`/v1/carts/${cartId}/items/${cartItemId}`);
-    return response.data.data;
+    return parseResponse<{ message: string }>(response);
   },
 
   shareCart: async (
     cartId: string
-  ): Promise<{ success: boolean; data: { sessionToken: string }; message: string }> => {
+  ): Promise<{ sessionToken: string }> => {
     const response = await apiClient.post(`/v1/carts/${cartId}/share`);
-    return response.data;
+    return parseResponse<{ sessionToken: string }>(response);
   },
 
   getCartByToken: async (
     token: string
-  ): Promise<{ success: boolean; data: CartResponse }> => {
+  ): Promise<CartResponse> => {
     const response = await apiClient.get(`/v1/carts/share/${token}`);
-    return response.data;
+    return parseResponse<CartResponse>(response);
   },
 };

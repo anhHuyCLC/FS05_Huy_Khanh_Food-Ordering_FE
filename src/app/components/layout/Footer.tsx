@@ -1,12 +1,30 @@
-import { Flame} from "lucide-react";
+import { Flame } from "lucide-react";
 import {
   FaInstagram,
   FaFacebook,
   FaYoutube,
   FaXTwitter,
 } from "react-icons/fa6";
+import { useTranslation } from "react-i18next";
 
 export function Footer() {
+  const { t } = useTranslation();
+
+  const sections = [
+    {
+      title: t("footer.company_title"),
+      links: t("footer.company_links", { returnObjects: true }) as string[],
+    },
+    {
+      title: t("footer.partners_title"),
+      links: t("footer.partners_links", { returnObjects: true }) as string[],
+    },
+    {
+      title: t("footer.legal_title"),
+      links: t("footer.legal_links", { returnObjects: true }) as string[],
+    },
+  ];
+
   return (
     <footer className="bg-[#0F172A] text-white">
       <div className="max-w-7xl mx-auto px-6 py-16">
@@ -20,7 +38,7 @@ export function Footer() {
               <span className="text-xl font-bold">Savour</span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-5 max-w-xs">
-              The premium food ordering platform connecting hungry people with amazing restaurants, fast drivers, and a vibrant food community.
+              {t("footer.about_savour")}
             </p>
             <div className="flex gap-3">
               {[FaXTwitter, FaInstagram, FaFacebook, FaYoutube].map((Icon, i) => (
@@ -32,20 +50,7 @@ export function Footer() {
           </div>
 
           {/* Links */}
-          {[
-            {
-              title: "Company",
-              links: ["About", "Careers", "Blog", "Press", "Contact"],
-            },
-            {
-              title: "Partners",
-              links: ["Restaurant Partners", "Driver Signup", "Pricing", "API Docs"],
-            },
-            {
-              title: "Legal",
-              links: ["Privacy Policy", "Terms of Service", "Cookie Policy", "Accessibility"],
-            },
-          ].map((section) => (
+          {sections.map((section) => (
             <div key={section.title}>
               <h4 className="text-sm font-semibold text-white mb-4">{section.title}</h4>
               <ul className="space-y-2.5">
@@ -63,11 +68,11 @@ export function Footer() {
 
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-gray-500 text-sm">
-            © 2026 Savour Inc. All rights reserved. Built with ❤️ for food lovers.
+            {t("footer.copyright")}
           </p>
           <div className="flex gap-6">
-            <span className="text-gray-500 text-sm">🌍 English (US)</span>
-            <span className="text-gray-500 text-sm">$ USD</span>
+            <span className="text-gray-500 text-sm">{t("footer.language")}</span>
+            <span className="text-gray-500 text-sm">{t("footer.currency")}</span>
           </div>
         </div>
       </div>

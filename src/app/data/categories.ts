@@ -16,6 +16,13 @@ export const quickCategories: QuickCategory[] = [
     keywords: [],
   },
   {
+    id: "combo",
+    name: "Combo",
+    slug: "combo",
+    icon: "🍱",
+    keywords: ["Combo"],
+  },
+  {
     id: "food",
     name: "Đồ ăn",
     slug: "food",

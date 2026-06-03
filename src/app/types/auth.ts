@@ -42,6 +42,8 @@ export interface UserBadge {
 }
 
 export interface UserProfile {
+  phone?: string;
+  avatarUrl?: string;
   rewardPoints?: number;
   badgeLevel?: string;
   achievedBadges?: UserBadge[];

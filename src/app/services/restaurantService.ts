@@ -127,7 +127,11 @@ export const restaurantService = {
   },
   getRecommendations: async (): Promise<Restaurant[]> => {
     const response = await apiClient.get("/v1/restaurant/recommendations");
-    return response.data;
+    return Array.isArray(response.data) ? response.data : (response.data.data || []);
+  },
+  updateRestaurantStatus: async (isActive: boolean): Promise<Restaurant> => {
+    const response = await apiClient.patch("/v1/restaurant/me/status", { isActive });
+    return response.data.data;
   },
 };
 
@@ -147,3 +151,4 @@ export const deletePromotion = restaurantService.deletePromotion;
 export const getComboSuggestions = restaurantService.getComboSuggestions;
 export const togglePromotion = restaurantService.togglePromotion;
 export const getRecommendations = restaurantService.getRecommendations;
+export const updateRestaurantStatus = restaurantService.updateRestaurantStatus;

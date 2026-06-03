@@ -45,3 +45,8 @@ export const getMe = async () => {
     const response = await apiClient.get("/v1/auth/me")
     return normalizeUser(response.data)
 }
+
+export const changePassword = async (currentPassword: string, newPassword: string) => {
+    const response = await apiClient.post("/v1/auth/change-password", { currentPassword, newPassword });
+    return response.data;
+};

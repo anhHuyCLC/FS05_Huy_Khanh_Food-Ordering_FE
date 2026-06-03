@@ -23,17 +23,13 @@ import {
 import { toast } from "sonner";
 import { useAuthStore } from "../../stores/authStore";
 
-const statusColors: Record<string, { color: string; bg: string }> = {
-  delivered: { color: "#10B981", bg: "#F0FDF4" },
-  on_way: { color: "#6366F1", bg: "#EEF2FF" },
-  preparing: { color: "#F59E0B", bg: "#FFFBEB" },
-  cancelled: { color: "#EF4444", bg: "#FEF2F2" },
-  completed: { color: "#10B981", bg: "#F0FDF4" },
-  pending: { color: "#6366F1", bg: "#EEF2FF" },
-  accepted: { color: "#F59E0B", bg: "#FFFBEB" },
-  ready: { color: "#10B981", bg: "#F0FDF4" },
-  delivering: { color: "#10B981", bg: "#F0FDF4" },
-};
+import {
+  FraudAlertsWidget,
+} from "../../components/admin/AdminComponents";
+import {
+  statusColors,
+  formatMoney,
+} from "../../components/admin/AdminUtils";
 
 export default function AdminDashboard() {
   const { t } = useTranslation();
@@ -322,14 +318,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Format Helper
-  const formatMoney = (amount: number | string | null | undefined) => {
-    const numericAmount = Number(amount || 0);
-    if (numericAmount >= 1000) {
-      return `${numericAmount.toLocaleString("vi-VN")}đ`;
-    }
-    return `$${numericAmount.toFixed(2)}`;
-  };
+  // Format Helper imported from AdminComponents
 
   // Sidebar navigation setup
   const translatedNavItems = [
@@ -657,43 +646,11 @@ export default function AdminDashboard() {
             </div>
 
             {/* Fraud Alerts Box */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-gray-50">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-red-500" />
-                  <h2 className="font-bold text-gray-900 text-sm">{t('admin.fraud_alerts')}</h2>
-                </div>
-                {fraudAlerts.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-500">
-                    {fraudAlerts.length} {t('admin.alerts')}
-                  </span>
-                )}
-              </div>
-              <div className="divide-y divide-gray-50">
-                {fraudAlerts.slice(0, 2).map((alert) => (
-                  <div key={alert.id} className="p-4">
-                    <div className="flex items-start justify-between mb-1">
-                      <p className="text-sm font-semibold text-gray-800">{alert.type}</p>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${alert.risk === "High" ? "bg-red-100 text-red-500" : "bg-yellow-100 text-yellow-600"}`}>
-                        {alert.risk}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-2">{alert.detail}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">{alert.time}</span>
-                      <Can permission={PERMISSIONS.ADMIN_MANAGEMENT.UPDATE}>
-                        <button onClick={() => toast.info("Khởi động quy trình điều tra bảo mật tài khoản.")} className="text-xs font-semibold text-red-500 hover:underline">{t('admin.investigate')}</button>
-                      </Can>
-                    </div>
-                  </div>
-                ))}
-                {fraudAlerts.length === 0 && (
-                  <div className="p-6 text-center text-sm text-gray-400">
-                    Hệ thống bảo mật an toàn. Không có cảnh báo.
-                  </div>
-                )}
-              </div>
-            </div>
+            <FraudAlertsWidget
+              fraudAlerts={fraudAlerts}
+              t={t}
+              onInvestigate={() => toast.info("Khởi động quy trình điều tra bảo mật tài khoản.")}
+            />
           </div>
         </div>
 

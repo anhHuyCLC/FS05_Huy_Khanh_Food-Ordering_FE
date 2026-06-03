@@ -23,9 +23,7 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
 
-  // const token = localStorage.getItem("token");
   const token =  localStorage.getItem("token");
-  // console.log("TOKEN =", token);
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
 
@@ -48,7 +46,20 @@ async function request<T>(
     );
   }
 
-  return res.json();
+  const data = await res.json();
+  const isUnwrappedPath =
+    path.startsWith("/location") ||
+    path.startsWith("/heatmap") ||
+    path.startsWith("/route-optimize");
+
+  if (isUnwrappedPath) {
+    return {
+      success: true,
+      data: data as T,
+    };
+  }
+
+  return data;
 }
 
 /* ───────────────── PROFILE ───────────────── */

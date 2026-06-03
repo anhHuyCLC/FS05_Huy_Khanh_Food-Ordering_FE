@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getAuthorizationCodeFromUrl, initGoogleSDK, renderGoogleOneTap, startGoogleOAuthFlow } from '../services/googleOAuth';
 import { useAuthActions } from './useAuth';
+import { toast } from 'sonner';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const REDIRECT_URI = import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/auth/google/callback`;
@@ -65,7 +66,7 @@ export function useGoogleAuth() {
       startGoogleOAuthFlow(GOOGLE_CLIENT_ID, REDIRECT_URI);
     } else {
       console.error("VITE_GOOGLE_CLIENT_ID is not defined in .env file");
-      alert("Chưa cấu hình Google Client ID. Vui lòng kiểm tra lại file .env của bạn.");
+      toast.error("Chưa cấu hình Google Client ID. Vui lòng kiểm tra lại file .env của bạn.");
     }
   }, []);
 
