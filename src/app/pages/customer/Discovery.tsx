@@ -115,12 +115,16 @@ export default function Discovery() {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [selectedRankLevel, setSelectedRankLevel] = useState<string | null>(null);
 
-  // ── URL-driven state (sync on mount) ────────────────────────────────────
+  // ── URL-driven state (derived from searchParams) ────────────────────────
   const categoryParam = searchParams.get("category") ?? "all";
   const qParam = searchParams.get("q") ?? "";
 
+  // Validate slug — graceful fallback to "all"
+  const isValidCategory = categoryParam === "all" || quickCategories.some((c) => c.slug === categoryParam);
+  const activeCategory = isValidCategory ? categoryParam : "all";
+
   const [search, setSearch] = useState(qParam);
-  const [activeCategory, setActiveCategory] = useState(categoryParam); // slug or "all"
+  const [prevParams, setPrevParams] = useState({ category: categoryParam, q: qParam });
   const [activeFilter, setActiveFilter] = useState("All");
   const selectedAddress = useAppSelector(selectSelectedAddress);
   const [isLocating, setIsLocating] = useState(false);
@@ -129,6 +133,13 @@ export default function Discovery() {
   const [sortBy, setSortBy] = useState<string>("Relevance");
   const [scrolled, setScrolled] = useState(false);
   const [showAllRestaurants, setShowAllRestaurants] = useState(false);
+
+  // Sync search state and pagination during render when URL params change
+  if (prevParams.category !== categoryParam || prevParams.q !== qParam) {
+    setPrevParams({ category: categoryParam, q: qParam });
+    setSearch(qParam);
+    setShowAllRestaurants(false);
+  }
 
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
@@ -167,21 +178,8 @@ export default function Discovery() {
     [selectedRankLevel]
   );
 
-  // ── Sync URL params → local state on navigation ──────────────────────────
-  useEffect(() => {
-    const slug = searchParams.get("category") ?? "all";
-    const q = searchParams.get("q") ?? "";
-    // Validate slug — graceful fallback to "all"
-    const isValid = slug === "all" || quickCategories.some((c) => c.slug === slug);
-    setActiveCategory(isValid ? slug : "all");
-    setSearch(q);
-    // Reset pagination on new navigation
-    setShowAllRestaurants(false);
-  }, [searchParams]);
-
   // ── Handle category pill click (in-page, updates URL) ───────────────────
   const handleCategorySelect = (slug: string) => {
-    setActiveCategory(slug);
     setShowAllRestaurants(false);
     const params: Record<string, string> = {};
     if (slug && slug !== "all") params.category = slug;
@@ -433,7 +431,6 @@ export default function Discovery() {
   const handleResetFilters = () => {
     setSearch("");
     setActiveFilter("All");
-    setActiveCategory("all");
     setMinRating(0);
     setMaxDistance(Infinity);
     setSortBy("Relevance");
@@ -618,7 +615,7 @@ export default function Discovery() {
               {/* Dynamic Combo cards */}
               {comboItems.length === 0 ? (
                 <div
-                  onClick={() => setActiveCategory("combo")}
+                  onClick={() => handleCategorySelect("combo")}
                   className="snap-start shrink-0 w-[85%] sm:w-[48%] lg:w-[32%] h-44 rounded-[2rem] p-5 text-white relative overflow-hidden bg-gradient-to-br from-amber-500 to-orange-600 shadow-md cursor-pointer hover:scale-[1.02] transition-transform active:scale-[0.98]"
                 >
                   <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
