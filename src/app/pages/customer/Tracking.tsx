@@ -21,7 +21,6 @@ export default function Tracking() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("orderId");
-  const vnpResponseCode = searchParams.get("vnp_ResponseCode");
   
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -161,21 +160,10 @@ export default function Tracking() {
 
     const fetchOrder = () => {
       orderService.getOrder(orderId)
-        .then(async (data) => {
-          // If VNPay returns an error code (not 00) and order is still pending, cancel it
-          if (vnpResponseCode && vnpResponseCode !== "00" && data.status === "pending") {
-            try {
-              await orderService.cancelOrder(orderId, { reason: "Thanh toán VNPay thất bại hoặc bị hủy." });
-              const updatedData = await orderService.getOrder(orderId);
-              setOrder(updatedData);
-            } catch {
-              // Backend might reject cancellation (e.g. 401/403) expecting IPN to handle it.
-              // We visually set it to cancelled so the user isn't confused.
-              setOrder({ ...data, status: "cancelled", cancelReason: "Thanh toán VNPay thất bại hoặc bị hủy." });
-            }
-          } else {
-            setOrder(data);
-          }
+        .then((data) => {
+          // BE (vnpayReturn) already cancels the order if payment failed/cancelled.
+          // FE just displays whatever status the order has.
+          setOrder(data);
           setIsLoading(false);
         })
         .catch((err) => {
@@ -187,7 +175,7 @@ export default function Tracking() {
     fetchOrder();
     const interval = setInterval(fetchOrder, 4000);
     return () => clearInterval(interval);
-  }, [orderId, vnpResponseCode]);
+  }, [orderId]);
 
   const handleCancelOrder = async () => {
     if (!orderId) return;
