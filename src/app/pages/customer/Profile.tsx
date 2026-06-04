@@ -39,7 +39,7 @@ const getBadgeIcon = (name: string) => {
 export default function Profile() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const [activeTab, setActiveTab] = useState("Orders");
+  const [activeTab, setActiveTab] = useState("orders");
   const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const selectedAddress = useAppSelector(selectSelectedAddress);
@@ -279,10 +279,10 @@ export default function Profile() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === t('profile.addresses')) {
-      fetchAddresses();
+    if (activeTab === "addresses") {
+      setTimeout(() => { fetchAddresses(); }, 0);
     }
-  }, [activeTab, t, fetchAddresses]);
+  }, [activeTab, fetchAddresses]);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -296,11 +296,10 @@ export default function Profile() {
     }
   }, []);
 
+  // Fetch orders on mount to display count in the stats header
   useEffect(() => {
-    if (activeTab === t('profile.orders')) {
-      fetchOrders();
-    }
-  }, [activeTab, t, fetchOrders]);
+    setTimeout(() => { fetchOrders(); }, 0);
+  }, [fetchOrders]);
 
   const fetchFavorites = useCallback(async () => {
     try {
@@ -315,10 +314,10 @@ export default function Profile() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === t('profile.favorites')) {
-      fetchFavorites();
+    if (activeTab === "favorites") {
+      setTimeout(() => { fetchFavorites(); }, 0);
     }
-  }, [activeTab, t, fetchFavorites]);
+  }, [activeTab, fetchFavorites]);
 
   const getAddressIcon = (label: string) => {
     const normalized = label.toLowerCase();
@@ -408,12 +407,12 @@ export default function Profile() {
       .slice(0, 2)
     : "SC";
 
-  const translatedTabs = [
-    t('profile.orders'),
-    t('profile.addresses'),
-    t('profile.favorites'),
-    t('profile.rewards'),
-    t('profile.settings'),
+  const tabs = [
+    { id: "orders", label: t('profile.orders') },
+    { id: "addresses", label: t('profile.addresses') },
+    { id: "favorites", label: t('profile.favorites') },
+    { id: "rewards", label: t('profile.rewards') },
+    { id: "settings", label: t('profile.settings') },
   ];
 
   return (
@@ -471,21 +470,21 @@ export default function Profile() {
         </div>
         {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-6">
-          {translatedTabs.map((tab) => (
+          {tabs.map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === tab ? "text-white" : "bg-white text-gray-600 border border-gray-200"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-2.5 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${activeTab === tab.id ? "text-white" : "bg-white text-gray-600 border border-gray-200"
                 }`}
-              style={activeTab === tab ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
+              style={activeTab === tab.id ? { background: "linear-gradient(135deg, #FF4500, #FF6B35)" } : {}}
             >
-              {tab}
+              {tab.label}
             </button>
           ))}
         </div>
 
         {/* Tab Content */}
-        {activeTab === t('profile.orders') && (
+        {activeTab === "orders" && (
           <div className="space-y-3">
             {isLoadingOrders ? (
               <div className="text-center py-8 text-gray-400 text-sm">Đang tải lịch sử đơn hàng...</div>
@@ -521,7 +520,7 @@ export default function Profile() {
           </div>
         )}
 
-        {activeTab === t('profile.addresses') && (
+        {activeTab === "addresses" && (
           <div className="space-y-3">
             {isLoadingAddresses ? (
               <div className="text-center py-8 text-gray-400 text-sm">Đang tải danh sách địa chỉ...</div>
@@ -579,7 +578,7 @@ export default function Profile() {
           </div>
         )}
 
-        {activeTab === t('profile.favorites') && (
+        {activeTab === "favorites" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
             {isLoadingFavorites ? (
               <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">Đang tải danh sách yêu thích...</div>
@@ -615,7 +614,7 @@ export default function Profile() {
           </div>
         )}
 
-        {activeTab === t('profile.rewards') && (
+        {activeTab === "rewards" && (
           <div>
             {/* Progress */}
             <div className="bg-white rounded-3xl p-6 mb-5 border border-gray-100 shadow-sm">
@@ -707,7 +706,7 @@ export default function Profile() {
           </div>
         )}
 
-        {activeTab === t('profile.settings') && (
+        {activeTab === "settings" && (
           <div className="space-y-3">
             {[
               { icon: "👤", label: t('profile.settings_tabs.personal_info'), sub: t('profile.settings_desc.personal_info'), key: "personal_info" },

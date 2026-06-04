@@ -95,6 +95,7 @@ import {
   clearHistory,
   upsertAvailableOrder,
 } from "../../features/driverSlice";
+import * as driverService from "../../services/driverService";
 import type { DeliveryStatus, EarningsPeriod, Order } from "../../types/driver";
 import React from "react";
 
@@ -192,8 +193,9 @@ export default function DriverDashboard() {
   const { toasts, toast: notify, dismiss } = useToast();
   // ── NEW state ─────────────────────────────────────────────────────────────────
   const [earningPeriod, setEarningPeriod] = useState<EarningsPeriod>("week");
-  // const [editingProfile, setEditingProfile] = useState(false);
-  // const [profileForm, setProfileForm] = useState({ vehicleInfo: "", licensePlate: "", avatarUrl: "" });
+  const [walletModal, setWalletModal] = useState<{ type: "deposit" | "withdraw"; isOpen: boolean }>({ type: "deposit", isOpen: false });
+  const [walletAmount, setWalletAmount] = useState<string>("");
+  const [isWalletLoading, setIsWalletLoading] = useState(false);
   const historySkipRef = useRef(0);
 
   const navItems = [
@@ -685,6 +687,33 @@ export default function DriverDashboard() {
       () => notify.error(t("driver_dashboard.location_permission_denied")),
     );
   }
+
+  const handleWalletAction = async () => {
+    const amount = Number(walletAmount);
+    if (!amount || amount <= 0) {
+      notify.error("Số tiền không hợp lệ");
+      return;
+    }
+    setIsWalletLoading(true);
+    try {
+      if (walletModal.type === "deposit") {
+        await driverService.depositWallet(amount);
+        notify.success(`Nạp ${amount.toLocaleString("vi-VN")}đ thành công!`);
+      } else {
+        await driverService.withdrawWallet(amount);
+        notify.success(`Rút ${amount.toLocaleString("vi-VN")}đ thành công!`);
+      }
+      setWalletModal({ ...walletModal, isOpen: false });
+      setWalletAmount("");
+      dispatch(loadDriverDashboard());
+      dispatch(fetchEarningsThunk(earningPeriod));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Giao dịch thất bại";
+      notify.error(message);
+    } finally {
+      setIsWalletLoading(false);
+    }
+  };
 
   // ── Derived values ────────────────────────────────────────────────────────────
   const totalPending = availableOrders.length;
@@ -1332,17 +1361,45 @@ export default function DriverDashboard() {
                     </p>
                   </div>
 
-                  {/* Số dư ví */}
+                  {/* Số dư ví & Công nợ */}
                   <div className="relative overflow-hidden rounded-2xl bg-violet-950 p-5">
                     <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full bg-violet-400 opacity-10 blur-2xl" />
-                    <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-violet-400">
-                      {t("driver_dashboard.wallet_balance")}
-                    </p>
-                    <p className="mt-2 text-3xl font-black text-white">
-                      {profile
-                        ? `${Number(profile.walletBalance).toLocaleString("vi-VN")}đ`
-                        : "—"}
-                    </p>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-violet-400">
+                          {t("driver_dashboard.wallet_balance")}
+                        </p>
+                        <p className="mt-2 text-3xl font-black text-white">
+                          {profile
+                            ? `${Number(profile.walletBalance).toLocaleString("vi-VN")}đ`
+                            : "—"}
+                        </p>
+                      </div>
+                      {(profile?.codDebt ?? 0) > 0 && (
+                        <div className="text-right">
+                          <p className="text-[9px] font-bold tracking-[0.25em] uppercase text-red-400">
+                            Công nợ COD
+                          </p>
+                          <p className="mt-2 text-lg font-black text-red-400">
+                            -{Number(profile!.codDebt).toLocaleString("vi-VN")}đ
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 flex gap-2 relative z-10">
+                      <button
+                        onClick={() => setWalletModal({ type: "deposit", isOpen: true })}
+                        className="flex-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 py-1.5 text-xs font-bold transition-all"
+                      >
+                        Nạp tiền
+                      </button>
+                      <button
+                        onClick={() => setWalletModal({ type: "withdraw", isOpen: true })}
+                        className="flex-1 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 py-1.5 text-xs font-bold transition-all"
+                      >
+                        Rút tiền
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1766,6 +1823,51 @@ export default function DriverDashboard() {
           </aside>
         </div>
       </div>
+
+      {/* Wallet Modal Overlay */}
+      {walletModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl transform transition-all">
+            <h3 className="text-lg font-black text-neutral-900 mb-2">
+              {walletModal.type === "deposit" ? "Nạp tiền vào ví" : "Rút tiền từ ví"}
+            </h3>
+            <p className="text-xs text-neutral-500 mb-4">
+              {walletModal.type === "deposit"
+                ? "Thanh toán công nợ COD hoặc nạp thêm số dư."
+                : "Rút số dư khả dụng từ ví tài xế."}
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">
+                  Số tiền (VNĐ)
+                </label>
+                <input
+                  type="number"
+                  value={walletAmount}
+                  onChange={(e) => setWalletAmount(e.target.value)}
+                  placeholder="Ví dụ: 100000"
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-bold text-neutral-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setWalletModal({ ...walletModal, isOpen: false })}
+                  className="flex-1 py-3 text-xs font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-all"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleWalletAction}
+                  disabled={isWalletLoading || !walletAmount}
+                  className="flex-1 py-3 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all"
+                >
+                  {isWalletLoading ? "Đang xử lý..." : "Xác nhận"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

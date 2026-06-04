@@ -98,6 +98,9 @@ apiClient.interceptors.response.use(
     }
 
     if (status === 401) {
+      if (requestUrl.includes('/cancel')) {
+        return Promise.reject(error);
+      }
       useAuthStore.getState().clearAuth();
       if (window.location.pathname !== "/login") {
         window.location.assign("/login");

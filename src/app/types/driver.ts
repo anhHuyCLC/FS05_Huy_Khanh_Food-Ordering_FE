@@ -16,6 +16,7 @@ export interface DriverProfile {
   currentStatus: DriverStatus;
   approvalStatus: ApprovalStatus; // MỚI
   walletBalance: number;
+  codDebt?: number;
   rating: number| string;
   commissionRate: number;
   vehicleInfo?: string;
@@ -58,6 +59,11 @@ export interface Order {
     phone: string;
   };
   orderItems?: OrderItem[];
+  payment?: {
+    status?: string;
+    method?: string;
+    amount?: number;
+  }[];
 }
 
 export interface HeatmapItem {
@@ -92,6 +98,7 @@ export interface DailyEarning {
 
 export interface Earnings {
   walletBalance?: number;
+  codDebt?: number;
   commissionRate?: number;
   rating?: number;
   period?: string;

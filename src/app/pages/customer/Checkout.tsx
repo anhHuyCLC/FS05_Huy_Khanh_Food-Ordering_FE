@@ -19,7 +19,6 @@ import DeliveryRoute from "../../components/map/DeliveryRoute";
 import { calculateDistance, getStableCoords, calculateDeliveryFee, getDeliveryTimeText } from "../../utils/geo";
 
 const payMethods = [
-  { id: "card", icon: <CreditCard className="w-5 h-5" />, label: "Credit / Debit Card", sub: "**** **** **** 4242" },
   { id: "vnpay", icon: <Wallet className="w-5 h-5" />, label: "Cổng thanh toán VNPay", sub: "Thanh toán bằng thẻ ATM, thẻ quốc tế hoặc mã QR" },
   { id: "cash", icon: <DollarSign className="w-5 h-5" />, label: "Cash on Delivery", sub: "Pay when your food arrives" },
 ];
@@ -40,7 +39,7 @@ export default function Checkout() {
 
   const restaurantId = queryRestaurantId || (filteredItems.length > 0 ? filteredItems[0].restaurantId : null);
 
-  const [payMethod, setPayMethod] = useState("card");
+  const [payMethod, setPayMethod] = useState("vnpay");
   const [promoCode, setPromoCode] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -57,24 +56,27 @@ export default function Checkout() {
 
   useEffect(() => {
     if (restaurantId) {
-      setIsLoadingPromotions(true);
-      orderService.getPromotions(restaurantId)
-        .then((data) => {
-          setPromotions(data || []);
-        })
-        .catch((err) => {
-          console.error("Failed to load promotions:", err);
-        })
-        .finally(() => {
-          setIsLoadingPromotions(false);
-        });
+      const t = setTimeout(() => {
+        setIsLoadingPromotions(true);
+        orderService.getPromotions(restaurantId)
+          .then((data) => {
+            setPromotions(data || []);
+          })
+          .catch((err) => {
+            console.error("Failed to load promotions:", err);
+          })
+          .finally(() => {
+            setIsLoadingPromotions(false);
+          });
+      }, 0);
+      return () => clearTimeout(t);
     }
   }, [restaurantId]);
 
   // Address states
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
-  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true);
 
   // Modal inline state for quick adding address
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -98,8 +100,8 @@ export default function Checkout() {
   // Debounced search for suggestions inside the modal
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setModalSuggestions([]);
-      return;
+      const t = setTimeout(() => setModalSuggestions([]), 0);
+      return () => clearTimeout(t);
     }
     if (searchQuery === formAddress) {
       return;
@@ -225,7 +227,6 @@ export default function Checkout() {
 
   const fetchAddresses = async () => {
     try {
-      setIsLoadingAddresses(true);
       const data = await addressService.getMyAddresses();
       const dataArray = Array.isArray(data) ? data : [];
       setAddresses(dataArray);
@@ -242,7 +243,10 @@ export default function Checkout() {
   };
 
   useEffect(() => {
-    fetchAddresses();
+    const t = setTimeout(() => {
+      fetchAddresses();
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   const handleQuickAddAddress = async (e?: React.FormEvent) => {
@@ -474,9 +478,8 @@ export default function Checkout() {
   const total = Math.max(0, subtotal - discount + delivery);
 
   const translatedPayMethods = [
-    { ...payMethods[0], label: t('checkout.credit_debit_card') },
-    { ...payMethods[1], label: t('checkout.vnpay', 'Cổng thanh toán VNPay'), sub: t('checkout.vnpay_sub', 'Thanh toán bằng thẻ ATM, thẻ quốc tế hoặc mã QR') },
-    { ...payMethods[2], label: t('checkout.cash_on_delivery'), sub: t('checkout.pay_on_arrival') },
+    { ...payMethods[0], label: t('checkout.vnpay', 'Cổng thanh toán VNPay'), sub: t('checkout.vnpay_sub', 'Thanh toán bằng thẻ ATM, thẻ quốc tế hoặc mã QR') },
+    { ...payMethods[1], label: t('checkout.cash_on_delivery'), sub: t('checkout.pay_on_arrival') },
   ];
 
   return (
@@ -709,22 +712,21 @@ export default function Checkout() {
 
             {/* Promo code */}
             <div className="flex flex-col gap-2 mb-5">
-              <div className="flex items-stretch gap-2">
-                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
-                  <Tag className="w-4 h-4 text-gray-400" />
+              <div className="flex gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 min-w-0">
+                  <Tag className="w-4 h-4 text-gray-400 shrink-0" />
                   <input
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     placeholder={t('cart.promo_code')}
-                    className="bg-transparent text-sm outline-none flex-1 text-gray-600"
+                    className="bg-transparent text-sm outline-none w-full text-gray-600 min-w-0"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => handleApplyPromo(promoCode)}
                   disabled={isCheckingPromo}
-                  className="flex items-center justify-center px-4 py-2 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 shrink-0 whitespace-nowrap cursor-pointer"
-                  style={{ background: "#FF4500" }}
+                  className="px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 shrink-0 whitespace-nowrap bg-orange-600 cursor-pointer"
                 >
                   {isCheckingPromo ? "..." : t('cart.apply')}
                 </button>

@@ -141,6 +141,9 @@ export default function Discovery() {
     setShowAllRestaurants(false);
   }
 
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [modalSearchQuery, setModalSearchQuery] = useState("");
+
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
 
@@ -375,6 +378,35 @@ export default function Discovery() {
     [filtered, showAllRestaurants]
   );
 
+  const modalSearchResults = useMemo(() => {
+    if (!modalSearchQuery.trim()) return [];
+    const keyword = modalSearchQuery.toLowerCase();
+
+    const results: Array<
+      | { type: 'restaurant'; item: Restaurant }
+      | { type: 'dish'; item: NonNullable<Restaurant['menuItems']>[number]; restaurant: Restaurant }
+    > = [];
+
+    for (const r of restaurants) {
+      if (
+        r.name.toLowerCase().includes(keyword) ||
+        r.categories?.some((c) => c.name.toLowerCase().includes(keyword))
+      ) {
+        results.push({ type: 'restaurant', item: r });
+      }
+
+      if (r.menuItems) {
+        for (const m of r.menuItems) {
+          if (m.name.toLowerCase().includes(keyword)) {
+            results.push({ type: 'dish', item: m, restaurant: r });
+          }
+        }
+      }
+    }
+
+    return results.slice(0, 10);
+  }, [modalSearchQuery, restaurants]);
+
   // ── Recent orders ───────────────────────────────────────────────────────
   const recommendedItemImages = useMemo(() => {
     const images: string[] = [];
@@ -473,16 +505,15 @@ export default function Discovery() {
 
             {/* Row 2: Search + Quick Filters */}
             <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-              {/* Search Box */}
-              <div className="flex-1 flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100 focus-within:bg-white transition-all">
+              {/* Search Box Trigger */}
+              <button
+                type="button"
+                onClick={() => setShowSearchModal(true)}
+                className="flex-1 flex items-center justify-center gap-2 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 hover:bg-gray-100 transition-all text-gray-500 shadow-sm"
+              >
                 <Search className="w-5 h-5 text-gray-400 shrink-0" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Bạn muốn ăn gì hôm nay?"
-                  className="flex-1 bg-transparent text-sm font-semibold outline-none text-gray-800 placeholder-gray-400"
-                />
-              </div>
+                <span className="text-sm font-semibold">Tìm kiếm</span>
+              </button>
 
               {/* Quick Filters */}
               <div className="flex flex-wrap gap-2 items-center">
@@ -1042,6 +1073,97 @@ export default function Discovery() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Search Modal ── */}
+      {showSearchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl flex flex-col transform scale-100 transition-all duration-300">
+            <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="flex-1 flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 focus-within:border-orange-300 focus-within:ring-2 focus-within:bg-white transition-all">
+                <Search className="w-5 h-5 text-gray-400 shrink-0" />
+                <input
+                  autoFocus
+                  value={modalSearchQuery}
+                  onChange={(e) => setModalSearchQuery(e.target.value)}
+                  placeholder="Nhập từ khóa tìm kiếm..."
+                  className="flex-1 bg-transparent text-sm font-semibold outline-none text-gray-800 placeholder-gray-400"
+                />
+              </div>
+              <button
+                onClick={() => setShowSearchModal(false)}
+                className="w-10 h-10 shrink-0 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {modalSearchQuery.trim() === "" ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="font-semibold text-sm">Nhập từ khóa để tìm kiếm món ăn hoặc nhà hàng.</p>
+                </div>
+              ) : modalSearchResults.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="font-semibold text-sm">Không tìm thấy kết quả nào cho "{modalSearchQuery}".</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {modalSearchResults.map((result, idx) => {
+                    if (result.type === 'restaurant') {
+                      const r = result.item;
+                      return (
+                        <div
+                          key={`res-${r.id}-${idx}`}
+                          onClick={() => {
+                            setShowSearchModal(false);
+                            navigate(`/restaurant/${r.id}`);
+                          }}
+                          className="flex items-center gap-3 p-3 rounded-2xl hover:bg-orange-50 border border-transparent hover:border-orange-100 cursor-pointer transition-all"
+                        >
+                          <img src={r.imageUrl || IMGS.restaurant} alt={r.name} className="w-12 h-12 rounded-xl object-cover" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-600 shrink-0">Nhà hàng</span>
+                              <h4 className="font-bold text-sm text-gray-800 truncate">{r.name}</h4>
+                            </div>
+                            <p className="text-[10px] text-gray-500 truncate">{r.address}</p>
+                          </div>
+                          <div className="text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-1 rounded-lg shrink-0">
+                            ⭐ {Number(r.rating || 0).toFixed(1)}
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      const m = result.item;
+                      const r = result.restaurant;
+                      return (
+                        <div
+                          key={`dish-${m.id}-${idx}`}
+                          onClick={() => {
+                            setShowSearchModal(false);
+                            navigate(`/restaurant/${r.id}`);
+                          }}
+                          className="flex items-center gap-3 p-3 rounded-2xl hover:bg-orange-50 border border-transparent hover:border-orange-100 cursor-pointer transition-all"
+                        >
+                          <img src={m.imageUrl || IMGS.restaurant} alt={m.name} className="w-12 h-12 rounded-xl object-cover" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-600 shrink-0">Món ăn</span>
+                              <h4 className="font-bold text-sm text-gray-800 truncate">{m.name}</h4>
+                            </div>
+                            <p className="text-[10px] text-gray-500 truncate">Tại: {r.name}</p>
+                          </div>
+                          <div className="text-sm font-bold text-[#FF4500] shrink-0">
+                            {m.basePrice.toLocaleString()}đ
+                          </div>
+                        </div>
+                      );
+                    }
+                  })}
                 </div>
               )}
             </div>

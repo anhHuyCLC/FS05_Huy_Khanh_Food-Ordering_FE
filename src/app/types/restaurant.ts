@@ -45,7 +45,6 @@ export interface ComboSuggestion {
 }
 
 export interface MenuItem {
-    effectivePrice: number;
     id: string;
     restaurantId: string;
     categoryId?: string | null;

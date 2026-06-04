@@ -21,6 +21,7 @@ export default function Tracking() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("orderId");
+  const vnpResponseCode = searchParams.get("vnp_ResponseCode");
   
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,7 +71,7 @@ export default function Tracking() {
   // Poll driver location when order status is delivering or ready
   useEffect(() => {
     if (!orderId || !order?.driverId || (order.status !== "delivering" && order.status !== "ready")) {
-      setDriverLoc(null);
+      setTimeout(() => setDriverLoc(null), 0);
       return;
     }
 
@@ -154,14 +155,27 @@ export default function Tracking() {
 
   useEffect(() => {
     if (!orderId) {
-      setIsLoading(false);
+      setTimeout(() => setIsLoading(false), 0);
       return;
     }
 
     const fetchOrder = () => {
       orderService.getOrder(orderId)
-        .then((data) => {
-          setOrder(data);
+        .then(async (data) => {
+          // If VNPay returns an error code (not 00) and order is still pending, cancel it
+          if (vnpResponseCode && vnpResponseCode !== "00" && data.status === "pending") {
+            try {
+              await orderService.cancelOrder(orderId, { reason: "Thanh toán VNPay thất bại hoặc bị hủy." });
+              const updatedData = await orderService.getOrder(orderId);
+              setOrder(updatedData);
+            } catch {
+              // Backend might reject cancellation (e.g. 401/403) expecting IPN to handle it.
+              // We visually set it to cancelled so the user isn't confused.
+              setOrder({ ...data, status: "cancelled", cancelReason: "Thanh toán VNPay thất bại hoặc bị hủy." });
+            }
+          } else {
+            setOrder(data);
+          }
           setIsLoading(false);
         })
         .catch((err) => {
@@ -173,7 +187,7 @@ export default function Tracking() {
     fetchOrder();
     const interval = setInterval(fetchOrder, 4000);
     return () => clearInterval(interval);
-  }, [orderId]);
+  }, [orderId, vnpResponseCode]);
 
   const handleCancelOrder = async () => {
     if (!orderId) return;
@@ -214,7 +228,8 @@ export default function Tracking() {
   };
 
   const statusRank: Record<string, number> = {
-    pending: 1, accepted: 1,
+    pending: 1,
+    accepted: 2,
     preparing: 2,
     ready: 3,
     delivering: 4,
@@ -222,17 +237,17 @@ export default function Tracking() {
     cancelled: 0
   };
 
-  const currentRank = order ? statusRank[order.status] || 1 : 2;
+  const currentRank = order ? statusRank[order.status] ?? 1 : 1;
 
   const steps = [
-    { id: 1, label: t('tracking.order_confirmed'), desc: `${order?.restaurant?.name || "Restaurant"} ${t('tracking.received_order')}`, icon: "✅", done: currentRank > 1, active: currentRank === 1 },
-    { id: 2, label: t('tracking.preparing'), desc: t('tracking.kitchen_working'), icon: "👨‍🍳", done: currentRank > 2, active: currentRank === 2 },
-    { id: 3, label: t('tracking.driver_picked_up'), desc: `${order?.driver?.profile?.fullName || "Driver"} ${t('tracking.collected')}`, icon: "🛵", done: currentRank > 3, active: currentRank === 3 },
-    { id: 4, label: t('tracking.on_the_way'), desc: `${order?.driver?.profile?.fullName || "Driver"} ${t('tracking.heading_to')}`, icon: "🗺️", done: currentRank > 4, active: currentRank === 4 },
-    { id: 5, label: t('tracking.delivered'), desc: t('tracking.enjoy_meal'), icon: "🎉", done: currentRank === 5, active: currentRank === 5 },
+    { id: 1, label: "Chờ xác nhận", desc: "Đang chờ nhà hàng xác nhận đơn", icon: "⏳", done: currentRank > 1, active: currentRank === 1 },
+    { id: 2, label: "Đang chuẩn bị", desc: `${order?.restaurant?.name || "Nhà hàng"} đang chuẩn bị món`, icon: "👨‍🍳", done: currentRank > 2, active: currentRank === 2 },
+    { id: 3, label: "Chờ tài xế", desc: "Món ăn đã xong, chờ tài xế đến lấy", icon: "📦", done: currentRank > 3, active: currentRank === 3 },
+    { id: 4, label: "Đang giao", desc: order?.driver ? `${order.driver.profile?.fullName || "Tài xế"} đang giao đến bạn` : "Tài xế đang giao đến bạn", icon: "🛵", done: currentRank > 4, active: currentRank === 4 },
+    { id: 5, label: "Hoàn thành", desc: "Chúc bạn ngon miệng!", icon: "🎉", done: currentRank === 5, active: currentRank === 5 },
   ];
 
-  const currentStep = steps.findIndex((s) => s.active) + 1 || 2;
+  const currentStep = steps.findIndex((s) => s.active) + 1 || 1;
 
   return (
     <div className="min-h-screen bg-gray-50">

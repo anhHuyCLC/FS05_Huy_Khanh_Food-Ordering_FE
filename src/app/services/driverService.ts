@@ -198,3 +198,15 @@ export const getEarnings = (
     `/earnings${qs ? `?${qs}` : ""}`
   );
 };
+
+export const depositWallet = (amount: number) =>
+  request<{ walletBalance: number; codDebt: number }>("/wallet/deposit", {
+    method: "POST",
+    body: JSON.stringify({ amount }),
+  });
+
+export const withdrawWallet = (amount: number) =>
+  request<{ walletBalance: number }>("/wallet/withdraw", {
+    method: "POST",
+    body: JSON.stringify({ amount }),
+  });

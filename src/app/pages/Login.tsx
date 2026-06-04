@@ -93,20 +93,17 @@ export default function Login() {
           </div>
 
           {/* Social logins */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="mb-6">
             <button
               onClick={handleGoogleOAuthFlow}
               disabled={googleLoading}
-              className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 hover:bg-gray-50 disabled:opacity-50 transition-colors text-sm font-medium text-gray-700"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 hover:bg-gray-50 disabled:opacity-50 transition-colors text-sm font-medium text-gray-700"
             >
               {googleLoading ? (
-                <span className="spinner-small"></span>
+                <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></span>
               ) : (
                 <>🌐 {t('auth.continue_with_google')}</>
               )}
-            </button>
-            <button className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-gray-200 hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700">
-              🍎 {t('auth.continue_with_apple')}
             </button>
           </div>
 
@@ -159,12 +156,12 @@ export default function Login() {
 
             <button
               type="submit"
-              className="auth-button auth-btn-primary"
+              className="w-full py-3 rounded-2xl text-white font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:shadow-none bg-orange-600 hover:bg-orange-700"
               disabled={loading}
             >
               {loading ? (
-                <span className="button-loading">
-                  <span className="spinner-small"></span>
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
                   Đang đăng nhập...
                 </span>
               ) : (

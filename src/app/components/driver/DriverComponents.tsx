@@ -167,6 +167,7 @@ export function AvailableOrderCard({
   t: (k: string) => string;
 }) {
   const itemCount = order.orderItems?.length ?? 0;
+  const isCOD = order.payment?.[0]?.method === "cash";
   return (
     <div className="group bg-white border border-neutral-100 rounded-xl overflow-hidden hover:border-orange-200 hover:shadow-md transition-all">
       <div className="h-0.5 bg-linear-to-r from-orange-500 via-amber-400 to-orange-300" />
@@ -200,6 +201,12 @@ export function AvailableOrderCard({
             <p className="text-lg font-black text-orange-600">
               {order.finalAmount?.toLocaleString("vi-VN")}đ
             </p>
+            {isCOD && (
+              <div className="mt-1 flex flex-col items-end">
+                <span className="bg-red-100 text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">Đơn COD</span>
+                <p className="text-[10px] text-red-500 font-medium mt-0.5">Thu khách: {order.finalAmount?.toLocaleString("vi-VN")}đ</p>
+              </div>
+            )}
           </div>
         </div>
         {order.assignmentExpiresAt && (
@@ -237,6 +244,7 @@ export function ActiveOrderCard({
   onUpdate: (s: string) => void;
   t: (k: string) => string;
 }) {
+  const isCOD = order.payment?.[0]?.method === "cash";
   const steps = [
     {
       key: "picked_up",
@@ -310,6 +318,12 @@ export function ActiveOrderCard({
             <p className="text-[10px] text-neutral-400 truncate">
               {order.customer.fullName} · {order.customer.phone}
             </p>
+          )}
+          {isCOD && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <span className="bg-red-100 text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">Đơn COD</span>
+              <p className="text-[10px] text-red-600 font-bold">Cần thu: {order.finalAmount?.toLocaleString("vi-VN")}đ</p>
+            </div>
           )}
         </div>
         <span
@@ -436,11 +450,16 @@ export function HistorySection({
                 <p className="text-xs font-black text-emerald-600">
                   +{Number(o.deliveryFee ?? 0).toLocaleString("vi-VN")}đ
                 </p>
-                <span
-                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${o.status === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}
-                >
-                  {o.status}
-                </span>
+                <div className="flex flex-col items-end gap-1 mt-1">
+                  <span
+                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${o.status === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}
+                  >
+                    {o.status}
+                  </span>
+                  {o.payment?.[0]?.method === "cash" && (
+                    <span className="bg-red-100 text-red-600 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">COD</span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
