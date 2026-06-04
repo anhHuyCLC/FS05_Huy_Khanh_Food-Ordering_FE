@@ -57,6 +57,7 @@ export interface MenuItem {
     category?: RestaurantCategory | null;
     optionGroups?: OptionGroup[];
     appliedPromotions?: AppliedPromotion[];
+    effectivePrice?: number;
 }
 
 export interface Restaurant {
