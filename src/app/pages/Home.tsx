@@ -10,7 +10,7 @@ import { Navbar } from "../components/layout/Navbar";
 import { Footer } from "../components/layout/Footer";
 import { testimonials, faqItems, IMGS } from "../data/mock";
 import { useAppDispatch, useAppSelector } from "../stores/store";
-import { fetchRestaurants} from "../features/restaurantSlice";
+import { fetchRestaurants } from "../features/restaurantSlice";
 import AddressAutocomplete from "../components/map/AddressAutocomplete";
 import MapView from "../components/map/MapView";
 import RestaurantMarkers from "../components/map/RestaurantMarkers";
@@ -134,10 +134,45 @@ export default function Home() {
     [withDistance]
   );
 
-  const freeDelivery = useMemo(
-    () => [...withDistance].filter((r) => r.isActive),
-    [withDistance]
-  );
+
+  const topRatedDishes = useMemo(() => {
+    const list: Array<{
+      id: string;
+      name: string;
+      price: string;
+      imageUrl: string;
+      restaurantName: string;
+      restaurantId: string;
+      rating: number;
+    }> = [];
+
+    // Filter restaurants with rating >= 4.0
+    let highRatedRest = [...withDistance]
+      .filter((r) => Number(r.rating || 0) >= 4.0)
+      .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+
+    if (highRatedRest.length === 0) {
+      highRatedRest = [...withDistance].sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+    }
+
+    highRatedRest.forEach((r) => {
+      (r.menuItems ?? []).forEach((item) => {
+        if (item.isAvailable) {
+          list.push({
+            id: item.id,
+            name: item.name,
+            price: `${Number(item.basePrice).toLocaleString("vi-VN")}đ`,
+            imageUrl: item.imageUrl || IMGS.restaurant,
+            restaurantName: r.name,
+            restaurantId: r.id,
+            rating: Number(r.rating || 4.5),
+          });
+        }
+      });
+    });
+
+    return list.slice(0, 8); // Show up to 8 top dishes
+  }, [withDistance]);
 
   const todaysPicks = useMemo(() => {
     const list: Array<{
@@ -150,23 +185,23 @@ export default function Home() {
       badge: string;
     }> = [];
 
-    const itemsWithImages: Array<{ item: MenuItem; r: Restaurant }> = [];
+    const availableItems: Array<{ item: MenuItem; r: Restaurant }> = [];
     (restaurants ?? []).forEach((r) => {
       (r.menuItems ?? []).forEach((item) => {
-        if (item.imageUrl && item.isAvailable) {
-          itemsWithImages.push({ item, r });
+        if (item.isAvailable) {
+          availableItems.push({ item, r });
         }
       });
     });
 
-    const picks = itemsWithImages.slice(0, 3);
+    const picks = availableItems.slice(0, 3);
     const labels = [t("home.trending_now"), t("home.ai_pick"), `⚡ ${t("home.flash_sale")}`];
     const badges = [t("home.trending"), t("home.ai_recommended"), t("home.discount_30_off")];
 
     picks.forEach(({ item, r }, index) => {
       list.push({
         label: labels[index] || t("home.fallback_specialty"),
-        img: item.imageUrl || "",
+        img: item.imageUrl || IMGS.restaurant,
         name: item.name,
         rest: r.name,
         restId: r.id,
@@ -175,13 +210,6 @@ export default function Home() {
       });
     });
 
-    if (list.length === 0) {
-      return [
-        { label: t("home.trending_now"), img: IMGS.ramen, name: "Tonkotsu Ramen", rest: "Ramen House", restId: "", price: "$14.99", badge: t("home.trending") },
-        { label: t("home.ai_pick"), img: IMGS.pizza, name: "Margherita Pizza", rest: "Pizza Palazzo", restId: "", price: "$18.99", badge: t("home.ai_recommended") },
-        { label: `⚡ ${t("home.flash_sale")}`, img: IMGS.sushi, name: "Sashimi Deluxe", rest: "Sushi Zen", restId: "", price: "$22.40", badge: t("home.discount_30_off") },
-      ];
-    }
     return list;
   }, [restaurants, t]);
 
@@ -348,11 +376,10 @@ export default function Home() {
       ═══════════════════════════════════════════════════════════════ */}
       <div
         ref={searchRef}
-        className={`bg-white/97 backdrop-blur-md border-b border-gray-100 sticky top-16 z-40 transition-all duration-500 ease-in-out origin-top ${
-          scrolled
+        className={`bg-white/97 backdrop-blur-md border-b border-gray-100 sticky top-16 z-40 transition-all duration-500 ease-in-out origin-top ${scrolled
             ? "shadow-lg translate-y-0 opacity-100 scale-y-100 max-h-96 py-3"
             : "pointer-events-none -translate-y-4 opacity-0 scale-y-95 max-h-0 overflow-hidden py-0"
-        }`}
+          }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-3">
 
@@ -412,6 +439,68 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Top Rated Dishes Section */}
+        <div className="py-8 border-b border-gray-150/50">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🍜</span>
+              <h2 className="text-xl font-black text-gray-900">
+                {t("home.top_rated_dishes_title")}
+              </h2>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={`dish-skeleton-${i}`} className="bg-white rounded-[2rem] p-4 border border-gray-100 animate-pulse flex flex-col justify-between h-[280px]">
+                  <div>
+                    <div className="h-40 bg-gray-200 rounded-3xl mb-4 w-full" />
+                    <div className="h-4 bg-gray-200 rounded-md w-3/4 mb-2" />
+                    <div className="h-3 bg-gray-200 rounded-md w-1/2" />
+                  </div>
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
+                    <div className="h-5 bg-gray-200 rounded-md w-1/4" />
+                    <div className="h-7 bg-gray-200 rounded-full w-1/3" />
+                  </div>
+                </div>
+              ))
+            ) : topRatedDishes.length > 0 ? (
+              topRatedDishes.map((dish, i) => (
+                <div
+                  key={`${dish.id}-${i}`}
+                  className="bg-white rounded-[2rem] p-4 border border-gray-100 hover:shadow-xl hover:scale-[1.02] active:scale-[0.99] transition-all duration-300 cursor-pointer group flex flex-col justify-between"
+                  onClick={() => dish.restaurantId && navigate(`/restaurant/${dish.restaurantId}`)}
+                >
+                  <div>
+                    <div className="relative h-40 rounded-3xl overflow-hidden mb-4 bg-gray-50">
+                      <img
+                        src={dish.imageUrl}
+                        alt={dish.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute top-3 right-3 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-xl text-[10px] font-bold text-yellow-400 flex items-center gap-0.5 shadow-sm">
+                        ★ {dish.rating}
+                      </div>
+                    </div>
+                    <h3 className="font-extrabold text-gray-800 text-sm line-clamp-1 group-hover:text-[#FF4500] transition-colors">{dish.name}</h3>
+                    <p className="text-xs text-gray-400 line-clamp-1 mt-1">{dish.restaurantName}</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
+                    <span className="font-black text-base text-[#FF4500]">{dish.price}</span>
+                    <span className="text-[10px] font-bold px-3 py-1.5 rounded-full bg-orange-50 text-[#FF4500] group-hover:bg-[#FF4500] group-hover:text-white transition-all duration-300">
+                      {t("home.order_food_now")}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-8 text-center text-gray-500 font-medium bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
+                {t("home.no_dishes_available")}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* C. Nearby Restaurants */}
         <RestaurantRow
           title={t("home.nearby_title")}
@@ -425,16 +514,15 @@ export default function Home() {
         <RestaurantRow
           title={t("home.top_rated_title")}
           icon="⭐"
-          restaurants={topRated.length > 0 ? topRated : trending}
+          restaurants={(topRated.length > 0 ? topRated : trending).slice(0, 5)}
           viewAllHref="/explore"
           loading={loading}
         />
-
         {/* E. Fast Delivery */}
         <RestaurantRow
           title={t("home.fast_delivery_title")}
           icon="⚡"
-          restaurants={fastDelivery.length > 0 ? fastDelivery : withDistance}
+          restaurants={(fastDelivery.length > 0 ? fastDelivery : withDistance).slice(0, 5)}
           viewAllHref="/explore"
           loading={loading}
         />
@@ -448,14 +536,14 @@ export default function Home() {
           loading={loading}
         />
 
-        {/* G. Free Delivery */}
+        {/* G. Free Delivery
         <RestaurantRow
           title={t("home.free_delivery_title")}
           icon="🚚"
           restaurants={freeDelivery.length > 0 ? freeDelivery : withDistance}
           viewAllHref="/explore"
           loading={loading}
-        />
+        /> */}
 
       </div>
 
@@ -535,25 +623,42 @@ export default function Home() {
             <p className="text-gray-500">{t("home.curated_by_ai")}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {todaysPicks.map((item) => (
-              <div
-                key={item.name}
-                className="relative group cursor-pointer"
-                onClick={() => item.restId ? navigate(`/restaurant/${item.restId}`) : navigate("/explore")}
-              >
-                <div className="relative h-56 rounded-3xl overflow-hidden mb-4">
-                  <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <span className="absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-bold text-white bg-white/20 backdrop-blur-md border border-white/30">{item.badge}</span>
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <p className="text-white font-bold text-lg">{item.name}</p>
-                    <p className="text-white/70 text-sm">{item.rest}</p>
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={`pick-skeleton-${i}`} className="animate-pulse bg-gray-50 border border-gray-100 rounded-[2rem] h-80 flex flex-col justify-between p-6">
+                  <div className="h-4 bg-gray-200 rounded-full w-24 mb-2" />
+                  <div className="space-y-3 mt-auto">
+                    <div className="h-6 bg-gray-200 rounded w-2/3" />
+                    <div className="h-4 bg-gray-200 rounded w-1/2" />
+                    <div className="h-4 bg-gray-200 rounded w-1/4 mt-4" />
                   </div>
                 </div>
-                <p className="text-xs text-gray-400 mb-1">{item.label}</p>
-                <p className="font-bold text-gray-900">{item.price}</p>
+              ))
+            ) : todaysPicks.length > 0 ? (
+              todaysPicks.map((item, i) => (
+                <div
+                  key={`${item.name}-${i}`}
+                  className="relative group cursor-pointer"
+                  onClick={() => item.restId ? navigate(`/restaurant/${item.restId}`) : navigate("/explore")}
+                >
+                  <div className="relative h-56 rounded-3xl overflow-hidden mb-4">
+                    <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <span className="absolute top-4 left-4 px-3 py-1 rounded-full text-xs font-bold text-white bg-white/20 backdrop-blur-md border border-white/30">{item.badge}</span>
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <p className="text-white font-bold text-lg">{item.name}</p>
+                      <p className="text-white/70 text-sm">{item.rest}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-1">{item.label}</p>
+                  <p className="font-bold text-gray-900">{item.price}</p>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-12 text-center text-gray-500 font-medium bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
+                {t("home.no_picks_available")}
               </div>
-            ))}
+            )}
           </div>
         </div>
       </section>

@@ -16,14 +16,27 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuthActions } from "../hooks/useAuth";
 import { useAuthStore } from "../stores/authStore";
 
 const CUISINE_TYPES = [
-  "Việt Nam", "Nhật Bản", "Hàn Quốc", "Trung Hoa",
-  "Ý", "Mỹ", "Thái Lan", "Ấn Độ",
-  "Đồ nướng", "Hải sản", "Chay / Thuần chay", "Đồ uống & Tráng miệng",
-  "Fastfood", "Pizza", "Ramen", "Khác",
+  { value: "Việt Nam", labelKey: "auth.cuisine_types.vietnamese" },
+  { value: "Nhật Bản", labelKey: "auth.cuisine_types.japanese" },
+  { value: "Hàn Quốc", labelKey: "auth.cuisine_types.korean" },
+  { value: "Trung Hoa", labelKey: "auth.cuisine_types.chinese" },
+  { value: "Ý", labelKey: "auth.cuisine_types.italian" },
+  { value: "Mỹ", labelKey: "auth.cuisine_types.american" },
+  { value: "Thái Lan", labelKey: "auth.cuisine_types.thai" },
+  { value: "Ấn Độ", labelKey: "auth.cuisine_types.indian" },
+  { value: "Đồ nướng", labelKey: "auth.cuisine_types.bbq" },
+  { value: "Hải sản", labelKey: "auth.cuisine_types.seafood" },
+  { value: "Chay / Thuần chay", labelKey: "auth.cuisine_types.vegan" },
+  { value: "Đồ uống & Tráng miệng", labelKey: "auth.cuisine_types.drinks" },
+  { value: "Fastfood", labelKey: "auth.cuisine_types.fastfood" },
+  { value: "Pizza", labelKey: "auth.cuisine_types.pizza" },
+  { value: "Ramen", labelKey: "auth.cuisine_types.ramen" },
+  { value: "Khác", labelKey: "auth.cuisine_types.other" },
 ];
 
 const OPEN_HOURS = [
@@ -36,13 +49,12 @@ const CLOSE_HOURS = [
   "22:00", "22:30", "23:00", "23:30", "00:00",
 ];
 
-const steps = [
-  { id: 1, label: "Tài khoản" },
-  { id: 2, label: "Nhà hàng" },
-  { id: 3, label: "Hoàn tất" },
-];
+interface Step {
+  id: number;
+  label: string;
+}
 
-function StepIndicator({ current }: { current: number }) {
+function StepIndicator({ current, steps }: { current: number; steps: Step[] }) {
   return (
     <div className="flex items-center gap-0 mb-8">
       {steps.map((s, i) => (
@@ -108,6 +120,7 @@ interface FormData {
 
 export default function RegisterRestaurant() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +132,12 @@ export default function RegisterRestaurant() {
   useEffect(() => {
     if (user) navigate("/");
   }, [user, navigate]);
+
+  const steps = [
+    { id: 1, label: t("auth.step_account") },
+    { id: 2, label: t("auth.step_restaurant") },
+    { id: 3, label: t("auth.step_complete") },
+  ];
 
   const [form, setForm] = useState<FormData>({
     firstname: "",
@@ -135,38 +154,89 @@ export default function RegisterRestaurant() {
     restaurantDescription: "",
   });
 
-  const update = (key: keyof FormData, value: string) =>
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const update = (key: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
 
   const validateStep1 = () => {
-    if (!form.firstname.trim()) return "Vui lòng nhập họ";
-    if (!form.lastname.trim()) return "Vui lòng nhập tên";
-    if (!form.email.trim()) return "Vui lòng nhập email";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      return "Email không hợp lệ";
-    if (!form.phonenumber.trim()) return "Vui lòng nhập số điện thoại";
-    if (form.password.length < 8) return "Mật khẩu phải có ít nhất 8 ký tự";
-    if (form.password !== form.confirmpassword)
-      return "Mật khẩu xác nhận không khớp";
-    return null;
+    const newErrors: Record<string, string> = {};
+    const nameRegex = /^[\p{L}\s]+$/u;
+
+    if (!form.firstname.trim()) {
+      newErrors.firstname = t("auth.errors.firstname_required");
+    } else if (!nameRegex.test(form.firstname.trim())) {
+      newErrors.firstname = t("auth.errors.firstname_invalid");
+    }
+
+    if (!form.lastname.trim()) {
+      newErrors.lastname = t("auth.errors.lastname_required");
+    } else if (!nameRegex.test(form.lastname.trim())) {
+      newErrors.lastname = t("auth.errors.lastname_invalid");
+    }
+
+    if (!form.email.trim()) {
+      newErrors.email = t("auth.errors.email_required");
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      newErrors.email = t("auth.errors.email_invalid");
+    }
+
+    if (!form.phonenumber.trim()) {
+      newErrors.phonenumber = t("auth.errors.phone_required");
+    } else if (!/^(0|\+84)[35789][0-9]{8}$/.test(form.phonenumber)) {
+      newErrors.phonenumber = t("auth.errors.phone_invalid");
+    }
+
+    if (!form.password) {
+      newErrors.password = t("auth.errors.password_required");
+    } else if (form.password.length < 8) {
+      newErrors.password = t("auth.errors.password_min");
+    }
+
+    if (!form.confirmpassword) {
+      newErrors.confirmpassword = t("auth.errors.confirm_password_required");
+    } else if (form.password !== form.confirmpassword) {
+      newErrors.confirmpassword = t("auth.errors.confirm_password_mismatch");
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const validateStep2 = () => {
-    if (!form.restaurantName.trim()) return "Vui lòng nhập tên nhà hàng";
-    if (!form.restaurantAddress.trim()) return "Vui lòng nhập địa chỉ nhà hàng";
-    if (!form.cuisineType) return "Vui lòng chọn loại ẩm thực";
-    return null;
+    const newErrors: Record<string, string> = {};
+
+    if (!form.restaurantName.trim()) {
+      newErrors.restaurantName = t("auth.errors.restaurant_name_required");
+    }
+    if (!form.restaurantAddress.trim()) {
+      newErrors.restaurantAddress = t("auth.errors.restaurant_address_required");
+    }
+    if (!form.cuisineType) {
+      newErrors.cuisineType = t("auth.errors.cuisine_type_required");
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleNextStep = () => {
     setError(null);
     if (step === 1) {
-      const err = validateStep1();
-      if (err) { setError(err); return; }
+      const isValid = validateStep1();
+      if (!isValid) return;
     }
     if (step === 2) {
-      const err = validateStep2();
-      if (err) { setError(err); return; }
+      const isValid = validateStep2();
+      if (!isValid) return;
     }
     setStep((s) => s + 1);
   };
@@ -194,14 +264,11 @@ export default function RegisterRestaurant() {
       });
       navigate("/login", {
         state: {
-          successMessage:
-            "Đăng ký nhà hàng thành công! Tài khoản đang chờ được phê duyệt.",
+          successMessage: t("auth.register_restaurant_success"),
         },
       });
-    } catch{
-      setError(
-        "Đăng ký nhà hàng thất bại. Email có thể đã được sử dụng hoặc thông tin không hợp lệ."
-      );
+    } catch {
+      setError(t("auth.register_restaurant_failed"));
       setStep(1);
     } finally {
       setLoading(false);
@@ -225,16 +292,16 @@ export default function RegisterRestaurant() {
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-100 mb-3">
             <Store className="w-4 h-4 text-orange-600" />
             <span className="text-sm font-semibold text-orange-700">
-              Đăng ký đối tác nhà hàng
+              {t("auth.restaurant_register_title")}
             </span>
           </div>
           <p className="text-gray-500 text-sm">
-            Mở rộng kinh doanh, tiếp cận hàng nghìn khách hàng mới
+            {t("auth.restaurant_register_subtitle")}
           </p>
         </div>
 
         {/* Step Indicator */}
-        <StepIndicator current={step} />
+        <StepIndicator current={step} steps={steps} />
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
           {/* ── STEP 1: Account Info ── */}
@@ -251,10 +318,10 @@ export default function RegisterRestaurant() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-gray-900">
-                    Thông tin chủ sở hữu
+                    {t("auth.restaurant_owner_info")}
                   </h2>
                   <p className="text-xs text-gray-400">
-                    Thông tin cá nhân của bạn
+                    {t("auth.restaurant_owner_info_desc")}
                   </p>
                 </div>
               </div>
@@ -262,70 +329,103 @@ export default function RegisterRestaurant() {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Họ <span className="text-red-400">*</span>
+                    {t("auth.firstname")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Nguyễn"
+                    placeholder={t("auth.firstname_placeholder")}
                     value={form.firstname}
                     onChange={(e) => update("firstname", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.firstname
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    }`}
                   />
+                  {errors.firstname && (
+                    <p className="text-xs text-red-500 mt-1">{errors.firstname}</p>
+                  )}
                 </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Tên <span className="text-red-400">*</span>
+                    {t("auth.lastname")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Văn A"
+                    placeholder={t("auth.lastname_placeholder")}
                     value={form.lastname}
                     onChange={(e) => update("lastname", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.lastname
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    }`}
                   />
+                  {errors.lastname && (
+                    <p className="text-xs text-red-500 mt-1">{errors.lastname}</p>
+                  )}
                 </div>
               </div>
-
+ 
               <div className="space-y-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Mail className="w-3 h-3" /> Email <span className="text-red-400">*</span>
+                    <Mail className="w-3 h-3" /> {t("auth.email")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="email"
-                    placeholder="restaurant@email.com"
+                    placeholder={t("auth.email_placeholder")}
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.email
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    }`}
                   />
+                  {errors.email && (
+                    <p className="text-xs text-red-500 mt-1">{errors.email}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> Số điện thoại{" "}
+                    <Phone className="w-3 h-3" /> {t("auth.phonenumber")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="tel"
-                    placeholder="0901 234 567"
+                    placeholder={t("auth.phonenumber_placeholder")}
                     value={form.phonenumber}
                     onChange={(e) => update("phonenumber", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.phonenumber
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    }`}
                   />
+                  {errors.phonenumber && (
+                    <p className="text-xs text-red-500 mt-1">{errors.phonenumber}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Mật khẩu{" "}
+                    <Lock className="w-3 h-3" /> {t("auth.password")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showPass ? "text" : "password"}
-                      placeholder="Tối thiểu 8 ký tự"
+                      placeholder={t("auth.min_8_chars")}
                       value={form.password}
                       onChange={(e) => update("password", e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all pr-11"
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all pr-11 ${
+                        errors.password
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      }`}
                     />
                     <button
                       type="button"
@@ -339,20 +439,27 @@ export default function RegisterRestaurant() {
                       )}
                     </button>
                   </div>
+                  {errors.password && (
+                    <p className="text-xs text-red-500 mt-1">{errors.password}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Xác nhận mật khẩu{" "}
+                    <Lock className="w-3 h-3" /> {t("auth.confirm_password")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showConfirm ? "text" : "password"}
-                      placeholder="Nhập lại mật khẩu"
+                      placeholder={t("auth.confirmpassword_placeholder")}
                       value={form.confirmpassword}
                       onChange={(e) => update("confirmpassword", e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all pr-11"
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all pr-11 ${
+                        errors.confirmpassword
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      }`}
                     />
                     <button
                       type="button"
@@ -366,6 +473,9 @@ export default function RegisterRestaurant() {
                       )}
                     </button>
                   </div>
+                  {errors.confirmpassword && (
+                    <p className="text-xs text-red-500 mt-1">{errors.confirmpassword}</p>
+                  )}
                 </div>
               </div>
 
@@ -380,7 +490,7 @@ export default function RegisterRestaurant() {
                 className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
-                Tiếp theo <ArrowRight className="w-4 h-4" />
+                {t("common.next")} <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -392,7 +502,7 @@ export default function RegisterRestaurant() {
                 onClick={() => { setError(null); setStep(1); }}
                 className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-5 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" /> Quay lại
+                <ArrowLeft className="w-4 h-4" /> {t("common.back")}
               </button>
 
               <div className="flex items-center gap-2 mb-5">
@@ -406,68 +516,89 @@ export default function RegisterRestaurant() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-gray-900">
-                    Thông tin nhà hàng
+                    {t("auth.restaurant_info")}
                   </h2>
                   <p className="text-xs text-gray-400">
-                    Chi tiết về nhà hàng của bạn
+                    {t("auth.restaurant_info_desc")}
                   </p>
                 </div>
               </div>
-
+ 
               <div className="space-y-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Store className="w-3 h-3" /> Tên nhà hàng{" "}
+                    <Store className="w-3 h-3" /> {t("auth.restaurant_name_label")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="VD: Phở Bò Hà Nội, Pizza House..."
+                    placeholder={t("auth.restaurant_name_placeholder")}
                     value={form.restaurantName}
                     onChange={(e) => update("restaurantName", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.restaurantName
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    }`}
                   />
+                  {errors.restaurantName && (
+                    <p className="text-xs text-red-500 mt-1">{errors.restaurantName}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" /> Địa chỉ nhà hàng{" "}
+                    <MapPin className="w-3 h-3" /> {t("auth.restaurant_address_label")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Số nhà, đường, quận, thành phố..."
+                    placeholder={t("auth.restaurant_address_placeholder")}
                     value={form.restaurantAddress}
                     onChange={(e) => update("restaurantAddress", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.restaurantAddress
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    }`}
                   />
+                  {errors.restaurantAddress && (
+                    <p className="text-xs text-red-500 mt-1">{errors.restaurantAddress}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Loại ẩm thực <span className="text-red-400">*</span>
+                    {t("auth.cuisine_type_label")} <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <select
                       value={form.cuisineType}
                       onChange={(e) => update("cuisineType", e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all appearance-none pr-10"
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all appearance-none pr-10 ${
+                        errors.cuisineType
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      }`}
                     >
-                      <option value="">-- Chọn loại ẩm thực --</option>
+                      <option value="">{t("auth.cuisine_type_select")}</option>
                       {CUISINE_TYPES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
+                        <option key={c.value} value={c.value}>
+                          {t(c.labelKey)}
                         </option>
                       ))}
                     </select>
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
+                  {errors.cuisineType && (
+                    <p className="text-xs text-red-500 mt-1">{errors.cuisineType}</p>
+                  )}
                 </div>
-
+ 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Giờ mở cửa
+                      <Clock className="w-3 h-3" /> {t("auth.open_time_label")}
                     </label>
                     <div className="relative">
                       <select
@@ -486,7 +617,7 @@ export default function RegisterRestaurant() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Giờ đóng cửa
+                      <Clock className="w-3 h-3" /> {t("auth.close_time_label")}
                     </label>
                     <div className="relative">
                       <select
@@ -504,14 +635,14 @@ export default function RegisterRestaurant() {
                     </div>
                   </div>
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Mô tả ngắn về nhà hàng{" "}
-                    <span className="text-gray-400">(tuỳ chọn)</span>
+                    {t("auth.restaurant_desc_label")}{" "}
+                    <span className="text-gray-400">{t("auth.restaurant_desc_optional")}</span>
                   </label>
                   <textarea
-                    placeholder="Mô tả phong cách, món đặc trưng của nhà hàng..."
+                    placeholder={t("auth.restaurant_desc_placeholder")}
                     value={form.restaurantDescription}
                     onChange={(e) =>
                       update("restaurantDescription", e.target.value)
@@ -521,19 +652,19 @@ export default function RegisterRestaurant() {
                   />
                 </div>
               </div>
-
+ 
               {error && (
                 <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
                   {error}
                 </div>
               )}
-
+ 
               <button
                 onClick={handleNextStep}
                 className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
-                Tiếp theo <ArrowRight className="w-4 h-4" />
+                {t("common.next")} <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -545,48 +676,50 @@ export default function RegisterRestaurant() {
                 onClick={() => { setError(null); setStep(2); }}
                 className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-5 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" /> Quay lại
+                <ArrowLeft className="w-4 h-4" /> {t("common.back")}
               </button>
 
               <h2 className="text-base font-bold text-gray-900 mb-1">
-                Xác nhận thông tin
+                {t("auth.confirm_info_title")}
               </h2>
               <p className="text-xs text-gray-400 mb-5">
-                Kiểm tra lại trước khi gửi đăng ký
+                {t("auth.confirm_info_desc")}
               </p>
 
               {/* Summary cards */}
               <div className="space-y-3 mb-6">
                 <div className="p-4 rounded-2xl bg-orange-50 border border-orange-100">
                   <p className="text-xs font-bold text-orange-600 mb-2 uppercase tracking-wide">
-                    Chủ sở hữu
+                    {t("auth.owner_section_title")}
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-700">
-                    <span className="text-gray-400 text-xs">Họ và tên</span>
+                    <span className="text-gray-400 text-xs">{t("auth.full_name")}</span>
                     <span className="font-medium">
                       {form.firstname} {form.lastname}
                     </span>
-                    <span className="text-gray-400 text-xs">Email</span>
+                    <span className="text-gray-400 text-xs">{t("auth.email")}</span>
                     <span className="font-medium truncate">{form.email}</span>
-                    <span className="text-gray-400 text-xs">SĐT</span>
+                    <span className="text-gray-400 text-xs">{t("auth.phonenumber")}</span>
                     <span className="font-medium">{form.phonenumber}</span>
                   </div>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100">
                   <p className="text-xs font-bold text-amber-600 mb-2 uppercase tracking-wide">
-                    Nhà hàng
+                    {t("auth.restaurant_section_title")}
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-700">
-                    <span className="text-gray-400 text-xs">Tên</span>
+                    <span className="text-gray-400 text-xs">{t("auth.restaurant_name_label")}</span>
                     <span className="font-medium">{form.restaurantName}</span>
-                    <span className="text-gray-400 text-xs">Địa chỉ</span>
+                    <span className="text-gray-400 text-xs">{t("auth.restaurant_address_label")}</span>
                     <span className="font-medium leading-tight">
                       {form.restaurantAddress}
                     </span>
-                    <span className="text-gray-400 text-xs">Ẩm thực</span>
-                    <span className="font-medium">{form.cuisineType}</span>
-                    <span className="text-gray-400 text-xs">Giờ hoạt động</span>
+                    <span className="text-gray-400 text-xs">{t("auth.cuisine_type_label")}</span>
+                    <span className="font-medium">
+                      {t(CUISINE_TYPES.find(c => c.value === form.cuisineType)?.labelKey || form.cuisineType)}
+                    </span>
+                    <span className="text-gray-400 text-xs">{t("auth.open_time_label")}</span>
                     <span className="font-medium">
                       {form.openTime} – {form.closeTime}
                     </span>
@@ -596,18 +729,17 @@ export default function RegisterRestaurant() {
 
               {/* Notice */}
               <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-xs mb-5">
-                ℹ️ Tài khoản nhà hàng sẽ được kiểm duyệt trong vòng <strong>24–48 giờ</strong>.
-                Chúng tôi sẽ liên hệ qua email để xác nhận.
+                {t("auth.restaurant_audit_notice")}
               </div>
 
               <p className="text-xs text-gray-400 mb-4">
-                Bằng cách đăng ký, bạn đồng ý với{" "}
+                {t("auth.partner_terms_agree")}{" "}
                 <a href="#" className="text-[#FF4500]">
-                  Điều khoản đối tác
+                  {t("auth.partner_terms")}
                 </a>{" "}
-                và{" "}
+                {t("auth.and")}{" "}
                 <a href="#" className="text-[#FF4500]">
-                  Chính sách bảo mật
+                  {t("auth.partner_privacy")}
                 </a>
                 .
               </p>
@@ -627,11 +759,11 @@ export default function RegisterRestaurant() {
                 {loading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Đang gửi...
+                    {t("auth.submit_restaurant_loading")}
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" /> Gửi đăng ký nhà hàng
+                    <CheckCircle2 className="w-4 h-4" /> {t("auth.submit_restaurant_btn")}
                   </>
                 )}
               </button>
@@ -640,20 +772,20 @@ export default function RegisterRestaurant() {
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          Đã có tài khoản?{" "}
+          {t("auth.already_have_account")}{" "}
           <Link
             to="/login"
             className="font-semibold"
             style={{ color: "#FF4500" }}
           >
-            Đăng nhập
+            {t("auth.sign_in")}
           </Link>
           {" · "}
           <Link
             to="/register"
             className="font-semibold text-gray-500 hover:text-gray-700"
           >
-            Đăng ký cách khác
+            {t("auth.other_register_options")}
           </Link>
         </p>
       </div>

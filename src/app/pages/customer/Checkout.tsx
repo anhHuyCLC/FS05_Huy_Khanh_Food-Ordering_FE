@@ -40,9 +40,18 @@ export default function Checkout() {
   const restaurantId = queryRestaurantId || (filteredItems.length > 0 ? filteredItems[0].restaurantId : null);
 
   const [payMethod, setPayMethod] = useState("vnpay");
-  const [promoCode, setPromoCode] = useState("");
-  const [promoApplied, setPromoApplied] = useState(false);
-  const [discountAmount, setDiscountAmount] = useState(0);
+  // Food promotion state
+  const [foodPromoCode, setFoodPromoCode] = useState("");
+  const [foodPromoApplied, setFoodPromoApplied] = useState(false);
+  const [foodDiscountAmount, setFoodDiscountAmount] = useState(0);
+
+  // Shipping promotion state
+  const [shippingPromoCode, setShippingPromoCode] = useState("");
+  const [shippingPromoApplied, setShippingPromoApplied] = useState(false);
+  const [shippingDiscountAmount, setShippingDiscountAmount] = useState(0);
+
+  // Input code state
+  const [typedPromoCode, setTypedPromoCode] = useState("");
   const [isCheckingPromo, setIsCheckingPromo] = useState(false);
   const [note, setNote] = useState("");
   const [customerPhone] = useState("");
@@ -52,7 +61,6 @@ export default function Checkout() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [isLoadingPromotions, setIsLoadingPromotions] = useState(false);
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
-  const [appliedPromoType, setAppliedPromoType] = useState<"food" | "shipping">("food");
 
   useEffect(() => {
     if (restaurantId) {
@@ -124,7 +132,7 @@ export default function Checkout() {
 
   const handleLocateInModal = () => {
     if (!navigator.geolocation) {
-      toast.error("Trình duyệt không hỗ trợ định vị");
+      toast.error(t("checkout.geo_not_supported"));
       return;
     }
     setIsLocatingUser(true);
@@ -139,16 +147,16 @@ export default function Checkout() {
           setSearchQuery(address);
           setFormLatitude(lat);
           setFormLongitude(lng);
-          toast.success("Định vị thành công!");
+          toast.success(t("checkout.geo_success"));
         } catch {
-          toast.error("Không thể xác định địa chỉ từ GPS");
+          toast.error(t("checkout.geo_address_failed"));
         } finally {
           setIsReverseGeocoding(false);
           setIsLocatingUser(false);
         }
       },
       (err) => {
-        toast.error("Lỗi GPS: " + err.message);
+        toast.error(t("checkout.geo_error", { message: err.message }));
         setIsLocatingUser(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -165,7 +173,7 @@ export default function Checkout() {
       setFormLongitude(lng);
     } catch (err) {
       console.error(err);
-      toast.error("Lỗi xác định vị trí");
+      toast.error(t("checkout.geo_resolve_error"));
     } finally {
       setIsReverseGeocoding(false);
     }
@@ -252,7 +260,7 @@ export default function Checkout() {
   const handleQuickAddAddress = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!formLabel.trim() || !formAddress.trim()) {
-      toast.error("Vui lòng điền đầy đủ thông tin");
+      toast.error(t("checkout.fill_info_required"));
       return;
     }
     try {
@@ -266,7 +274,7 @@ export default function Checkout() {
           longitude: formLongitude,
           isDefault: formIsDefault,
         });
-        toast.success("Cập nhật địa chỉ thành công");
+        toast.success(t("checkout.update_address_success"));
       } else {
         await addressService.createAddress({
           label: formLabel,
@@ -276,7 +284,7 @@ export default function Checkout() {
           longitude: formLongitude,
           isDefault: formIsDefault,
         });
-        toast.success("Thêm địa chỉ thành công");
+        toast.success(t("checkout.add_address_success"));
       }
       setIsModalOpen(false);
 
@@ -293,7 +301,7 @@ export default function Checkout() {
         }
       }
     } catch {
-      toast.error("Không thể lưu địa chỉ. Vui lòng thử lại sau.");
+      toast.error(t("checkout.save_address_error"));
     } finally {
       setIsSaving(false);
     }
@@ -389,7 +397,7 @@ export default function Checkout() {
 
       const selectedAddr = addresses.find((a) => a.id === selectedAddressId);
       if (!selectedAddr) {
-        toast.error("Vui lòng chọn địa chỉ giao hàng.");
+        toast.error(t("checkout.select_address_error"));
         setIsLoading(false);
         return;
       }
@@ -410,7 +418,8 @@ export default function Checkout() {
         deliveryLongitude: delivLon,
         customerPhone: selectedAddr.phone || customerPhone || undefined,
         note: note,
-        promotionCode: promoApplied ? promoCode : undefined,
+        promotionCode: foodPromoApplied ? foodPromoCode : undefined,
+        shippingPromotionCode: shippingPromoApplied ? shippingPromoCode : undefined,
         paymentMethod: payMethod === "vnpay" ? "bank_transfer" : payMethod === "card" ? "e_wallet" : "cash",
         paymentProvider: payMethod === "vnpay" ? "vnpay" : undefined,
         items: filteredItems.map((item) => ({
@@ -431,7 +440,7 @@ export default function Checkout() {
         navigate(`/tracking?orderId=${order.id}`);
       }
     } catch {
-      toast.error("Đặt hàng thất bại. Vui lòng kiểm tra lại thông tin và thử lại.");
+      toast.error(t("checkout.place_order_error"));
     } finally {
       setIsLoading(false);
     }
@@ -446,36 +455,61 @@ export default function Checkout() {
     if (!codeToApply.trim() || !restaurantId) return;
     setIsCheckingPromo(true);
     try {
+      // Validate code by passing both fields in query. The BE checkPromotion expects it.
+      // To determine whether the code is food or shipping, we pass it appropriately.
+      // We can also call checkPromotion by checking it against the backend.
       const res = await orderService.checkPromotion({
         promotionCode: codeToApply,
         restaurantId: restaurantId,
         totalAmount: subtotal,
         deliveryFee: delivery
       });
-      const hasDiscount = res.success ? (res.data?.discountAmount !== undefined) : (res.discountAmount !== undefined);
-      const discountVal = res.success ? res.data.discountAmount : res.discountAmount;
-      const typeVal = res.success ? res.data.promotionType : res.promotionType;
+
+      // Backend returns details of checked promos in res
+      const hasDiscount = res.success ? (res.discountAmount !== undefined) : (res.discountAmount !== undefined);
+      const discountVal = res.success ? res.discountAmount : res.discountAmount;
+      const typeVal = res.success ? res.promotionType : res.promotionType;
+
       if (hasDiscount) {
-        setPromoCode(codeToApply);
-        setPromoApplied(true);
-        setDiscountAmount(discountVal);
-        setAppliedPromoType(typeVal || "food");
-        toast.success("Áp dụng mã giảm giá thành công!");
+        if (typeVal === "shipping") {
+          setShippingPromoCode(codeToApply);
+          setShippingPromoApplied(true);
+          setShippingDiscountAmount(discountVal);
+        } else {
+          setFoodPromoCode(codeToApply);
+          setFoodPromoApplied(true);
+          setFoodDiscountAmount(discountVal);
+        }
+        toast.success(t("checkout.apply_voucher_success"));
         setIsPromoModalOpen(false);
+        setTypedPromoCode("");
       }
-    } catch {
-      toast.error("Mã giảm giá không hợp lệ hoặc đã hết hạn.");
-      setPromoApplied(false);
-      setDiscountAmount(0);
+    } catch (err) {
+      const error = err as { response?: { data?: { message?: string } } };
+      const msg = error?.response?.data?.message || t("checkout.apply_voucher_error");
+      toast.error(msg);
     } finally {
       setIsCheckingPromo(false);
     }
   };
 
-  const discount = promoApplied
-    ? (appliedPromoType === "shipping" ? Math.min(discountAmount, delivery) : discountAmount)
-    : 0;
-  const total = Math.max(0, subtotal - discount + delivery);
+  const handleRemoveFoodPromo = () => {
+    setFoodPromoCode("");
+    setFoodPromoApplied(false);
+    setFoodDiscountAmount(0);
+    toast.success(t("checkout.remove_voucher_success") || "Đã hủy áp dụng mã giảm giá đồ ăn!");
+  };
+
+  const handleRemoveShippingPromo = () => {
+    setShippingPromoCode("");
+    setShippingPromoApplied(false);
+    setShippingDiscountAmount(0);
+    toast.success(t("checkout.remove_voucher_success") || "Đã hủy áp dụng mã vận chuyển!");
+  };
+
+  const foodDiscount = foodPromoApplied ? foodDiscountAmount : 0;
+  const shippingDiscount = shippingPromoApplied ? Math.min(shippingDiscountAmount, delivery) : 0;
+  const total = Math.max(0, subtotal - foodDiscount - shippingDiscount + delivery);
 
   const translatedPayMethods = [
     { ...payMethods[0], label: t('checkout.vnpay', 'Cổng thanh toán VNPay'), sub: t('checkout.vnpay_sub', 'Thanh toán bằng thẻ ATM, thẻ quốc tế hoặc mã QR') },
@@ -513,10 +547,10 @@ export default function Checkout() {
             </h2>
             <div className="space-y-3">
               {isLoadingAddresses ? (
-                <div className="text-sm text-gray-400 py-2">Đang tải danh sách địa chỉ...</div>
+                <div className="text-sm text-gray-400 py-2">{t("checkout.loading_addresses")}</div>
               ) : !Array.isArray(addresses) || addresses.length === 0 ? (
                 <div className="text-sm text-gray-400 py-2">
-                  Bạn chưa lưu địa chỉ nào. Vui lòng thêm địa chỉ mới để tiếp tục.
+                  {t("checkout.no_addresses_saved")}
                 </div>
               ) : (
                 addresses.map((a) => {
@@ -539,7 +573,7 @@ export default function Checkout() {
                           <span className="font-semibold text-sm text-gray-800">{a.label}</span>
                           {a.isDefault && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-[#FF4500]">
-                              Mặc định
+                              {t("checkout.default_badge")}
                             </span>
                           )}
                         </div>
@@ -554,7 +588,7 @@ export default function Checkout() {
                           openEditModal(a);
                         }}
                         className="p-2 rounded-xl text-gray-400 hover:text-[#FF4500] hover:bg-orange-50 transition-colors cursor-pointer shrink-0"
-                        title="Chỉnh sửa"
+                        title={t("common.edit")}
                       >
                         <Edit className="w-4 h-4" />
                       </button>
@@ -601,7 +635,7 @@ export default function Checkout() {
                         address: filteredItems[0]?.restaurantAddress || "Restaurant Address",
                         latitude: restaurantCoords.latitude.toString(),
                         longitude: restaurantCoords.longitude.toString(),
-                        description: "Điểm lấy hàng",
+                        description: t("checkout.pickup_point"),
                       },
                     ]}
                   />
@@ -610,7 +644,7 @@ export default function Checkout() {
               </div>
             ) : (
               <div className="text-sm text-gray-400 py-6 text-center">
-                Chọn địa chỉ giao hàng để xem bản đồ lộ trình.
+                {t("checkout.select_address_for_map")}
               </div>
             )}
           </div>
@@ -635,14 +669,14 @@ export default function Checkout() {
             {routeState ? (
               <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
                 <div>
-                  <p className="text-xs text-gray-400 font-medium">Khoảng cách</p>
+                  <p className="text-xs text-gray-400 font-medium">{t("checkout.distance")}</p>
                   <p className="text-sm font-bold text-gray-800">{(routeState.distance / 1000).toFixed(1)} km</p>
                 </div>
               </div>
             ) : fallbackDistance !== null ? (
               <div className="flex flex-row sm:flex-col justify-between sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-gray-100">
                 <div>
-                  <p className="text-xs text-gray-400 font-medium">Khoảng cách</p>
+                  <p className="text-xs text-gray-400 font-medium">{t("checkout.distance")}</p>
                   <p className="text-sm font-bold text-gray-800">{fallbackDistance.toFixed(1)} km</p>
                 </div>
               </div>
@@ -654,7 +688,7 @@ export default function Checkout() {
             <h2 className="font-bold text-gray-900 mb-3">{t('checkout.order_note', 'Ghi chú đơn hàng')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Ghi chú cho nhà hàng</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("checkout.note_for_restaurant")}</label>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
@@ -716,15 +750,15 @@ export default function Checkout() {
                 <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 min-w-0">
                   <Tag className="w-4 h-4 text-gray-400 shrink-0" />
                   <input
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
+                    value={typedPromoCode}
+                    onChange={(e) => setTypedPromoCode(e.target.value)}
                     placeholder={t('cart.promo_code')}
                     className="bg-transparent text-sm outline-none w-full text-gray-600 min-w-0"
                   />
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleApplyPromo(promoCode)}
+                  onClick={() => handleApplyPromo(typedPromoCode)}
                   disabled={isCheckingPromo}
                   className="px-4 py-2.5 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 shrink-0 whitespace-nowrap bg-orange-600 cursor-pointer"
                 >
@@ -736,14 +770,37 @@ export default function Checkout() {
                 onClick={() => setIsPromoModalOpen(true)}
                 className="w-full py-2.5 rounded-xl border border-[#FF4500]/30 hover:border-[#FF4500]/60 text-[#FF4500] font-semibold text-sm transition-all hover:bg-orange-50/50 flex items-center justify-center gap-2 cursor-pointer"
               >
-                🎟️ Chọn mã giảm giá cho bạn
+                🎟️ {t("checkout.select_voucher")}
               </button>
             </div>
-            {promoApplied && (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 text-green-600 text-sm mb-4">
-                <CheckCircle className="w-4 h-4" /> {appliedPromoType === "shipping"
-                  ? `Đã áp dụng mã giảm phí vận chuyển (-${discount.toLocaleString()}đ)!`
-                  : `Đã áp dụng mã giảm giá đồ ăn (-${discount.toLocaleString()}đ)!`}
+            {foodPromoApplied && (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 text-green-600 text-sm mb-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>{t("checkout.applied_dish_discount", { amount: foodDiscount.toLocaleString() })}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFoodPromo}
+                  className="text-xs font-bold text-red-500 hover:text-red-700 bg-transparent border-0 cursor-pointer shrink-0"
+                >
+                  Xóa
+                </button>
+              </div>
+            )}
+            {shippingPromoApplied && (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-blue-55 text-blue-600 text-sm mb-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-500" />
+                  <span>{t("checkout.applied_delivery_discount", { amount: shippingDiscount.toLocaleString() })}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveShippingPromo}
+                  className="text-xs font-bold text-red-500 hover:text-red-700 bg-transparent border-0 cursor-pointer shrink-0"
+                >
+                  Xóa
+                </button>
               </div>
             )}
 
@@ -752,17 +809,19 @@ export default function Checkout() {
               <div className="flex justify-between text-sm text-gray-500">
                 <span>{t('cart.subtotal')}</span><span>{subtotal.toLocaleString()}đ</span>
               </div>
-              {promoApplied && appliedPromoType === "food" && (
+              {foodPromoApplied && (
                 <div className="flex justify-between text-sm text-green-500">
-                  <span>Giảm giá món ăn</span><span>-{discount.toLocaleString()}đ</span>
+                  <span>{t("checkout.dish_discount")} ({foodPromoCode})</span>
+                  <span>-{foodDiscount.toLocaleString()}đ</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-gray-500">
                 <span>{t('cart.delivery_fee')}</span><span>{delivery.toLocaleString()}đ</span>
               </div>
-              {promoApplied && appliedPromoType === "shipping" && (
+              {shippingPromoApplied && (
                 <div className="flex justify-between text-sm text-green-500">
-                  <span>Giảm phí vận chuyển</span><span>-{discount.toLocaleString()}đ</span>
+                  <span>{t("checkout.delivery_discount")} ({shippingPromoCode})</span>
+                  <span>-{shippingDiscount.toLocaleString()}đ</span>
                 </div>
               )}
               <div className="flex justify-between font-black text-gray-900 text-lg pt-2 border-t border-gray-100">
@@ -792,26 +851,30 @@ export default function Checkout() {
               <div>
                 <div className="border-b border-gray-100 pb-4 mb-4">
                   <h3 className="text-lg font-bold text-gray-900">
-                    {editingAddress ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ giao hàng mới"}
+                    {editingAddress ? t("checkout.edit_address") : t("checkout.add_new_address_title")}
                   </h3>
-                  <p className="text-xs text-gray-400 mt-1">Tìm kiếm hoặc chọn vị trí trên bản đồ để lưu địa chỉ</p>
+                  <p className="text-xs text-gray-400 mt-1">{t("checkout.search_address_map_hint")}</p>
                 </div>
 
                 <form onSubmit={(e) => { e.preventDefault(); handleQuickAddAddress(); }} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nhãn địa chỉ</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("checkout.address_label")}</label>
                     <div className="flex flex-wrap gap-2 mb-2">
-                      {["Nhà riêng", "Văn phòng", "Trường học"].map((suggested) => (
+                      {[
+                        { key: "home", label: t("checkout.label_home", "Nhà riêng") },
+                        { key: "office", label: t("checkout.label_office", "Văn phòng") },
+                        { key: "school", label: t("checkout.label_school", "Trường học") }
+                      ].map((suggested) => (
                         <button
-                          key={suggested}
+                          key={suggested.key}
                           type="button"
-                          onClick={() => setFormLabel(suggested)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${formLabel === suggested
+                          onClick={() => setFormLabel(suggested.label)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${formLabel === suggested.label
                               ? "bg-orange-50 text-[#FF4500] border-orange-200 font-bold"
                               : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
                             }`}
                         >
-                          {suggested}
+                          {suggested.label}
                         </button>
                       ))}
                     </div>
@@ -819,7 +882,7 @@ export default function Checkout() {
                       type="text"
                       value={formLabel}
                       onChange={(e) => setFormLabel(e.target.value)}
-                      placeholder="Ví dụ: Nhà riêng, Công ty..."
+                      placeholder={t("checkout.address_label_placeholder")}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                       required
                     />
@@ -828,7 +891,7 @@ export default function Checkout() {
                   {/* Autocomplete Search input */}
                   <div className="relative">
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                      Tìm kiếm địa chỉ
+                      {t("checkout.search_address_btn")}
                     </label>
                     <div className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-200 p-2 focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
                       <Search className="w-4 h-4 text-gray-400 ml-1 shrink-0" />
@@ -840,7 +903,7 @@ export default function Checkout() {
                           setIsDropdownOpen(true);
                         }}
                         onFocus={() => setIsDropdownOpen(true)}
-                        placeholder="Nhập tên đường, toà nhà, khu vực..."
+                        placeholder={t("checkout.search_address_placeholder")}
                         className="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-400 py-1"
                       />
                       {searchQuery && (
@@ -869,7 +932,7 @@ export default function Checkout() {
                         ) : (
                           <Navigation className="w-3 h-3" />
                         )}
-                        <span>Định vị</span>
+                        <span>{t("checkout.locate_btn")}</span>
                       </button>
                     </div>
 
@@ -879,7 +942,7 @@ export default function Checkout() {
                         {isSearchingSuggestions ? (
                           <div className="flex items-center justify-center py-4 gap-2 text-xs text-gray-400">
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FF4500]" />
-                            <span>Đang tìm địa chỉ...</span>
+                            <span>{t("checkout.locating")}</span>
                           </div>
                         ) : (
                           modalSuggestions.map((item, idx) => (
@@ -906,30 +969,30 @@ export default function Checkout() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Địa chỉ chi tiết</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("checkout.detailed_address_label")}</label>
                     <textarea
                       value={formAddress}
                       onChange={(e) => {
                         setFormAddress(e.target.value);
                       }}
-                      placeholder="Số nhà, ngõ/ngách, phường/xã..."
+                      placeholder={t("checkout.detailed_address_placeholder")}
                       rows={2}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
                       required
                     />
                   </div>
-
+ 
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Số điện thoại</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("checkout.phone_label")}</label>
                     <input
                       type="tel"
                       value={formPhone}
                       onChange={(e) => setFormPhone(e.target.value)}
-                      placeholder="Nhập số điện thoại (tuỳ chọn)"
+                      placeholder={t("checkout.phone_placeholder")}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                     />
                   </div>
-
+ 
                   <div className="flex items-center gap-3 py-1">
                     <input
                       type="checkbox"
@@ -939,7 +1002,7 @@ export default function Checkout() {
                       className="w-4 h-4 rounded border-gray-300 text-[#FF4500] focus:ring-orange-500"
                     />
                     <label htmlFor="isDefaultCheckout" className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
-                      Đặt làm địa chỉ mặc định cho lần sau
+                      {t("checkout.set_default_checkbox")}
                     </label>
                   </div>
                 </form>
@@ -952,7 +1015,7 @@ export default function Checkout() {
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
-                  Hủy
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -961,7 +1024,7 @@ export default function Checkout() {
                   className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
                   style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                 >
-                  {isSaving ? "Đang lưu..." : editingAddress ? "Lưu thay đổi" : "Thêm địa chỉ"}
+                  {isSaving ? `${t("common.loading")}...` : editingAddress ? t("common.save") : t("common.add")}
                 </button>
               </div>
             </div>
@@ -981,18 +1044,18 @@ export default function Checkout() {
                 {formLatitude && formLongitude && (
                   <UserMarker
                     position={{ lat: formLatitude, lng: formLongitude }}
-                    addressName={formAddress || "Vị trí được chọn"}
+                    addressName={formAddress || t("checkout.selected_position")}
                   />
                 )}
               </MapView>
               <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1.5 rounded-full z-[1000] pointer-events-none">
-                📍 Click trên bản đồ để ghim vị trí chính xác
+                {t("checkout.click_map_hint")}
               </div>
               {isReverseGeocoding && (
                 <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] flex items-center justify-center z-[1001] pointer-events-none">
                   <div className="bg-white/90 shadow-lg px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-semibold text-gray-700">
                     <Loader2 className="w-4 h-4 animate-spin text-[#FF4500]" />
-                    <span>Đang xác định địa chỉ...</span>
+                    <span>{t("checkout.locating")}</span>
                   </div>
                 </div>
               )}
@@ -1009,8 +1072,8 @@ export default function Checkout() {
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Chọn mã giảm giá</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Áp dụng mã giảm giá cho đơn hàng của bạn</p>
+                <h3 className="text-lg font-bold text-gray-900">{t("checkout.select_voucher")}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("checkout.apply_voucher_desc")}</p>
               </div>
               <button
                 onClick={() => setIsPromoModalOpen(false)}
@@ -1025,23 +1088,23 @@ export default function Checkout() {
               {isLoadingPromotions ? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
                   <Loader2 className="w-8 h-8 animate-spin text-[#FF4500]" />
-                  <span className="text-sm">Đang tải danh sách khuyến mãi...</span>
+                  <span className="text-sm">{t("checkout.loading_promos")}</span>
                 </div>
               ) : promotions.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 text-sm">
-                  Không có mã giảm giá nào khả dụng vào lúc này.
+                  {t("checkout.no_promos")}
                 </div>
               ) : (
                 <>
                   {/* Food Vouchers Section */}
                   <div>
                     <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-1.5">
-                      🍔 Khuyến mãi món ăn
+                      🍔 {t("checkout.dish_discount")}
                     </h4>
                     <div className="space-y-3">
                       {promotions.filter(p => p.promotionType !== "shipping").map((p) => {
                         const isEligible = subtotal >= Number(p.minOrderValue || 0);
-                        const isApplied = promoCode === p.code && promoApplied;
+                        const isApplied = foodPromoCode === p.code && foodPromoApplied;
                         return (
                           <div
                             key={p.id}
@@ -1067,29 +1130,35 @@ export default function Checkout() {
                               </div>
                               <p className="text-xs text-gray-600 mb-2 font-medium">{p.description}</p>
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-400">
-                                <span>Đơn tối thiểu: {Number(p.minOrderValue || 0).toLocaleString()}đ</span>
+                                <span>{t("discovery.min_order", { min: Number(p.minOrderValue || 0).toLocaleString() })}</span>
                                 <span>HSD: {new Date(p.validTo).toLocaleDateString("vi-VN")}</span>
                               </div>
                             </div>
                             <button
                               type="button"
-                              disabled={!isEligible || isApplied}
-                              onClick={() => handleApplyPromo(p.code)}
+                              disabled={!isEligible}
+                              onClick={() => {
+                                if (isApplied) {
+                                  handleRemoveFoodPromo();
+                                } else {
+                                  handleApplyPromo(p.code);
+                                }
+                              }}
                               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                                 isApplied
-                                  ? "bg-green-500 text-white cursor-default"
+                                  ? "bg-green-55 text-green-600 hover:bg-red-50 hover:text-red-500 border border-green-200 hover:border-red-200"
                                   : isEligible
                                   ? "bg-[#FF4500] text-white hover:opacity-90"
                                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
                               }`}
                             >
-                              {isApplied ? "Đã dùng" : "Áp dụng"}
+                              {isApplied ? t("checkout.applied") : t("checkout.apply")}
                             </button>
                           </div>
                         );
                       })}
                       {promotions.filter(p => p.promotionType !== "shipping").length === 0 && (
-                        <p className="text-xs text-gray-400 italic pl-2">Không có mã giảm giá món ăn nào.</p>
+                        <p className="text-xs text-gray-400 italic pl-2">{t("checkout.no_dish_vouchers")}</p>
                       )}
                     </div>
                   </div>
@@ -1097,12 +1166,12 @@ export default function Checkout() {
                   {/* Shipping Vouchers Section */}
                   <div>
                     <h4 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-1.5">
-                      🚚 Khuyến mãi vận chuyển (Freeship)
+                      🚚 {t("checkout.delivery_discount")}
                     </h4>
                     <div className="space-y-3">
                       {promotions.filter(p => p.promotionType === "shipping").map((p) => {
                         const isEligible = subtotal >= Number(p.minOrderValue || 0);
-                        const isApplied = promoCode === p.code && promoApplied;
+                        const isApplied = shippingPromoCode === p.code && shippingPromoApplied;
                         return (
                           <div
                             key={p.id}
@@ -1122,35 +1191,41 @@ export default function Checkout() {
                                 <span className="font-bold text-gray-800 text-sm">{p.code}</span>
                                 {isApplied && (
                                   <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-600">
-                                    Đang áp dụng
+                                    {t("checkout.applying")}
                                   </span>
                                 )}
                               </div>
                               <p className="text-xs text-gray-600 mb-2 font-medium">{p.description}</p>
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-400">
-                                <span>Đơn tối thiểu: {Number(p.minOrderValue || 0).toLocaleString()}đ</span>
+                                <span>{t("discovery.min_order", { min: Number(p.minOrderValue || 0).toLocaleString() })}</span>
                                 <span>HSD: {new Date(p.validTo).toLocaleDateString("vi-VN")}</span>
                               </div>
                             </div>
                             <button
                               type="button"
-                              disabled={!isEligible || isApplied}
-                              onClick={() => handleApplyPromo(p.code)}
+                              disabled={!isEligible}
+                              onClick={() => {
+                                if (isApplied) {
+                                  handleRemoveShippingPromo();
+                                } else {
+                                  handleApplyPromo(p.code);
+                                }
+                              }}
                               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                                 isApplied
-                                  ? "bg-green-500 text-white cursor-default"
+                                  ? "bg-green-55 text-green-600 hover:bg-red-50 hover:text-red-500 border border-green-200 hover:border-red-200"
                                   : isEligible
                                   ? "bg-[#FF4500] text-white hover:opacity-90"
                                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
                               }`}
                             >
-                              {isApplied ? "Đã dùng" : "Áp dụng"}
+                              {isApplied ? t("checkout.applied") : t("checkout.apply")}
                             </button>
                           </div>
                         );
                       })}
                       {promotions.filter(p => p.promotionType === "shipping").length === 0 && (
-                        <p className="text-xs text-gray-400 italic pl-2">Không có mã vận chuyển nào.</p>
+                        <p className="text-xs text-gray-400 italic pl-2">{t("checkout.no_delivery_vouchers")}</p>
                       )}
                     </div>
                   </div>
@@ -1165,7 +1240,7 @@ export default function Checkout() {
                 onClick={() => setIsPromoModalOpen(false)}
                 className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
               >
-                Đóng
+                {t("common.close")}
               </button>
             </div>
           </div>

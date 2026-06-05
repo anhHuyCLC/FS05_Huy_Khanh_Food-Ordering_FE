@@ -1119,9 +1119,13 @@
                               <div className="flex justify-between text-sm text-red-500 font-medium">
                                 <span>
                                   Khuyến mãi{" "}
-                                  {order.promotion?.code
-                                    ? `(${order.promotion.code})`
-                                    : ""}
+                                  {(() => {
+                                    const codes = [
+                                      order.promotion?.code,
+                                      order.shippingPromotion?.code
+                                    ].filter(Boolean);
+                                    return codes.length > 0 ? `(${codes.join(" + ")})` : "";
+                                  })()}
                                 </span>
                                 <span>-{formatMoney(order.discountAmount)}</span>
                               </div>

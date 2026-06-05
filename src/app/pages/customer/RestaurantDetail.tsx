@@ -159,7 +159,7 @@ export default function RestaurantDetail() {
       if (group.isRequired) {
         const val = selectedOptions[group.name];
         if (!val || (Array.isArray(val) && val.length === 0)) {
-          toast.warning(`Vui lòng chọn ${group.name}`);
+          toast.warning(t("restaurant.select_required", { name: group.name }));
           return;
         }
       }
@@ -217,25 +217,25 @@ export default function RestaurantDetail() {
             >
               <LogIn className="w-8 h-8 text-[#FF4500]" />
             </div>
-            <h2 className="text-xl font-black text-gray-900 text-center mb-2">Đăng nhập để tiếp tục</h2>
+            <h2 className="text-xl font-black text-gray-900 text-center mb-2">{t("auth.login_to_continue")}</h2>
             <p className="text-sm text-gray-500 text-center mb-7 leading-relaxed">
-              Bạn cần đăng nhập để thêm món vào giỏ hàng và tiến hành đặt đơn.
+              {t("auth.login_required_desc")}
             </p>
             <button
               onClick={() => navigate("/login")}
               className="w-full py-3.5 rounded-2xl text-white font-bold text-sm mb-3 transition-all hover:opacity-90"
               style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
             >
-              Đăng nhập ngay
+              {t("auth.login_now")}
             </button>
             <button
               onClick={() => navigate("/register")}
               className="w-full py-3.5 rounded-2xl text-gray-700 font-semibold text-sm border border-gray-200 hover:bg-gray-50 transition-all"
             >
-              Tạo tài khoản mới
+              {t("auth.create_account_btn")}
             </button>
             <p className="text-xs text-gray-400 text-center mt-4">
-              Bạn có thể tiếp tục xem thực đơn mà không cần đăng nhập
+              {t("auth.continue_guest_desc")}
             </p>
           </div>
         </div>
@@ -284,10 +284,10 @@ export default function RestaurantDetail() {
                       <p className="font-bold text-gray-800 text-sm">{group.name}</p>
                       {group.isRequired ? (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: "#FF4500" }}>
-                          Bắt buộc
+                          {t("restaurant.required")}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400 font-medium">Tuỳ chọn</span>
+                        <span className="text-xs text-gray-400 font-medium">{t("restaurant.optional")}</span>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -349,7 +349,7 @@ export default function RestaurantDetail() {
                       })}
                     </div>
                     {!isSingle && (
-                      <p className="text-xs text-gray-400 mt-2">Chọn tối đa {group.maxChoices} lựa chọn</p>
+                      <p className="text-xs text-gray-400 mt-2">{t("restaurant.select_max", { max: group.maxChoices })}</p>
                     )}
                   </div>
                 );
@@ -369,7 +369,7 @@ export default function RestaurantDetail() {
                 ) : (
                   <>
                     <ShoppingCart className="w-5 h-5" />
-                    Thêm vào giỏ hàng
+                    {t("restaurant.add_to_cart")}
                   </>
                 )}
               </button>
@@ -422,11 +422,11 @@ export default function RestaurantDetail() {
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   {restaurant.isActive && (
                     <span className="px-3 py-1.5 rounded-xl text-sm font-bold text-white" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      Open
+                      {t("restaurant.open_status")}
                     </span>
                   )}
                   <span className="text-sm text-orange-500 font-semibold mt-1">
-                    Phí giao hàng: {deliveryFee.toLocaleString()}đ
+                    {t("restaurant.delivery_fee_label", { fee: deliveryFee.toLocaleString() })}
                   </span>
                 </div>
               </div>
@@ -438,8 +438,8 @@ export default function RestaurantDetail() {
                     <div key={promo.id} className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: "linear-gradient(135deg, #FFF5F0, #FFE8DC)" }}>
                       <Flame className="w-5 h-5 text-[#FF4500]" />
                       <div>
-                        <p className="text-sm font-bold text-gray-800">Mã: {promo.code}</p>
-                        <p className="text-xs text-gray-600">{promo.description || `Giảm giá khi đặt đơn tại cửa hàng. Đơn tối thiểu ${Number(promo.minOrderValue || 0).toLocaleString()}đ`}</p>
+                        <p className="text-sm font-bold text-gray-800">{t("restaurant.promo_code", { code: promo.code })}</p>
+                        <p className="text-xs text-gray-600">{promo.description || t("restaurant.promo_desc_fallback", { min: Number(promo.minOrderValue || 0).toLocaleString() })}</p>
                       </div>
                     </div>
                   ))}
@@ -448,8 +448,8 @@ export default function RestaurantDetail() {
                 <div className="flex items-center gap-3 p-4 rounded-2xl mb-4" style={{ background: "linear-gradient(135deg, #FFF5F0, #FFE8DC)" }}>
                   <Flame className="w-5 h-5 text-[#FF4500]" />
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">Chào mừng bạn đến với {restaurant.name}!</p>
-                    <p className="text-xs text-gray-500">Đặt đơn ngay để nhận nhiều ưu đãi hấp dẫn.</p>
+                    <p className="text-sm font-semibold text-gray-800">{t("restaurant.welcome_to", { name: restaurant.name })}</p>
+                    <p className="text-xs text-gray-500">{t("restaurant.welcome_desc")}</p>
                   </div>
                 </div>
               )}
@@ -494,7 +494,7 @@ export default function RestaurantDetail() {
                           <p className="text-sm text-gray-500 mb-1 line-clamp-2">{item.description}</p>
                           {item.optionGroups && item.optionGroups.length > 0 && (
                             <p className="text-xs text-[#FF4500] font-medium flex items-center gap-0.5">
-                              <ChevronRight className="w-3 h-3" /> {item.optionGroups.length} tuỳ chọn
+                              <ChevronRight className="w-3 h-3" /> {t("restaurant.options_count", { count: item.optionGroups.length })}
                             </p>
                           )}
                         </div>
@@ -528,7 +528,7 @@ export default function RestaurantDetail() {
                             style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                           >
                             {loadingItemId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                            {item.optionGroups && item.optionGroups.length > 0 ? "Chọn" : t('common.add')}
+                            {item.optionGroups && item.optionGroups.length > 0 ? t("restaurant.select_options") : t('common.add')}
                           </button>
                         )}
                       </div>
@@ -555,7 +555,7 @@ export default function RestaurantDetail() {
                       className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold mx-auto transition-all hover:opacity-90"
                       style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                     >
-                      <LogIn className="w-4 h-4" /> Đăng nhập để đặt hàng
+                      <LogIn className="w-4 h-4" /> {t("restaurant.login_to_order")}
                     </button>
                   )}
                 </div>

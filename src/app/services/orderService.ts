@@ -12,7 +12,7 @@ export const orderService = {
     return parseResponse<Order>(response);
   },
 
-  checkPromotion: async (data: { promotionCode: string; restaurantId: string; totalAmount: number; deliveryFee?: number }) => {
+  checkPromotion: async (data: { promotionCode?: string; shippingPromotionCode?: string; restaurantId: string; totalAmount: number; deliveryFee?: number }) => {
     const response = await apiClient.post('/v1/orders/check-promotion', data);
     return response.data;
   },

@@ -199,14 +199,46 @@ export const getEarnings = (
   );
 };
 
-export const depositWallet = (amount: number) =>
-  request<{ walletBalance: number; codDebt: number }>("/wallet/deposit", {
+// Tạo yêu cầu nạp tiền qua VNPay — trả về payment URL
+export const requestDeposit = (amount: number) =>
+  request<{
+    requestId: string;
+    paymentUrl: string;
+  }>("/wallet/deposit", {
     method: "POST",
     body: JSON.stringify({ amount }),
   });
 
-export const withdrawWallet = (amount: number) =>
-  request<{ walletBalance: number }>("/wallet/withdraw", {
-    method: "POST",
-    body: JSON.stringify({ amount }),
-  });
+// Yêu cầu rút tiền — gửi thông tin ngân hàng cho admin
+export const requestWithdraw = (
+  amount: number,
+  bankName: string,
+  bankAccount: string,
+  bankOwner: string,
+  note?: string
+) =>
+  request<{ requestId: string; amount: number; status: string; message: string }>(
+    "/wallet/withdraw",
+    {
+      method: "POST",
+      body: JSON.stringify({ amount, bankName, bankAccount, bankOwner, note }),
+    }
+  );
+
+// Lấy lịch sử yêu cầu ví
+export const getWalletRequests = () =>
+  request<
+    Array<{
+      id: string;
+      type: "deposit" | "withdraw";
+      amount: number;
+      status: "pending" | "approved" | "rejected";
+      note: string | null;
+      adminNote: string | null;
+      bankName: string | null;
+      bankAccount: string | null;
+      bankOwner: string | null;
+      reviewedAt: string | null;
+      createdAt: string;
+    }>
+  >("/wallet/requests");

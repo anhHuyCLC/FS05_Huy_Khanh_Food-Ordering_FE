@@ -98,6 +98,7 @@ import {
 import * as driverService from "../../services/driverService";
 import type { DeliveryStatus, EarningsPeriod, Order } from "../../types/driver";
 import React from "react";
+import { Wallet, Building2, User as UserIcon, FileText, Copy, CheckCircle2, Clock3 } from "lucide-react";
 
 // ── Biểu đồ thu nhập theo ngày (fallback khi chưa có data từ API) ─────────────
 const SAMPLE_CHART: { day: string; earnings: number }[] = [
@@ -193,10 +194,23 @@ export default function DriverDashboard() {
   const { toasts, toast: notify, dismiss } = useToast();
   // ── NEW state ─────────────────────────────────────────────────────────────────
   const [earningPeriod, setEarningPeriod] = useState<EarningsPeriod>("week");
-  const [walletModal, setWalletModal] = useState<{ type: "deposit" | "withdraw"; isOpen: boolean }>({ type: "deposit", isOpen: false });
-  const [walletAmount, setWalletAmount] = useState<string>("");
+  // ── Wallet modal state ─────────────────────────────────────────────────────
+  type WalletModalType = "deposit" | "withdraw";
+  const [walletModal, setWalletModal] = useState<{ type: WalletModalType; isOpen: boolean }>({
+    type: "deposit",
+    isOpen: false,
+  });
+  // Deposit: chỉ cần step 1 (nhập số tiền) rồi mở VNPay
+  const [walletAmount, setWalletAmount] = useState("");
+  // Withdraw bank info
+  const [bankName, setBankName] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankOwner, setBankOwner] = useState("");
+  const [walletNote, setWalletNote] = useState("");
   const [isWalletLoading, setIsWalletLoading] = useState(false);
+  const [isVNPayRedirecting, setIsVNPayRedirecting] = useState(false);
   const historySkipRef = useRef(0);
+
 
   const navItems = [
     {
@@ -688,34 +702,86 @@ export default function DriverDashboard() {
     );
   }
 
-  const handleWalletAction = async () => {
+  // ── Mở modal ví ────────────────────────────────────────────────────────────────
+  function openWalletModal(type: "deposit" | "withdraw") {
+    setWalletModal({ type, isOpen: true });
+    setWalletAmount("");
+    setWalletNote("");
+    setBankName("");
+    setBankAccount("");
+    setBankOwner("");
+  }
+
+  function closeWalletModal() {
+    setWalletModal((m) => ({ ...m, isOpen: false }));
+  }
+
+  // Nạp tiền qua VNPay — mở trang thanh toán
+  async function handleDepositSubmit() {
     const amount = Number(walletAmount);
-    if (!amount || amount <= 0) {
-      notify.error("Số tiền không hợp lệ");
-      return;
-    }
+    if (!amount || amount <= 0) { notify.error("Số tiền không hợp lệ"); return; }
     setIsWalletLoading(true);
     try {
-      if (walletModal.type === "deposit") {
-        await driverService.depositWallet(amount);
-        notify.success(`Nạp ${amount.toLocaleString("vi-VN")}đ thành công!`);
-      } else {
-        await driverService.withdrawWallet(amount);
-        notify.success(`Rút ${amount.toLocaleString("vi-VN")}đ thành công!`);
+      const res = await driverService.requestDeposit(amount);
+      if (res.success && res.data?.paymentUrl) {
+        closeWalletModal();
+        setIsVNPayRedirecting(true);
+        // Mở VNPay trong tab hiện tại — VNPay sẽ redirect về trang này sau khi thanh toán
+        window.location.href = res.data.paymentUrl;
       }
-      setWalletModal({ ...walletModal, isOpen: false });
-      setWalletAmount("");
-      dispatch(loadDriverDashboard());
-      dispatch(fetchEarningsThunk(earningPeriod));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Giao dịch thất bại";
-      notify.error(message);
+      notify.error(error instanceof Error ? error.message : "Tạo yêu cầu thất bại");
     } finally {
       setIsWalletLoading(false);
     }
-  };
+  }
+
+  // Rút tiền
+  async function handleWithdrawSubmit() {
+    const amount = Number(walletAmount);
+    if (!amount || amount <= 0) { notify.error("Số tiền không hợp lệ"); return; }
+    if (!bankName.trim()) { notify.error("Vui lòng nhập tên ngân hàng"); return; }
+    if (!bankAccount.trim()) { notify.error("Vui lòng nhập số tài khoản"); return; }
+    if (!bankOwner.trim()) { notify.error("Vui lòng nhập tên chủ tài khoản"); return; }
+    setIsWalletLoading(true);
+    try {
+      const res = await driverService.requestWithdraw(amount, bankName, bankAccount, bankOwner, walletNote || undefined);
+      if (res.success) {
+        notify.success(res.data?.message ?? `Yêu cầu rút ${amount.toLocaleString("vi-VN")}đ đã gửi!`);
+        closeWalletModal();
+        dispatch(loadDriverDashboard());
+      }
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : "Giao dịch thất bại");
+    } finally {
+      setIsWalletLoading(false);
+    }
+  }
+
+  // ── Phát hiện VNPay redirect về sau khi thanh toán ví ──────────────────────
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const walletStatus = params.get("walletStatus");
+    const amount = params.get("amount");
+
+    if (walletStatus === "success") {
+      notify.success(
+        `🎉 Nạp tiền thành công! ${amount ? Number(amount).toLocaleString("vi-VN") + "đ" : ""} đã được cộng vào ví.`
+      );
+      dispatch(loadDriverDashboard()); // Refresh dashboard data to update wallet balance and codDebt
+      // Xóa query params khỏi URL
+      window.history.replaceState({}, "", window.location.pathname);
+      setIsVNPayRedirecting(false);
+    } else if (walletStatus === "failed") {
+      notify.error("Thanh toán VNPay thất bại hoặc bị hủy. Vui lòng thử lại.");
+      window.history.replaceState({}, "", window.location.pathname);
+      setIsVNPayRedirecting(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Derived values ────────────────────────────────────────────────────────────
+
   const totalPending = availableOrders.length;
   const totalActive = activeOrders.length;
   const statusCfg =
@@ -1388,13 +1454,13 @@ export default function DriverDashboard() {
                     </div>
                     <div className="mt-4 flex gap-2 relative z-10">
                       <button
-                        onClick={() => setWalletModal({ type: "deposit", isOpen: true })}
+                        onClick={() => openWalletModal("deposit")}
                         className="flex-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 py-1.5 text-xs font-bold transition-all"
                       >
                         Nạp tiền
                       </button>
                       <button
-                        onClick={() => setWalletModal({ type: "withdraw", isOpen: true })}
+                        onClick={() => openWalletModal("withdraw")}
                         className="flex-1 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 py-1.5 text-xs font-bold transition-all"
                       >
                         Rút tiền
@@ -1824,50 +1890,172 @@ export default function DriverDashboard() {
         </div>
       </div>
 
-      {/* Wallet Modal Overlay */}
+      {/* ══ Wallet Modal ══════════════════════════════════════════════════════════ */}
       {walletModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl transform transition-all">
-            <h3 className="text-lg font-black text-neutral-900 mb-2">
-              {walletModal.type === "deposit" ? "Nạp tiền vào ví" : "Rút tiền từ ví"}
-            </h3>
-            <p className="text-xs text-neutral-500 mb-4">
-              {walletModal.type === "deposit"
-                ? "Thanh toán công nợ COD hoặc nạp thêm số dư."
-                : "Rút số dư khả dụng từ ví tài xế."}
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">
-                  Số tiền (VNĐ)
-                </label>
-                <input
-                  type="number"
-                  value={walletAmount}
-                  onChange={(e) => setWalletAmount(e.target.value)}
-                  placeholder="Ví dụ: 100000"
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-bold text-neutral-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => setWalletModal({ ...walletModal, isOpen: false })}
-                  className="flex-1 py-3 text-xs font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-all"
-                >
-                  Hủy
-                </button>
-                <button
-                  onClick={handleWalletAction}
-                  disabled={isWalletLoading || !walletAmount}
-                  className="flex-1 py-3 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all"
-                >
-                  {isWalletLoading ? "Đang xử lý..." : "Xác nhận"}
-                </button>
-              </div>
-            </div>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+
+            {/* ── DEPOSIT MODAL ── */}
+            {walletModal.type === "deposit" && (
+              <>
+                {/* Header */}
+                <div className="relative bg-gradient-to-br from-emerald-600 to-emerald-500 px-6 pt-6 pb-8">
+                  <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-white/10 -translate-y-1/2 translate-x-1/2" />
+                  <button onClick={closeWalletModal} className="absolute top-4 right-4 text-white/70 hover:text-white text-lg leading-none">✕</button>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <Wallet className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-emerald-200">Ví tài xế</p>
+                      <h3 className="text-lg font-black text-white">Nạp tiền vào ví</h3>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 bg-white/15 rounded-lg px-3 py-2">
+                    <span className="text-[10px] text-emerald-100">⚡ Tự động qua VNPay — tiền vào ví ngay sau khi thanh toán</span>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="px-6 py-5 space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Số tiền nạp (VNĐ)</label>
+                    <input
+                      type="number"
+                      value={walletAmount}
+                      onChange={(e) => setWalletAmount(e.target.value)}
+                      placeholder="Tối thiểu 10.000đ"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-bold text-neutral-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                    {/* Quick amounts */}
+                    <div className="flex gap-2 mt-2">
+                      {[50000, 100000, 200000, 500000].map((v) => (
+                        <button key={v} onClick={() => setWalletAmount(String(v))}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${walletAmount === String(v) ? "bg-emerald-500 text-white border-emerald-500" : "bg-neutral-50 text-neutral-600 border-neutral-200 hover:border-emerald-300"}`}>
+                          {v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}k`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* VNPay info box */}
+                  <div className="flex items-start gap-3 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
+                    <div className="shrink-0 mt-0.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center">
+                        <span className="text-white text-[10px] font-black">VNP</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-800">Thanh toán qua VNPay</p>
+                      <p className="text-[11px] text-emerald-600 mt-0.5">Hỗ trợ quét QR ngân hàng, ATM, tài khoản VNPay. Tiền cộng vào ví <strong>ngay lập tức</strong> sau khi thanh toán thành công.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={closeWalletModal} className="flex-1 py-3 text-xs font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-all">Hủy</button>
+                    <button onClick={handleDepositSubmit} disabled={isWalletLoading || !walletAmount || Number(walletAmount) <= 0}
+                      className="flex-1 py-3 text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all flex items-center justify-center gap-2">
+                      {isWalletLoading ? (
+                        <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Đang tạo link...</>
+                      ) : (
+                        <>⚡ Thanh toán qua VNPay</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+
+            {/* ── WITHDRAW MODAL ── */}
+            {walletModal.type === "withdraw" && (
+              <>
+                {/* Header */}
+                <div className="relative bg-gradient-to-br from-violet-700 to-violet-500 px-6 pt-6 pb-8">
+                  <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-white/10 -translate-y-1/2 translate-x-1/2" />
+                  <button onClick={closeWalletModal} className="absolute top-4 right-4 text-white/70 hover:text-white text-lg leading-none">✕</button>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold tracking-[0.2em] uppercase text-violet-200">Ví tài xế</p>
+                      <h3 className="text-lg font-black text-white">Rút tiền từ ví</h3>
+                    </div>
+                  </div>
+                  {profile && (
+                    <div className="mt-3 inline-flex items-center gap-1.5 bg-white/15 rounded-lg px-3 py-1.5">
+                      <span className="text-[9px] font-bold text-violet-200 uppercase tracking-wider">Số dư khả dụng:</span>
+                      <span className="text-sm font-black text-white">{Number(profile.walletBalance).toLocaleString("vi-VN")}đ</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Body */}
+                <div className="px-6 py-5 space-y-3.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">Số tiền rút (VNĐ)</label>
+                    <input type="number" value={walletAmount} onChange={(e) => setWalletAmount(e.target.value)}
+                      placeholder="Tối thiểu 50.000đ"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-bold text-neutral-900 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all" />
+                    {/* Quick amounts */}
+                    <div className="flex gap-2 mt-2">
+                      {[100000, 200000, 500000, 1000000].map((v) => (
+                        <button key={v} onClick={() => setWalletAmount(String(v))}
+                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${walletAmount === String(v) ? "bg-violet-500 text-white border-violet-500" : "bg-neutral-50 text-neutral-600 border-neutral-200 hover:border-violet-300"}`}>
+                          {v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}k`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 className="w-3 h-3" /> Thông tin tài khoản nhận tiền
+                    </p>
+                    <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)}
+                      placeholder="Tên ngân hàng (VD: MB Bank, Vietcombank...)"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-2.5 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all" />
+                    <input type="text" value={bankAccount} onChange={(e) => setBankAccount(e.target.value)}
+                      placeholder="Số tài khoản"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-2.5 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-mono" />
+                    <div className="relative">
+                      <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                      <input type="text" value={bankOwner} onChange={(e) => setBankOwner(e.target.value.toUpperCase())}
+                        placeholder="TÊN CHỦ TÀI KHOẢN (viết hoa)"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all font-mono uppercase" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">
+                      <FileText className="inline w-3 h-3 mr-1" />Ghi chú (tùy chọn)
+                    </label>
+                    <input type="text" value={walletNote} onChange={(e) => setWalletNote(e.target.value)}
+                      placeholder="Lý do rút tiền..."
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-2.5 text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 transition-all" />
+                  </div>
+
+                  <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5">
+                    <Clock3 className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-700">Yêu cầu sẽ được admin xử lý trong <strong>1–24 giờ</strong>. Số dư sẽ bị giữ sau khi duyệt.</p>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={closeWalletModal} className="flex-1 py-3 text-xs font-bold text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl transition-all">Hủy</button>
+                    <button onClick={handleWithdrawSubmit}
+                      disabled={isWalletLoading || !walletAmount || Number(walletAmount) <= 0 || !bankName || !bankAccount || !bankOwner}
+                      className="flex-1 py-3 text-xs font-bold text-white bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all">
+                      {isWalletLoading ? "Đang gửi..." : "Gửi yêu cầu rút tiền"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
+
     </DashboardLayout>
   );
 }

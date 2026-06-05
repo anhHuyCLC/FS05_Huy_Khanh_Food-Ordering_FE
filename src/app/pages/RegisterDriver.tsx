@@ -16,23 +16,23 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuthActions } from "../hooks/useAuth";
 import { useAuthStore } from "../stores/authStore";
 
 const VEHICLE_TYPES = [
-  { value: "MOTORBIKE", label: "🏍️ Xe máy" },
-  { value: "BICYCLE", label: "🚲 Xe đạp" },
-  { value: "CAR", label: "🚗 Ô tô" },
-  { value: "ELECTRIC_BIKE", label: "⚡ Xe máy điện" },
-];
+  { value: "MOTORBIKE", labelKey: "auth.vehicle_types.motorbike" },
+  { value: "BICYCLE", labelKey: "auth.vehicle_types.bicycle" },
+  { value: "CAR", labelKey: "auth.vehicle_types.car" },
+  { value: "ELECTRIC_BIKE", labelKey: "auth.vehicle_types.electric_bike" },
+]
 
-const steps = [
-  { id: 1, label: "Tài khoản" },
-  { id: 2, label: "Phương tiện" },
-  { id: 3, label: "Hoàn tất" },
-];
+interface Step {
+  id: number;
+  label: string;
+}
 
-function StepIndicator({ current }: { current: number }) {
+function StepIndicator({ current, steps }: { current: number; steps: Step[] }) {
   return (
     <div className="flex items-center gap-0 mb-8">
       {steps.map((s, i) => (
@@ -97,6 +97,7 @@ interface FormData {
 
 export default function RegisterDriver() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +109,12 @@ export default function RegisterDriver() {
   useEffect(() => {
     if (user) navigate("/");
   }, [user, navigate]);
+
+  const steps = [
+    { id: 1, label: t("auth.step_account") },
+    { id: 2, label: t("auth.step_vehicle") },
+    { id: 3, label: t("auth.step_complete") },
+  ];
 
   const [form, setForm] = useState<FormData>({
     firstname: "",
@@ -123,42 +130,96 @@ export default function RegisterDriver() {
     nationalIdNumber: "",
   });
 
-  const update = (key: keyof FormData, value: string) =>
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const update = (key: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
 
   const validateStep1 = () => {
-    if (!form.firstname.trim()) return "Vui lòng nhập họ";
-    if (!form.lastname.trim()) return "Vui lòng nhập tên";
-    if (!form.email.trim()) return "Vui lòng nhập email";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      return "Email không hợp lệ";
-    if (!form.phonenumber.trim()) return "Vui lòng nhập số điện thoại";
-    if (!form.address.trim()) return "Vui lòng nhập địa chỉ thường trú";
-    if (form.password.length < 8) return "Mật khẩu phải có ít nhất 8 ký tự";
-    if (form.password !== form.confirmpassword)
-      return "Mật khẩu xác nhận không khớp";
-    return null;
+    const newErrors: Record<string, string> = {};
+    const nameRegex = /^[\p{L}\s]+$/u;
+
+    if (!form.firstname.trim()) {
+      newErrors.firstname = t("auth.errors.firstname_required");
+    } else if (!nameRegex.test(form.firstname.trim())) {
+      newErrors.firstname = t("auth.errors.firstname_invalid");
+    }
+
+    if (!form.lastname.trim()) {
+      newErrors.lastname = t("auth.errors.lastname_required");
+    } else if (!nameRegex.test(form.lastname.trim())) {
+      newErrors.lastname = t("auth.errors.lastname_invalid");
+    }
+
+    if (!form.email.trim()) {
+      newErrors.email = t("auth.errors.email_required");
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      newErrors.email = t("auth.errors.email_invalid");
+    }
+
+    if (!form.phonenumber.trim()) {
+      newErrors.phonenumber = t("auth.errors.phone_required");
+    } else if (!/^(0|\+84)[35789][0-9]{8}$/.test(form.phonenumber)) {
+      newErrors.phonenumber = t("auth.errors.phone_invalid");
+    }
+
+    if (!form.address.trim()) {
+      newErrors.address = t("auth.errors.address_driver_required");
+    }
+
+    if (!form.password) {
+      newErrors.password = t("auth.errors.password_required");
+    } else if (form.password.length < 8) {
+      newErrors.password = t("auth.errors.password_min");
+    }
+
+    if (!form.confirmpassword) {
+      newErrors.confirmpassword = t("auth.errors.confirm_password_required");
+    } else if (form.password !== form.confirmpassword) {
+      newErrors.confirmpassword = t("auth.errors.confirm_password_mismatch");
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const validateStep2 = () => {
-    if (!form.vehicleType) return "Vui lòng chọn loại phương tiện";
-    if (!form.licensePlate.trim()) return "Vui lòng nhập biển số xe";
-    if (!form.driverLicenseNumber.trim())
-      return "Vui lòng nhập số bằng lái xe";
-    if (!form.nationalIdNumber.trim())
-      return "Vui lòng nhập số CCCD/CMND";
-    return null;
+    const newErrors: Record<string, string> = {};
+
+    if (!form.vehicleType) {
+      newErrors.vehicleType = t("auth.errors.vehicle_type_required");
+    }
+    if (!form.licensePlate.trim()) {
+      newErrors.licensePlate = t("auth.errors.license_plate_required");
+    }
+    if (!form.driverLicenseNumber.trim()) {
+      newErrors.driverLicenseNumber = t("auth.errors.driver_license_required");
+    }
+    if (!form.nationalIdNumber.trim()) {
+      newErrors.nationalIdNumber = t("auth.errors.national_id_required");
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleNextStep = () => {
     setError(null);
     if (step === 1) {
-      const err = validateStep1();
-      if (err) { setError(err); return; }
+      const isValid = validateStep1();
+      if (!isValid) return;
     }
     if (step === 2) {
-      const err = validateStep2();
-      if (err) { setError(err); return; }
+      const isValid = validateStep2();
+      if (!isValid) return;
     }
     setStep((s) => s + 1);
   };
@@ -184,22 +245,18 @@ export default function RegisterDriver() {
       });
       navigate("/login", {
         state: {
-          successMessage:
-            "Đăng ký tài xế thành công! Tài khoản đang chờ được phê duyệt.",
+          successMessage: t("auth.register_driver_success"),
         },
       });
     } catch {
-      setError(
-        "Đăng ký tài xế thất bại. Email có thể đã được sử dụng hoặc thông tin không hợp lệ."
-      );
+      setError(t("auth.register_driver_failed"));
       setStep(1);
     } finally {
       setLoading(false);
     }
   };
 
-  const vehicleLabel =
-    VEHICLE_TYPES.find((v) => v.value === form.vehicleType)?.label || "";
+  const vehicleLabel = t(VEHICLE_TYPES.find((v) => v.value === form.vehicleType)?.labelKey || "");
 
   return (
     <div
@@ -227,16 +284,16 @@ export default function RegisterDriver() {
           >
             <Bike className="w-4 h-4 text-blue-600" />
             <span className="text-sm font-semibold text-blue-700">
-              Đăng ký làm tài xế giao hàng
+              {t("auth.driver_register_title")}
             </span>
           </div>
           <p className="text-gray-500 text-sm">
-            Tự do về thời gian, thu nhập hấp dẫn, giao hàng mọi lúc bạn muốn
+            {t("auth.driver_register_subtitle")}
           </p>
         </div>
 
         {/* Step Indicator */}
-        <StepIndicator current={step} />
+        <StepIndicator current={step} steps={steps} />
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
           {/* ── STEP 1: Account Info ── */}
@@ -253,10 +310,10 @@ export default function RegisterDriver() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-gray-900">
-                    Thông tin cá nhân
+                    {t("auth.driver_personal_info")}
                   </h2>
                   <p className="text-xs text-gray-400">
-                    Thông tin tài khoản của bạn
+                    {t("auth.driver_personal_info_desc")}
                   </p>
                 </div>
               </div>
@@ -264,85 +321,124 @@ export default function RegisterDriver() {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Họ <span className="text-red-400">*</span>
+                    {t("auth.firstname")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Nguyễn"
+                    placeholder={t("auth.firstname_placeholder")}
                     value={form.firstname}
                     onChange={(e) => update("firstname", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.firstname
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.firstname && (
+                    <p className="text-xs text-red-500 mt-1">{errors.firstname}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Tên <span className="text-red-400">*</span>
+                    {t("auth.lastname")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Văn A"
+                    placeholder={t("auth.lastname_placeholder")}
                     value={form.lastname}
                     onChange={(e) => update("lastname", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.lastname
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.lastname && (
+                    <p className="text-xs text-red-500 mt-1">{errors.lastname}</p>
+                  )}
                 </div>
               </div>
-
+ 
               <div className="space-y-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Mail className="w-3 h-3" /> Email{" "}
+                    <Mail className="w-3 h-3" /> {t("auth.email")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="email"
-                    placeholder="driver@email.com"
+                    placeholder={t("auth.email_placeholder")}
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.email
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.email && (
+                    <p className="text-xs text-red-500 mt-1">{errors.email}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> Số điện thoại{" "}
+                    <Phone className="w-3 h-3" /> {t("auth.phonenumber")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="tel"
-                    placeholder="0901 234 567"
+                    placeholder={t("auth.phonenumber_placeholder")}
                     value={form.phonenumber}
                     onChange={(e) => update("phonenumber", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.phonenumber
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.phonenumber && (
+                    <p className="text-xs text-red-500 mt-1">{errors.phonenumber}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" /> Địa chỉ thường trú{" "}
+                    <MapPin className="w-3 h-3" /> {t("auth.driver_address_label")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Số nhà, đường, quận, thành phố..."
+                    placeholder={t("auth.driver_address_placeholder")}
                     value={form.address}
                     onChange={(e) => update("address", e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.address
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.address && (
+                    <p className="text-xs text-red-500 mt-1">{errors.address}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Mật khẩu{" "}
+                    <Lock className="w-3 h-3" /> {t("auth.password")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showPass ? "text" : "password"}
-                      placeholder="Tối thiểu 8 ký tự"
+                      placeholder={t("auth.min_8_chars")}
                       value={form.password}
                       onChange={(e) => update("password", e.target.value)}
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all pr-11"
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all pr-11 ${
+                        errors.password
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      }`}
                     />
                     <button
                       type="button"
@@ -356,22 +452,29 @@ export default function RegisterDriver() {
                       )}
                     </button>
                   </div>
+                  {errors.password && (
+                    <p className="text-xs text-red-500 mt-1">{errors.password}</p>
+                  )}
                 </div>
-
+ 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Xác nhận mật khẩu{" "}
+                    <Lock className="w-3 h-3" /> {t("auth.confirm_password")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showConfirm ? "text" : "password"}
-                      placeholder="Nhập lại mật khẩu"
+                      placeholder={t("auth.confirmpassword_placeholder")}
                       value={form.confirmpassword}
                       onChange={(e) =>
                         update("confirmpassword", e.target.value)
                       }
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all pr-11"
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all pr-11 ${
+                        errors.confirmpassword
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      }`}
                     />
                     <button
                       type="button"
@@ -385,6 +488,9 @@ export default function RegisterDriver() {
                       )}
                     </button>
                   </div>
+                  {errors.confirmpassword && (
+                    <p className="text-xs text-red-500 mt-1">{errors.confirmpassword}</p>
+                  )}
                 </div>
               </div>
 
@@ -399,7 +505,7 @@ export default function RegisterDriver() {
                 className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
                 style={{ background: "linear-gradient(135deg, #3B82F6, #6366F1)" }}
               >
-                Tiếp theo <ArrowRight className="w-4 h-4" />
+                {t("common.next")} <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -411,7 +517,7 @@ export default function RegisterDriver() {
                 onClick={() => { setError(null); setStep(1); }}
                 className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-5 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" /> Quay lại
+                <ArrowLeft className="w-4 h-4" /> {t("common.back")}
               </button>
 
               <div className="flex items-center gap-2 mb-5">
@@ -425,10 +531,10 @@ export default function RegisterDriver() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-gray-900">
-                    Thông tin phương tiện & giấy tờ
+                    {t("auth.driver_vehicle_info")}
                   </h2>
                   <p className="text-xs text-gray-400">
-                    Cần thiết để xác minh tài xế
+                    {t("auth.driver_vehicle_info_desc")}
                   </p>
                 </div>
               </div>
@@ -437,7 +543,7 @@ export default function RegisterDriver() {
                 {/* Vehicle type selector */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-2">
-                    Loại phương tiện <span className="text-red-400">*</span>
+                    {t("auth.vehicle_type_label")} <span className="text-red-400">*</span>
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {VEHICLE_TYPES.map((v) => (
@@ -451,7 +557,7 @@ export default function RegisterDriver() {
                             : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
                         }`}
                       >
-                        {v.label}
+                        {t(v.labelKey)}
                       </button>
                     ))}
                   </div>
@@ -459,57 +565,77 @@ export default function RegisterDriver() {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <Car className="w-3 h-3" /> Biển số xe{" "}
+                    <Car className="w-3 h-3" /> {t("auth.license_plate_label")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="VD: 51G-123.45"
+                    placeholder={t("auth.license_plate_placeholder")}
                     value={form.licensePlate}
                     onChange={(e) =>
                       update("licensePlate", e.target.value.toUpperCase())
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all font-mono"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all font-mono ${
+                      errors.licensePlate
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.licensePlate && (
+                    <p className="text-xs text-red-500 mt-1">{errors.licensePlate}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <CreditCard className="w-3 h-3" /> Số bằng lái xe{" "}
+                    <CreditCard className="w-3 h-3" /> {t("auth.driver_license_label")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Số trên bằng lái xe của bạn"
+                    placeholder={t("auth.driver_license_placeholder")}
                     value={form.driverLicenseNumber}
                     onChange={(e) =>
                       update("driverLicenseNumber", e.target.value)
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.driverLicenseNumber
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.driverLicenseNumber && (
+                    <p className="text-xs text-red-500 mt-1">{errors.driverLicenseNumber}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
-                    <CreditCard className="w-3 h-3" /> Số CCCD / CMND{" "}
+                    <CreditCard className="w-3 h-3" /> {t("auth.national_id_label")}{" "}
                     <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="Số căn cước công dân hoặc CMND"
+                    placeholder={t("auth.national_id_placeholder")}
                     value={form.nationalIdNumber}
                     onChange={(e) =>
                       update("nationalIdNumber", e.target.value)
                     }
-                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+                    className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                      errors.nationalIdNumber
+                        ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                        : "border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    }`}
                   />
+                  {errors.nationalIdNumber && (
+                    <p className="text-xs text-red-500 mt-1">{errors.nationalIdNumber}</p>
+                  )}
                 </div>
               </div>
 
               {/* Info notice */}
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs mb-4">
-                🔒 Thông tin giấy tờ của bạn được bảo mật và chỉ dùng để xác
-                minh danh tính tài xế.
+                {t("auth.driver_secure_notice")}
               </div>
 
               {error && (
@@ -523,7 +649,7 @@ export default function RegisterDriver() {
                 className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95"
                 style={{ background: "linear-gradient(135deg, #3B82F6, #6366F1)" }}
               >
-                Tiếp theo <ArrowRight className="w-4 h-4" />
+                {t("common.next")} <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -535,36 +661,36 @@ export default function RegisterDriver() {
                 onClick={() => { setError(null); setStep(2); }}
                 className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 mb-5 transition-colors"
               >
-                <ArrowLeft className="w-4 h-4" /> Quay lại
+                <ArrowLeft className="w-4 h-4" /> {t("common.back")}
               </button>
 
               <h2 className="text-base font-bold text-gray-900 mb-1">
-                Xác nhận thông tin
+                {t("auth.confirm_info_title")}
               </h2>
               <p className="text-xs text-gray-400 mb-5">
-                Kiểm tra lại trước khi gửi đăng ký
+                {t("auth.confirm_info_desc")}
               </p>
 
               {/* Summary */}
               <div className="space-y-3 mb-5">
                 <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100">
                   <p className="text-xs font-bold text-blue-600 mb-2 uppercase tracking-wide">
-                    Thông tin tài xế
+                    {t("auth.driver_personal_info")}
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <span className="text-gray-400 text-xs">Họ và tên</span>
+                    <span className="text-gray-400 text-xs">{t("auth.full_name")}</span>
                     <span className="font-medium text-gray-700">
                       {form.firstname} {form.lastname}
                     </span>
-                    <span className="text-gray-400 text-xs">Email</span>
+                    <span className="text-gray-400 text-xs">{t("auth.email")}</span>
                     <span className="font-medium text-gray-700 truncate">
                       {form.email}
                     </span>
-                    <span className="text-gray-400 text-xs">SĐT</span>
+                    <span className="text-gray-400 text-xs">{t("auth.phonenumber")}</span>
                     <span className="font-medium text-gray-700">
                       {form.phonenumber}
                     </span>
-                    <span className="text-gray-400 text-xs">Địa chỉ</span>
+                    <span className="text-gray-400 text-xs">{t("auth.address")}</span>
                     <span className="font-medium text-gray-700 leading-tight">
                       {form.address}
                     </span>
@@ -573,22 +699,22 @@ export default function RegisterDriver() {
 
                 <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
                   <p className="text-xs font-bold text-indigo-600 mb-2 uppercase tracking-wide">
-                    Phương tiện & Giấy tờ
+                    {t("auth.driver_vehicle_label")}
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <span className="text-gray-400 text-xs">Phương tiện</span>
+                    <span className="text-gray-400 text-xs">{t("auth.vehicle_type_label")}</span>
                     <span className="font-medium text-gray-700">
                       {vehicleLabel}
                     </span>
-                    <span className="text-gray-400 text-xs">Biển số</span>
+                    <span className="text-gray-400 text-xs">{t("auth.license_plate_label")}</span>
                     <span className="font-medium text-gray-700 font-mono">
                       {form.licensePlate}
                     </span>
-                    <span className="text-gray-400 text-xs">Bằng lái</span>
+                    <span className="text-gray-400 text-xs">{t("auth.driver_license_label")}</span>
                     <span className="font-medium text-gray-700">
                       {form.driverLicenseNumber}
                     </span>
-                    <span className="text-gray-400 text-xs">CCCD/CMND</span>
+                    <span className="text-gray-400 text-xs">{t("auth.national_id_label")}</span>
                     <span className="font-medium text-gray-700">
                       {form.nationalIdNumber}
                     </span>
@@ -598,19 +724,17 @@ export default function RegisterDriver() {
 
               {/* Benefits */}
               <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-xs mb-4">
-                ℹ️ Tài khoản tài xế sẽ được kiểm duyệt trong vòng{" "}
-                <strong>24–48 giờ</strong>. Chúng tôi sẽ liên hệ qua số điện
-                thoại để xác nhận.
+                {t("auth.driver_audit_notice")}
               </div>
 
               <p className="text-xs text-gray-400 mb-4">
-                Bằng cách đăng ký, bạn đồng ý với{" "}
+                {t("auth.partner_terms_agree")}{" "}
                 <a href="#" className="text-blue-500">
-                  Điều khoản tài xế
+                  {t("auth.driver_terms")}
                 </a>{" "}
-                và{" "}
+                {t("auth.and")}{" "}
                 <a href="#" className="text-blue-500">
-                  Chính sách bảo mật
+                  {t("auth.partner_privacy")}
                 </a>
                 .
               </p>
@@ -630,11 +754,11 @@ export default function RegisterDriver() {
                 {loading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Đang gửi...
+                    {t("auth.submit_driver_loading")}
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" /> Gửi đăng ký tài xế
+                    <CheckCircle2 className="w-4 h-4" /> {t("auth.submit_driver_btn")}
                   </>
                 )}
               </button>
@@ -643,20 +767,20 @@ export default function RegisterDriver() {
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          Đã có tài khoản?{" "}
+          {t("auth.already_have_account")}{" "}
           <Link
             to="/login"
             className="font-semibold"
             style={{ color: "#FF4500" }}
           >
-            Đăng nhập
+            {t("auth.sign_in")}
           </Link>
           {" · "}
           <Link
             to="/register"
             className="font-semibold text-gray-500 hover:text-gray-700"
           >
-            Đăng ký cách khác
+            {t("auth.other_register_options")}
           </Link>
         </p>
       </div>

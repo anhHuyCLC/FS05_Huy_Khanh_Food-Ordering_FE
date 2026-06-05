@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trophy, Star, Clock, CheckCircle, Edit, Trash2 } from "lucide-react";
-import { IMGS } from "../../data/mock";
 import { useTranslation } from "react-i18next";
 import { useAppDispatch, useAppSelector } from "../../stores/store";
 import { fetchRestaurants } from "../../features/restaurantSlice";
@@ -20,12 +19,6 @@ import type { Order } from "../../types/order";
 import dayjs from "dayjs";
 import { selectSelectedAddress } from "../../features/mapSelectors";
 import { calculateDistance, getStableCoords, getDeliveryTimeText } from "../../utils/geo";
-
-
-
-const restaurantImages = [IMGS.burger, IMGS.pizza, IMGS.chicken, IMGS.coffee, IMGS.sushi, IMGS.ramen, IMGS.dessert, IMGS.restaurant];
-
-const getRestaurantImage = (index: number) => restaurantImages[index % restaurantImages.length];
 
 const getBadgeIcon = (name: string) => {
   const normalized = name.toLowerCase();
@@ -49,9 +42,10 @@ export default function Profile() {
 
   // Personal Info Form
   const [profileName, setProfileName] = useState(user?.fullName || "");
-  const [profilePhone, setProfilePhone] = useState(user?.profile?.phone || "");
-  const [profileAvatar, setProfileAvatar] = useState(user?.profile?.avatarUrl || "");
+  const [profilePhone, setProfilePhone] = useState(user?.profile?.phone || user?.phoneNumber || "");
+  const [profileAvatar, setProfileAvatar] = useState(user?.profile?.avatarUrl || user?.avatarUrl || "");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
 
   // Notification Settings
   const [notifPush, setNotifPush] = useState(true);
@@ -79,8 +73,8 @@ export default function Profile() {
     setSettingsModal(type);
     if (type === "personal_info") {
       setProfileName(user?.fullName || "");
-      setProfilePhone(user?.profile?.phone || "");
-      setProfileAvatar(user?.profile?.avatarUrl || "");
+      setProfilePhone(user?.profile?.phone || user?.phoneNumber || "");
+      setProfileAvatar(user?.profile?.avatarUrl || user?.avatarUrl || "");
     } else if (type === "security") {
       setOldPassword("");
       setNewPassword("");
@@ -92,7 +86,7 @@ export default function Profile() {
     e.preventDefault();
     if (!user) return;
     if (!profileName.trim()) {
-      toast.error("Họ và tên không được để trống");
+      toast.error(t("profile.name_required"));
       return;
     }
     try {
@@ -106,10 +100,11 @@ export default function Profile() {
       const { getMe } = await import("../../services/authService");
       const updatedUser = await getMe();
       useAuthStore.getState().setUser(updatedUser);
-      toast.success("Cập nhật thông tin thành công!");
+      toast.success(t("profile.update_info_success"));
+      setAvatarError(false);
       setSettingsModal(null);
     } catch {
-      toast.error("Không thể cập nhật thông tin cá nhân. Vui lòng thử lại sau.");
+      toast.error(t("profile.update_info_error"));
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -120,10 +115,10 @@ export default function Profile() {
     try {
       setIsSavingNotif(true);
       await new Promise((resolve) => setTimeout(resolve, 500));
-      toast.success("Cập nhật cài đặt thông báo thành công!");
+      toast.success(t("profile.update_notif_success"));
       setSettingsModal(null);
     } catch {
-      toast.error("Không thể lưu cài đặt thông báo");
+      toast.error(t("profile.update_notif_error"));
     } finally {
       setIsSavingNotif(false);
     }
@@ -132,20 +127,20 @@ export default function Profile() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      toast.error("Mật khẩu xác nhận không khớp");
+      toast.error(t("profile.confirm_password_mismatch"));
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error("Mật khẩu mới phải có tối thiểu 6 ký tự");
+    if (newPassword.length < 8) {
+      toast.error(t("profile.password_min_length"));
       return;
     }
     try {
       setIsChangingPass(true);
       await changePassword(oldPassword, newPassword);
-      toast.success("Đổi mật khẩu thành công!");
+      toast.success(t("profile.change_password_success"));
       setSettingsModal(null);
     } catch {
-      toast.error("Đổi mật khẩu thất bại. Mật khẩu cũ có thể không chính xác.");
+      toast.error(t("profile.change_password_error"));
     } finally {
       setIsChangingPass(false);
     }
@@ -154,12 +149,12 @@ export default function Profile() {
   const handleAddCard = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCardNumber.trim() || !newCardExpiry.trim() || !newCardCVV.trim()) {
-      toast.error("Vui lòng nhập đầy đủ thông tin thẻ");
+      toast.error(t("profile.card_info_required"));
       return;
     }
     const cleanNumber = newCardNumber.replace(/\s+/g, "");
     if (cleanNumber.length < 12) {
-      toast.error("Số thẻ không hợp lệ");
+      toast.error(t("profile.card_number_invalid"));
       return;
     }
     const masked = `**** **** **** ${cleanNumber.slice(-4)}`;
@@ -174,25 +169,25 @@ export default function Profile() {
     setNewCardExpiry("");
     setNewCardCVV("");
     setIsAddingCard(false);
-    toast.success("Thêm thẻ thanh toán thành công!");
+    toast.success(t("profile.add_card_success"));
   };
 
   const handleDeleteCard = (id: string) => {
-    if (!confirm("Bạn có chắc muốn xóa thẻ này?")) return;
+    if (!confirm(t("profile.confirm_delete_card"))) return;
     setCards(cards.filter((c) => c.id !== id));
-    toast.success("Xóa thẻ thanh toán thành công!");
+    toast.success(t("profile.delete_card_success"));
   };
 
   const handleDeleteAccount = () => {
-    const doubleConfirm = prompt("Để xác nhận xóa tài khoản, vui lòng nhập chữ 'DELETE' dưới đây:");
+    const doubleConfirm = prompt(t("profile.confirm_delete_account_prompt"));
     if (doubleConfirm !== "DELETE") {
-      toast.error("Xác nhận không chính xác. Hủy yêu cầu xóa.");
+      toast.error(t("profile.confirm_delete_account_invalid"));
       return;
     }
-    toast.info("Đang xử lý yêu cầu xóa tài khoản...");
+    toast.info(t("profile.deleting_account"));
     setTimeout(() => {
       useAuthStore.getState().logout();
-      toast.success("Tài khoản của bạn đã được xóa thành công.");
+      toast.success(t("profile.delete_account_success"));
       navigate("/login");
     }, 1500);
   };
@@ -346,7 +341,7 @@ export default function Profile() {
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formLabel.trim() || !formAddress.trim()) {
-      toast.error("Vui lòng điền đầy đủ nhãn và địa chỉ");
+      toast.error(t("profile.address_fields_required"));
       return;
     }
     try {
@@ -357,32 +352,32 @@ export default function Profile() {
           address: formAddress,
           isDefault: formIsDefault,
         });
-        toast.success("Cập nhật địa chỉ thành công");
+        toast.success(t("profile.update_address_success"));
       } else {
         await addressService.createAddress({
           label: formLabel,
           address: formAddress,
           isDefault: formIsDefault,
         });
-        toast.success("Thêm địa chỉ thành công");
+        toast.success(t("profile.add_address_success"));
       }
       setIsModalOpen(false);
       fetchAddresses();
     } catch {
-      toast.error("Không thể lưu địa chỉ. Vui lòng thử lại sau.");
+      toast.error(t("profile.save_address_error"));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteAddress = async (id: string) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa địa chỉ này?")) return;
+    if (!confirm(t("profile.confirm_delete_address"))) return;
     try {
       await addressService.deleteAddress(id);
-      toast.success("Xóa địa chỉ thành công");
+      toast.success(t("profile.delete_address_success"));
       fetchAddresses();
     } catch {
-      toast.error("Không thể xóa địa chỉ. Vui lòng thử lại sau.");
+      toast.error(t("profile.delete_address_error"));
     }
   };
 
@@ -390,10 +385,10 @@ export default function Profile() {
     if (addr.isDefault) return;
     try {
       await addressService.updateAddress(addr.id, { isDefault: true });
-      toast.success("Đặt địa chỉ mặc định thành công");
+      toast.success(t("profile.set_default_address_success"));
       fetchAddresses();
     } catch {
-      toast.error("Không thể đặt mặc định. Vui lòng thử lại sau.");
+      toast.error(t("profile.set_default_address_error"));
     }
   };
 
@@ -436,9 +431,18 @@ export default function Profile() {
           <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-[#FF4500]/20 blur-2xl" />
           <div className="flex items-center gap-5">
             <div className="relative">
-              <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-white text-2xl font-black" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                {userInitials}
-              </div>
+              {(user?.profile?.avatarUrl || user?.avatarUrl) && !avatarError ? (
+                <img
+                  src={user?.profile?.avatarUrl || user?.avatarUrl || ""}
+                  alt={user.fullName}
+                  className="w-20 h-20 rounded-3xl object-cover border border-white/10"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-white text-2xl font-black" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
+                  {userInitials}
+                </div>
+              )}
               <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500 border-2 border-gray-900 flex items-center justify-center">
                 <CheckCircle className="w-3 h-3 text-white" />
               </div>
@@ -487,9 +491,9 @@ export default function Profile() {
         {activeTab === "orders" && (
           <div className="space-y-3">
             {isLoadingOrders ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Đang tải lịch sử đơn hàng...</div>
+              <div className="text-center py-8 text-gray-400 text-sm">{t("profile.loading_orders")}</div>
             ) : orders.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Chưa có đơn hàng nào.</div>
+              <div className="text-center py-8 text-gray-400 text-sm">{t("profile.no_orders")}</div>
             ) : (
               orders.map((order) => (
                 <div
@@ -497,7 +501,7 @@ export default function Profile() {
                   className="bg-white rounded-2xl p-4 flex items-center gap-4 border border-gray-100 hover:border-orange-200 transition-all cursor-pointer"
                   onClick={() => navigate(`/tracking?orderId=${order.id}`)}
                 >
-                  <img src={order.restaurant?.logo || IMGS.burger} alt={order.restaurant?.name || "Restaurant"} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                  <img src={order.restaurant?.logo} alt={order.restaurant?.name || "Restaurant"} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900">{order.restaurant?.name || "Restaurant"}</p>
                     <p className="text-sm text-gray-400">#{order.id.slice(0, 8).toUpperCase()} · {dayjs(order.createdAt).format("MMM D, YYYY")}</p>
@@ -523,9 +527,9 @@ export default function Profile() {
         {activeTab === "addresses" && (
           <div className="space-y-3">
             {isLoadingAddresses ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Đang tải danh sách địa chỉ...</div>
+              <div className="text-center py-8 text-gray-400 text-sm">{t("profile.loading_addresses")}</div>
             ) : !Array.isArray(addresses) || addresses.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Chưa có địa chỉ nào được lưu.</div>
+              <div className="text-center py-8 text-gray-400 text-sm">{t("profile.no_addresses")}</div>
             ) : (
               addresses.map((a) => (
                 <div key={a.id} className="bg-white rounded-2xl p-5 flex items-start gap-4 border border-gray-100 hover:border-orange-100 transition-all">
@@ -544,7 +548,7 @@ export default function Profile() {
                           onClick={() => handleSetDefault(a)}
                           className="text-xs text-gray-400 hover:text-[#FF4500] transition-colors shrink-0"
                         >
-                          Thiết lập mặc định
+                          {t("profile.set_default")}
                         </button>
                       )}
                     </div>
@@ -554,14 +558,14 @@ export default function Profile() {
                     <button
                       onClick={() => openEditModal(a)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-[#FF4500] hover:bg-orange-50 transition-colors cursor-pointer"
-                      title="Sửa"
+                      title={t("common.edit")}
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteAddress(a.id)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
-                      title="Xóa"
+                      title={t("common.delete")}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -581,11 +585,11 @@ export default function Profile() {
         {activeTab === "favorites" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
             {isLoadingFavorites ? (
-              <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">Đang tải danh sách yêu thích...</div>
+              <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">{t("profile.loading_favorites")}</div>
             ) : favoriteRestaurants.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">Chưa có nhà hàng yêu thích nào.</div>
+              <div className="text-center py-8 text-gray-400 text-sm col-span-2 w-full">{t("profile.no_favorites")}</div>
             ) : (
-              favoriteRestaurants.map((r, index) => {
+              favoriteRestaurants.map((r) => {
                 let restLat = r.latitude ? parseFloat(String(r.latitude)) : null;
                 let restLon = r.longitude ? parseFloat(String(r.longitude)) : null;
                 if (restLat === null || restLon === null || isNaN(restLat) || isNaN(restLon)) {
@@ -599,7 +603,7 @@ export default function Profile() {
 
                 return (
                   <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
-                    <img src={getRestaurantImage(index)} alt={r.name} className="w-full h-32 object-cover" />
+                    <img src={r.imageUrl} alt={r.name} className="w-full h-32 object-cover" />
                     <div className="p-4">
                       <p className="font-bold text-gray-900">{r.name}</p>
                       <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
@@ -621,9 +625,9 @@ export default function Profile() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="font-bold text-gray-900">
-                    Cấp độ {currentLevelName} &rarr; {nextLevelName}
+                    {t("profile.level_transition", { current: currentLevelName, next: nextLevelName })}
                   </p>
-                  <p className="text-sm text-gray-400">Tiến trình: {progressPercentage.toFixed(1)}%</p>
+                  <p className="text-sm text-gray-400">{t("profile.progress_percentage", { percent: progressPercentage.toFixed(1) })}</p>
                 </div>
                 <Trophy className="w-6 h-6 text-yellow-400" />
               </div>
@@ -632,18 +636,18 @@ export default function Profile() {
               </div>
               <p className="text-xs text-gray-400 mt-2">
                 {pointsToNext > 0
-                  ? `Tích lũy thêm ${pointsToNext.toLocaleString()} điểm để đạt hạng ${nextLevelName}`
-                  : "Bạn đã đạt cấp độ cao nhất!"}
+                  ? t("profile.points_to_next", { points: pointsToNext.toLocaleString(), tier: nextLevelName })
+                  : t("profile.max_level_reached")}
               </p>
             </div>
 
             {/* Missions List */}
             <div className="bg-white rounded-3xl p-6 mb-5 border border-gray-100 shadow-sm">
               <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2 text-base">
-                🎯 Nhiệm vụ tích điểm
+                {t("profile.points_mission")}
               </h3>
               {userMissions.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">Không có nhiệm vụ hoạt động nào.</p>
+                <p className="text-sm text-gray-400 text-center py-4">{t("profile.no_active_missions")}</p>
               ) : (
                 <div className="space-y-4">
                   {userMissions.map((um: UserMission) => {
@@ -656,7 +660,7 @@ export default function Profile() {
                             <p className="text-xs text-gray-400">{um.mission.description}</p>
                           </div>
                           <span className="text-xs font-bold text-[#FF4500] bg-orange-50 px-2.5 py-1 rounded-full shrink-0">
-                            +{um.mission.pointsReward} Điểm
+                            +{um.mission.pointsReward} {t("profile.points")}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-2">
@@ -668,7 +672,7 @@ export default function Profile() {
                           </span>
                           {um.isCompleted && (
                             <span className="text-xs font-bold text-green-500 flex items-center gap-0.5 shrink-0">
-                              <CheckCircle className="w-3.5 h-3.5" /> Hoàn thành
+                              <CheckCircle className="w-3.5 h-3.5" /> {t("profile.mission_completed")}
                             </span>
                           )}
                         </div>
@@ -682,11 +686,11 @@ export default function Profile() {
             {/* Badges Grid */}
             <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
               <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2 text-base">
-                🏆 Huy hiệu đã đạt
+                {t("profile.achieved_badges_title")}
               </h3>
               {userBadges.length === 0 ? (
                 <div className="text-center py-6 text-gray-400 text-sm">
-                  Bạn chưa đạt huy hiệu nào. Hãy hoàn thành các đơn hàng để tích điểm và mở khóa!
+                  {t("profile.badges_empty")}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -696,7 +700,7 @@ export default function Profile() {
                       <p className="font-semibold text-gray-900 text-sm">{ub.badge.name}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{ub.badge.description}</p>
                       <span className="inline-flex items-center gap-1 text-xs text-green-500 mt-2">
-                        <CheckCircle className="w-3 h-3" /> Đã đạt
+                        <CheckCircle className="w-3 h-3" /> {t("profile.badge_achieved")}
                       </span>
                     </div>
                   ))}
@@ -745,15 +749,15 @@ export default function Profile() {
           <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-bold text-gray-900">
-                {editingAddress ? "Chỉnh sửa địa chỉ" : "Thêm địa chỉ mới"}
+                {editingAddress ? t("checkout.edit_address") : t("profile.add_address")}
               </h3>
-              <p className="text-xs text-gray-400 mt-1">Lưu địa chỉ để đặt món nhanh chóng hơn</p>
+              <p className="text-xs text-gray-400 mt-1">{t("profile.save_address_btn")}</p>
             </div>
             <form onSubmit={handleSaveAddress} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Nhãn địa chỉ</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("checkout.address_label")}</label>
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {["Nhà riêng", "Văn phòng", "Trường học"].map((suggested) => (
+                  {[t("checkout.label_home"), t("checkout.label_office"), t("checkout.label_school")].map((suggested) => (
                     <button
                       key={suggested}
                       type="button"
@@ -771,18 +775,18 @@ export default function Profile() {
                   type="text"
                   value={formLabel}
                   onChange={(e) => setFormLabel(e.target.value)}
-                  placeholder="Ví dụ: Nhà riêng, Công ty, Người yêu..."
+                  placeholder={t("checkout.address_label_placeholder")}
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Địa chỉ chi tiết</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("checkout.detailed_address_label")}</label>
                 <textarea
                   value={formAddress}
                   onChange={(e) => setFormAddress(e.target.value)}
-                  placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố..."
+                  placeholder={t("checkout.detailed_address_placeholder")}
                   rows={3}
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
                   required
@@ -798,7 +802,7 @@ export default function Profile() {
                   className="w-4 h-4 rounded border-gray-300 text-[#FF4500] focus:ring-orange-500"
                 />
                 <label htmlFor="isDefault" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
-                  Đặt làm địa chỉ mặc định
+                  {t("checkout.set_default_checkbox")}
                 </label>
               </div>
 
@@ -808,7 +812,7 @@ export default function Profile() {
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
-                  Hủy
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
@@ -816,7 +820,7 @@ export default function Profile() {
                   className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
                   style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                 >
-                  {isSaving ? "Đang lưu..." : "Lưu địa chỉ"}
+                  {isSaving ? `${t("profile.loading_save")}...` : t("profile.save_address_btn")}
                 </button>
               </div>
             </form>
@@ -833,18 +837,18 @@ export default function Profile() {
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">
-                  {settingsModal === "personal_info" && "Thông tin cá nhân"}
-                  {settingsModal === "notifications" && "Cài đặt thông báo"}
-                  {settingsModal === "security" && "Mật khẩu & Bảo mật"}
-                  {settingsModal === "payments" && "Phương thức thanh toán"}
-                  {settingsModal === "referral" && "Giới thiệu bạn bè"}
+                  {settingsModal === "personal_info" && t("profile.settings_tabs.personal_info")}
+                  {settingsModal === "notifications" && t("profile.settings_tabs.notifications")}
+                  {settingsModal === "security" && t("profile.settings_tabs.security")}
+                  {settingsModal === "payments" && t("profile.settings_tabs.payments")}
+                  {settingsModal === "referral" && t("profile.settings_tabs.referral")}
                 </h3>
                 <p className="text-xs text-gray-400 mt-1">
-                  {settingsModal === "personal_info" && "Cập nhật tên, số điện thoại và ảnh đại diện"}
-                  {settingsModal === "notifications" && "Chọn các kênh bạn muốn nhận thông báo"}
-                  {settingsModal === "security" && "Thay đổi mật khẩu đăng nhập của bạn"}
-                  {settingsModal === "payments" && "Quản lý các thẻ thanh toán liên kết"}
-                  {settingsModal === "referral" && "Chia sẻ mã để nhận thêm điểm thưởng"}
+                  {settingsModal === "personal_info" && t("profile.personal_info_desc")}
+                  {settingsModal === "notifications" && t("profile.notifications_desc")}
+                  {settingsModal === "security" && t("profile.security_desc")}
+                  {settingsModal === "payments" && t("profile.payments_desc")}
+                  {settingsModal === "referral" && t("profile.referral_desc")}
                 </p>
               </div>
               <button onClick={() => setSettingsModal(null)} className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
@@ -859,43 +863,62 @@ export default function Profile() {
               {settingsModal === "personal_info" && (
                 <form onSubmit={handleUpdateProfile} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Họ và tên</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("auth.full_name")}</label>
                     <input
                       type="text"
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      placeholder="Nhập họ và tên..."
+                      placeholder={t("auth.full_name")}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Số điện thoại</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("auth.phonenumber")}</label>
                     <input
                       type="text"
                       value={profilePhone}
                       onChange={(e) => setProfilePhone(e.target.value)}
-                      placeholder="Nhập số điện thoại..."
+                      placeholder={t("auth.phonenumber_placeholder")}
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Đường dẫn ảnh đại diện (Avatar URL)</label>
-                    <input
-                      type="url"
-                      value={profileAvatar}
-                      onChange={(e) => setProfileAvatar(e.target.value)}
-                      placeholder="https://example.com/avatar.jpg"
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
-                    />
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.avatar_url_label")}</label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={profileAvatar}
+                        onChange={(e) => setProfileAvatar(e.target.value)}
+                        placeholder={t("profile.avatar_url_placeholder")}
+                        className="w-full pl-4 pr-16 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const text = await navigator.clipboard.readText();
+                            if (text) {
+                              setProfileAvatar(text);
+                              toast.success(t("common.success"));
+                            }
+                          } catch (err) {
+                            console.error("Failed to read clipboard:", err);
+                          }
+                        }}
+                        className="absolute right-2 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-[#FF4500] hover:text-[#FF6B35] rounded-xl text-xs font-bold transition-all"
+                      >
+                        {t("common.paste")}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex gap-3 pt-4 border-t border-gray-100">
                     <button type="button" onClick={() => setSettingsModal(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors">
-                      Hủy
+                      {t("common.cancel")}
                     </button>
                     <button type="submit" disabled={isUpdatingProfile} className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      {isUpdatingProfile ? "Đang lưu..." : "Lưu thay đổi"}
+                      {isUpdatingProfile ? `${t("profile.loading_save")}...` : t("common.save_changes")}
                     </button>
                   </div>
                 </form>
@@ -906,9 +929,9 @@ export default function Profile() {
                 <form onSubmit={handleSaveNotifications} className="space-y-4">
                   <div className="space-y-3">
                     {[
-                      { state: notifPush, setter: setNotifPush, title: "Thông báo ứng dụng (Push)", desc: "Nhận tin tức cập nhật đơn hàng tức thời" },
-                      { state: notifEmail, setter: setNotifEmail, title: "Email Marketing", desc: "Nhận hóa đơn và mã giảm giá hàng tuần" },
-                      { state: notifSMS, setter: setNotifSMS, title: "Tin nhắn SMS", desc: "Nhận OTP và thông báo khẩn cấp từ tài xế" },
+                      { state: notifPush, setter: setNotifPush, title: t("profile.settings_tabs.notifications") + " (Push)", desc: t("profile.notifications_desc") },
+                      { state: notifEmail, setter: setNotifEmail, title: "Email Marketing", desc: t("profile.settings_desc.notifications") },
+                      { state: notifSMS, setter: setNotifSMS, title: "SMS", desc: t("profile.settings_desc.notifications") },
                     ].map((item) => (
                       <div key={item.title} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
                         <div>
@@ -930,10 +953,10 @@ export default function Profile() {
 
                   <div className="flex gap-3 pt-4 border-t border-gray-100">
                     <button type="button" onClick={() => setSettingsModal(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors">
-                      Hủy
+                      {t("common.cancel")}
                     </button>
                     <button type="submit" disabled={isSavingNotif} className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      {isSavingNotif ? "Đang lưu..." : "Lưu cài đặt"}
+                      {isSavingNotif ? `${t("profile.loading_save")}...` : t("profile.save_settings_btn")}
                     </button>
                   </div>
                 </form>
@@ -943,7 +966,7 @@ export default function Profile() {
               {settingsModal === "security" && (
                 <form onSubmit={handleChangePassword} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mật khẩu hiện tại</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.current_password")}</label>
                     <input
                       type="password"
                       value={oldPassword}
@@ -954,18 +977,18 @@ export default function Profile() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mật khẩu mới</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.new_password")}</label>
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Tối thiểu 6 ký tự..."
+                      placeholder="••••••••"
                       className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Xác nhận mật khẩu mới</label>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.confirm_new_password")}</label>
                     <input
                       type="password"
                       value={confirmPassword}
@@ -978,10 +1001,10 @@ export default function Profile() {
 
                   <div className="flex gap-3 pt-4 border-t border-gray-100">
                     <button type="button" onClick={() => setSettingsModal(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors">
-                      Hủy
+                      {t("common.cancel")}
                     </button>
                     <button type="submit" disabled={isChangingPass} className="flex-1 py-3 rounded-2xl text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                      {isChangingPass ? "Đang đổi..." : "Cập nhật mật khẩu"}
+                      {isChangingPass ? t("profile.changing") : t("profile.update_password_btn")}
                     </button>
                   </div>
                 </form>
@@ -993,7 +1016,7 @@ export default function Profile() {
                   {isAddingCard ? (
                     <form onSubmit={handleAddCard} className="space-y-4">
                       <div>
-                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Số thẻ</label>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.card_number_label")}</label>
                         <input
                           type="text"
                           value={newCardNumber}
@@ -1005,7 +1028,7 @@ export default function Profile() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Hết hạn (MM/YY)</label>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.card_expiry_label")}</label>
                           <input
                             type="text"
                             value={newCardExpiry}
@@ -1016,7 +1039,7 @@ export default function Profile() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Mã CVV</label>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("profile.card_cvv_label")}</label>
                           <input
                             type="password"
                             value={newCardCVV}
@@ -1029,10 +1052,10 @@ export default function Profile() {
                       </div>
                       <div className="flex gap-3 pt-2">
                         <button type="button" onClick={() => setIsAddingCard(false)} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50">
-                          Hủy
+                          {t("common.cancel")}
                         </button>
                         <button type="submit" className="flex-1 py-2.5 rounded-xl text-white text-xs font-semibold hover:opacity-90" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}>
-                          Xác nhận
+                          {t("profile.card_confirm_btn")}
                         </button>
                       </div>
                     </form>
@@ -1044,7 +1067,7 @@ export default function Profile() {
                             <span className="text-2xl">{card.type === "Visa" ? "💳" : "🎴"}</span>
                             <div>
                               <p className="font-semibold text-sm text-gray-800">{card.type} {card.number}</p>
-                              <p className="text-xs text-gray-400">Hết hạn {card.expiry}</p>
+                              <p className="text-xs text-gray-400">{t("profile.expires")} {card.expiry}</p>
                             </div>
                           </div>
                           <button onClick={() => handleDeleteCard(card.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
@@ -1053,7 +1076,7 @@ export default function Profile() {
                         </div>
                       ))}
                       <button onClick={() => setIsAddingCard(true)} className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-[#FF4500] hover:bg-orange-50 hover:border-orange-200 transition-colors mt-2">
-                        + Thêm thẻ thanh toán mới
+                        {t("profile.add_new_card")}
                       </button>
                     </div>
                   )}
@@ -1064,7 +1087,7 @@ export default function Profile() {
               {settingsModal === "referral" && (
                 <div className="space-y-4 text-center">
                   <div className="p-6 rounded-3xl bg-orange-50/50 border border-orange-100 inline-block w-full">
-                    <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-2">Mã giới thiệu của bạn</p>
+                    <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-2">{t("profile.referral_code_title")}</p>
                     <div className="flex items-center justify-center gap-3 bg-white border border-orange-150 rounded-2xl p-4 shadow-sm">
                       <span className="font-mono text-2xl font-black text-gray-800">
                         {`SAVOUR-${user?.id?.slice(0, 6).toUpperCase() || "FRIEND"}`}
@@ -1073,19 +1096,19 @@ export default function Profile() {
                         onClick={() => {
                           const code = `SAVOUR-${user?.id?.slice(0, 6).toUpperCase() || "FRIEND"}`;
                           navigator.clipboard.writeText(code);
-                          toast.success("Đã sao chép mã giới thiệu!");
+                          toast.success(t("profile.referral_copied"));
                         }}
                         className="p-2 rounded-xl bg-orange-100 text-[#FF4500] hover:bg-orange-200 transition-colors"
                       >
-                        Sao chép
+                        {t("discovery.copy_code")}
                       </button>
                     </div>
                   </div>
                   <div className="text-left space-y-2 text-xs text-gray-500 px-2">
-                    <p className="font-bold text-gray-700">🎁 Thể lệ chương trình:</p>
-                    <p>• Bạn bè nhập mã khi đăng ký tài khoản mới.</p>
-                    <p>• Bạn nhận ngay <span className="font-black text-[#FF4500]">50 điểm thưởng Savour</span> khi bạn bè hoàn thành đơn hàng đầu tiên.</p>
-                    <p>• Bạn bè được tặng ngay <span className="font-black text-green-600">Voucher WELCOME10</span> giảm 10%.</p>
+                    <p className="font-bold text-gray-700">{t("profile.referral_rules_title")}</p>
+                    <p>{t("profile.referral_rule_1")}</p>
+                    <p>{t("profile.referral_rule_2")}</p>
+                    <p>{t("profile.referral_rule_3")}</p>
                   </div>
                 </div>
               )}

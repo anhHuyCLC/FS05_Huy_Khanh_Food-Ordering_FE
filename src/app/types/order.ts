@@ -14,6 +14,7 @@ export interface CreateOrderInput {
   deliveryLongitude?: number;
   customerPhone?: string;
   promotionCode?: string;
+  shippingPromotionCode?: string;
   paymentMethod?: "cash" | "e_wallet" | "bank_transfer";
   note?: string;
   tableNumber?: string;
@@ -97,6 +98,11 @@ export interface Order {
     };
   };
   promotion?: {
+    code?: string;
+    discountPercentage?: number | null;
+    fixedDiscount?: number | null;
+  };
+  shippingPromotion?: {
     code?: string;
     discountPercentage?: number | null;
     fixedDiscount?: number | null;

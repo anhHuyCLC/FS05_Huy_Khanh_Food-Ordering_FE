@@ -125,7 +125,7 @@ export default function Discovery() {
 
   const [search, setSearch] = useState(qParam);
   const [prevParams, setPrevParams] = useState({ category: categoryParam, q: qParam });
-  const [activeFilter, setActiveFilter] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("all");
   const selectedAddress = useAppSelector(selectSelectedAddress);
   const [isLocating, setIsLocating] = useState(false);
   const [maxDistance, setMaxDistance] = useState<number>(Infinity);
@@ -337,11 +337,11 @@ export default function Discovery() {
     }
 
     // Status filters
-    if (activeFilter === t("discovery.open_now")) {
+    if (activeFilter === "open_now") {
       baseResult = baseResult.filter((r) => r.isActive);
-    } else if (activeFilter === t("discovery.top_rated")) {
+    } else if (activeFilter === "top_rated") {
       baseResult = baseResult.filter((r) => Number(r.rating || 0) >= 4.5);
-    } else if (activeFilter === t("discovery.under_30_min")) {
+    } else if (activeFilter === "under_30_min") {
       baseResult = baseResult.filter((r) => {
         let dist = Infinity;
         if (selectedAddress && r.latitude && r.longitude) {
@@ -462,7 +462,7 @@ export default function Discovery() {
 
   const handleResetFilters = () => {
     setSearch("");
-    setActiveFilter("All");
+    setActiveFilter("all");
     setMinRating(0);
     setMaxDistance(Infinity);
     setSortBy("Relevance");
@@ -495,9 +495,9 @@ export default function Discovery() {
                   {isLocating ? <Loader2 className="w-4 h-4 text-[#FF4500] animate-spin" /> : <MapPin className="w-4 h-4 text-[#FF4500]" />}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Địa chỉ giao hàng</p>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">{t("checkout.delivery_address")}</p>
                   <p className="text-xs sm:text-sm font-bold text-gray-800 truncate mt-1 group-hover:text-[#FF4500] transition-colors">
-                    {selectedAddress ? (selectedAddress.address || `Đã định vị (${selectedAddress.lat.toFixed(4)}, ${selectedAddress.lng.toFixed(4)})`) : "Nhấp định vị vị trí của tôi"}
+                    {selectedAddress ? (selectedAddress.address || `${t("discovery.located_at")} (${selectedAddress.lat.toFixed(4)}, ${selectedAddress.lng.toFixed(4)})`) : t("discovery.click_to_locate")}
                   </p>
                 </div>
               </div>
@@ -512,7 +512,7 @@ export default function Discovery() {
                 className="flex-1 flex items-center justify-center gap-2 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 hover:bg-gray-100 transition-all text-gray-500 shadow-sm"
               >
                 <Search className="w-5 h-5 text-gray-400 shrink-0" />
-                <span className="text-sm font-semibold">Tìm kiếm</span>
+                <span className="text-sm font-semibold">{t("common.search")}</span>
               </button>
 
               {/* Quick Filters */}
@@ -534,7 +534,7 @@ export default function Discovery() {
                     onChange={(e) => setMaxDistance(Number(e.target.value))}
                     className="appearance-none pl-3 pr-8 py-2 rounded-xl bg-gray-50 border border-gray-100 text-xs font-bold text-gray-700 outline-none cursor-pointer focus:border-orange-300 focus:ring-2 focus:ring-orange-50 transition-all"
                   >
-                    <option value={Infinity}>Khoảng cách</option>
+                    <option value={Infinity}>{t("discovery.distance")}</option>
                     <option value={2}>&lt; 2 km</option>
                     <option value={5}>&lt; 5 km</option>
                     <option value={10}>&lt; 10 km</option>
@@ -548,19 +548,19 @@ export default function Discovery() {
                     onChange={(e) => setMinRating(Number(e.target.value))}
                     className="appearance-none pl-3 pr-8 py-2 rounded-xl bg-gray-50 border border-gray-100 text-xs font-bold text-gray-700 outline-none cursor-pointer focus:border-orange-300 focus:ring-2 focus:ring-orange-50 transition-all"
                   >
-                    <option value={0}>Đánh giá</option>
-                    <option value={4}>Từ 4.0 ⭐</option>
-                    <option value={4.5}>Từ 4.5 ⭐</option>
+                    <option value={0}>{t("home.rating")}</option>
+                    <option value={4}>{t("discovery.from_rating_4")}</option>
+                    <option value={4.5}>{t("discovery.from_rating_45")}</option>
                   </select>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 pointer-events-none" />
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setActiveFilter(activeFilter === t("discovery.open_now") ? "All" : t("discovery.open_now"))}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 ${activeFilter === t("discovery.open_now") ? "bg-green-50 text-green-600 border-green-200" : "bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100"}`}
+                  onClick={() => setActiveFilter(activeFilter === "open_now" ? "all" : "open_now")}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 ${activeFilter === "open_now" ? "bg-green-50 text-green-600 border-green-200" : "bg-gray-50 text-gray-600 border-gray-100 hover:bg-gray-100"}`}
                 >
-                  🟢 Mở cửa
+                  🟢 {t("discovery.open_now")}
                 </button>
               </div>
             </form>
@@ -578,7 +578,7 @@ export default function Discovery() {
           <div className="space-y-3">
             <h2 className="text-lg font-black text-gray-800 tracking-tight flex items-center gap-2">
               <Gift className="w-5 h-5 text-[#FF4500]" />
-              Khuyến mãi &amp; Vouchers dành cho bạn
+              {t("discovery.promotions_vouchers")}
             </h2>
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory">
               {promotions.length === 0 ? (
@@ -600,8 +600,8 @@ export default function Discovery() {
                         <div className="h-full flex flex-col justify-between relative z-10">
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <span className="px-2 py-0.5 bg-white/20 rounded text-[9px] font-black uppercase">Voucher</span>
-                              <span className="text-[10px] font-bold text-red-100">Đơn tối thiểu {Number(promo.minOrderValue).toLocaleString()}đ</span>
+                              <span className="px-2 py-0.5 bg-white/20 rounded text-[9px] font-black uppercase">{t("discovery.voucher")}</span>
+                              <span className="text-[10px] font-bold text-red-100">{t("discovery.min_order", { min: Number(promo.minOrderValue).toLocaleString() })}</span>
                             </div>
                             <h3 className="text-2xl font-black mt-1.5">{promo.code}</h3>
                             <p className="text-xs text-red-50/90 mt-1 line-clamp-1">{promo.description || "Giảm ngay hóa đơn đồ ăn"}</p>
@@ -610,7 +610,7 @@ export default function Discovery() {
                             onClick={(e) => { e.stopPropagation(); handleCopyCode(promo.code); }}
                             className="px-3.5 py-1.5 bg-white text-red-600 text-xs font-black rounded-xl inline-flex items-center gap-1.5 shadow-sm hover:bg-red-50 transition-colors w-fit"
                           >
-                            {copiedCode === promo.code ? <><Check className="w-3 h-3" /> Đã sao chép!</> : <><Copy className="w-3 h-3" /> Sao Chép Mã</>}
+                            {copiedCode === promo.code ? <><Check className="w-3 h-3" /> {t("discovery.copied")}</> : <><Copy className="w-3 h-3" /> {t("discovery.copy_code")}</>}
                           </button>
                         </div>
                       </div>
@@ -631,12 +631,12 @@ export default function Discovery() {
                       <div className="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-white/10" />
                       <div className="h-full flex flex-col justify-between relative z-10">
                         <div>
-                          <span className="px-2 py-0.5 bg-white/20 rounded text-[9px] font-black uppercase">{isFreeship ? "Freeship" : "Ưu đãi"}</span>
+                          <span className="px-2 py-0.5 bg-white/20 rounded text-[9px] font-black uppercase">{isFreeship ? t("discovery.free_delivery") : t("restaurant.promo")}</span>
                           <h3 className="text-xl font-black mt-2">{promo.code}</h3>
                           <p className="text-xs text-orange-50/90 mt-1 line-clamp-2">{promo.description || "Khuyến mãi hấp dẫn"}</p>
                         </div>
                         <button className="px-3.5 py-1.5 bg-white text-gray-800 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-gray-50 transition-colors w-fit">
-                          Xem Cửa Hàng <ArrowRight className="w-3 h-3" />
+                          {t("discovery.view_store")} <ArrowRight className="w-3 h-3" />
                         </button>
                       </div>
                     </div>
@@ -657,7 +657,7 @@ export default function Discovery() {
                       <p className="text-xs text-amber-50/90 mt-1">2 Gà Giòn + Pepsi mát lạnh chỉ 59K</p>
                     </div>
                     <button className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-amber-50 transition-colors w-fit">
-                      Đặt Ngay <ArrowRight className="w-3 h-3" />
+                      {t("discovery.order_now")} <ArrowRight className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
@@ -676,12 +676,12 @@ export default function Discovery() {
                         <p className="text-xs text-amber-50/90 mt-1 line-clamp-2">{combo.desc}</p>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold bg-white/25 px-2.5 py-1 rounded-xl">{combo.price.toLocaleString("vi-VN")}đ</span>
+                        <span className="text-sm font-bold bg-white/25 px-2.5 py-1 rounded-xl">{combo.price.toLocaleString()}đ</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleOrderCombo(combo); }}
                           className="px-3.5 py-1.5 bg-white text-amber-600 text-xs font-black rounded-lg inline-flex items-center gap-1 shadow-sm hover:bg-amber-50 transition-colors w-fit"
                         >
-                          Đặt Ngay <ArrowRight className="w-3 h-3" />
+                          {t("discovery.order_now")} <ArrowRight className="w-3 h-3" />
                         </button>
                       </div>
                     </div>
@@ -696,13 +696,13 @@ export default function Discovery() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-gray-800 tracking-tight flex items-center gap-2">
                 <Crown className="w-5 h-5 text-yellow-500" />
-                Hạng thành viên &amp; Ưu đãi độc quyền
+                {t("discovery.membership_perks")}
               </h2>
               {user && (
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${userRank.bgColor} ${userRank.borderColor} border`}>
                   <span className="text-sm">{userRank.emoji}</span>
                   <span className={`text-xs font-black ${userRank.textColor}`}>{userRank.label}</span>
-                  <span className={`text-[10px] font-bold ${userRank.textColor} opacity-70`}>· {userPoints} điểm</span>
+                  <span className={`text-[10px] font-bold ${userRank.textColor} opacity-70`}>· {userPoints} {t("profile.rewards")}</span>
                 </div>
               )}
             </div>
@@ -713,7 +713,7 @@ export default function Discovery() {
                 <div className="shrink-0 text-2xl">{userRank.emoji}</div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs font-bold ${userRank.textColor}`}>
-                    Còn <span className="font-black">{nextRank.minPoints - userPoints} điểm</span> để lên hạng {nextRank.emoji} {nextRank.label}
+                    {t("discovery.points_to_next_rank", { points: nextRank.minPoints - userPoints, rank: `${nextRank.emoji} ${nextRank.label}` })}
                   </p>
                   <div className="mt-2 h-2 bg-white/60 rounded-full overflow-hidden">
                     <div
@@ -745,17 +745,17 @@ export default function Discovery() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-2xl">{rank.emoji}</span>
                       {isCurrent && (
-                        <span className="px-2 py-0.5 bg-white/25 rounded-full text-[9px] font-black uppercase tracking-widest">Hạng của bạn</span>
+                        <span className="px-2 py-0.5 bg-white/25 rounded-full text-[9px] font-black uppercase tracking-widest">{t("discovery.your_rank")}</span>
                       )}
                       {!isUnlocked && <span className="text-[10px] text-gray-400">🔒 {rank.minPoints}đ</span>}
                     </div>
                     <h4 className={`font-black text-sm ${isCurrent ? "text-white" : userRank.textColor}`}>{rank.label}</h4>
                     <p className={`text-[10px] mt-0.5 ${isCurrent ? "text-white/70" : "text-gray-400"}`}>
-                      {rank.vouchers.length} ưu đãi độc quyền
+                      {t("discovery.exclusive_offers_count", { count: rank.vouchers.length })}
                     </p>
                     <div className="mt-3 flex items-center gap-1">
                       <Zap className={`w-3 h-3 ${isCurrent ? "text-white/80" : "text-gray-400"}`} />
-                      <span className={`text-[10px] font-bold ${isCurrent ? "text-white/80" : "text-gray-400"}`}>Từ {rank.minPoints.toLocaleString()} điểm</span>
+                      <span className={`text-[10px] font-bold ${isCurrent ? "text-white/80" : "text-gray-400"}`}>{t("discovery.from_points", { count: rank.minPoints.toLocaleString() })}</span>
                     </div>
                   </div>
                 );
@@ -765,7 +765,7 @@ export default function Discovery() {
             {/* My rank vouchers – always show current rank vouchers */}
             {user && (
               <div className="space-y-2">
-                <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Voucher độc quyền hạng {userRank.label} của bạn</p>
+                <p className="text-xs font-black text-gray-500 uppercase tracking-widest">{t("discovery.exclusive_vouchers_for", { tier: userRank.label })}</p>
                 <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
                   {userRank.vouchers.map((v) => (
                     <div
@@ -773,16 +773,16 @@ export default function Discovery() {
                       className={`shrink-0 rounded-2xl border-2 border-dashed ${userRank.borderColor} ${userRank.bgColor} p-4 flex flex-col justify-between min-w-[180px] relative`}
                     >
                       <div>
-                        <span className={`text-[9px] font-black uppercase tracking-widest ${userRank.textColor} opacity-70`}>Voucher độc quyền</span>
+                        <span className={`text-[9px] font-black uppercase tracking-widest ${userRank.textColor} opacity-70`}>{t("discovery.voucher")}</span>
                         <h4 className={`font-black text-lg mt-1 ${userRank.textColor}`}>{v.code}</h4>
                         <p className="text-[10px] text-gray-500 mt-0.5">{v.desc}</p>
-                        {v.minOrder > 0 && <p className="text-[9px] text-gray-400 mt-0.5">Đơn từ {v.minOrder.toLocaleString()}đ</p>}
+                        {v.minOrder > 0 && <p className="text-[9px] text-gray-400 mt-0.5">{t("discovery.order_from", { min: v.minOrder.toLocaleString() })}</p>}
                       </div>
                       <button
                         onClick={() => handleCopyCode(v.code)}
                         className={`mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r ${userRank.color} text-white shadow-sm hover:opacity-90 transition-opacity w-fit`}
                       >
-                        {copiedCode === v.code ? <><Check className="w-3 h-3" /> Đã sao chép!</> : <><Copy className="w-3 h-3" /> Sao chép</>}
+                        {copiedCode === v.code ? <><Check className="w-3 h-3" /> {t("discovery.copied")}</> : <><Copy className="w-3 h-3" /> {t("discovery.copy_code")}</>}
                       </button>
                     </div>
                   ))}
@@ -794,11 +794,10 @@ export default function Discovery() {
           {/* ── Personalized / AI Section ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
 
-            {/* Recent orders */}
             <div className="space-y-3.5">
               <h2 className="text-lg font-black text-gray-800 tracking-tight flex items-center gap-2">
                 <RotateCcw className="w-5 h-5 text-orange-500" />
-                Đặt lại món gần đây
+                {t("discovery.reorder_recent")}
               </h2>
               <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
                 {recentDisplayList.map((r) => (
@@ -814,7 +813,7 @@ export default function Discovery() {
                         <p className="text-[10px] text-gray-400 font-semibold truncate mt-0.5">{r.address || "Đà Nẵng"}</p>
                       </div>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-[10px] font-black text-[#FF4500] bg-orange-50 px-2 py-0.5 rounded-lg">Đặt lại</span>
+                        <span className="text-[10px] font-black text-[#FF4500] bg-orange-50 px-2 py-0.5 rounded-lg">{t("discovery.reorder")}</span>
                         <span className="text-[10px] font-semibold text-gray-400 flex items-center gap-0.5">⭐ {r.rating || "New"}</span>
                       </div>
                     </div>
@@ -827,7 +826,7 @@ export default function Discovery() {
             <div className="space-y-3.5">
               <h2 className="text-lg font-black text-gray-800 tracking-tight flex items-center gap-2">
                 <Brain className="w-5 h-5 text-indigo-500" />
-                Dành cho bạn
+                {t("discovery.for_you")}
               </h2>
               <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-900/40 rounded-2xl p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 relative overflow-hidden shadow-lg h-[90px]">
                 <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -867,8 +866,8 @@ export default function Discovery() {
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <h2 className="text-lg font-black text-gray-800">
                 {activeCategoryName
-                  ? `Cửa hàng · ${activeCategoryName}`
-                  : "Tất cả cửa hàng"}
+                  ? t("discovery.stores_category", { category: activeCategoryName })
+                  : t("discovery.all_stores")}
               </h2>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
                 {loading ? t("common.loading") : `${filtered.length} ${t("discovery.restaurants_near")}`}
@@ -894,17 +893,17 @@ export default function Discovery() {
             ) : filtered.length === 0 ? (
               <div className="text-center py-16 px-6 bg-white rounded-3xl border border-gray-100 shadow-sm max-w-md mx-auto">
                 <span className="text-6xl">🍲</span>
-                <h3 className="font-black text-gray-800 mt-4 text-base">Không tìm thấy nhà hàng nào</h3>
+                <h3 className="font-black text-gray-800 mt-4 text-base">{t("discovery.no_restaurants_found")}</h3>
                 <p className="text-gray-400 text-xs mt-1.5 font-medium">
                   {activeCategoryName
-                    ? `Chưa có nhà hàng nào cho danh mục "${activeCategoryName}".`
-                    : "Hãy thử xóa bớt bộ lọc hoặc tìm kiếm bằng từ khóa khác."}
+                    ? t("discovery.no_restaurants_category", { category: activeCategoryName })
+                    : t("discovery.no_restaurants_desc")}
                 </p>
                 <button
                   onClick={handleResetFilters}
                   className="mt-6 px-6 py-2.5 bg-gradient-to-r from-[#FF4500] to-[#FF6B35] text-white font-bold text-xs rounded-xl hover:opacity-95 shadow-md shadow-orange-500/20 uppercase tracking-wider"
                 >
-                  Xem tất cả cửa hàng
+                  {t("discovery.view_all_stores")}
                 </button>
               </div>
             ) : (
@@ -921,7 +920,7 @@ export default function Discovery() {
                       onClick={() => setShowAllRestaurants(!showAllRestaurants)}
                       className="px-8 py-3.5 bg-white hover:bg-gray-50 text-gray-800 font-black text-xs rounded-2xl border border-gray-200 hover:border-gray-300 shadow-sm transition-all hover:scale-[1.01] active:scale-95 uppercase tracking-wider flex items-center gap-1.5"
                     >
-                      {showAllRestaurants ? "Thu gọn danh sách" : `Xem tất cả cửa hàng (${filtered.length})`}
+                      {showAllRestaurants ? t("discovery.collapse_list") : t("discovery.view_all_stores_count", { count: filtered.length })}
                       <ArrowRight className={`w-3.5 h-3.5 text-[#FF4500] transition-transform ${showAllRestaurants ? "-rotate-90" : ""}`} />
                     </button>
                   </div>

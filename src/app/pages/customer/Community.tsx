@@ -50,7 +50,7 @@ const viLocale = {
 };
 
 dayjs.extend(relativeTime);
-dayjs.locale(viLocale, undefined, true);
+dayjs.locale("vi", viLocale);
 
 const TAB_VALUES = ["for_you", "following", "trending", "near_you"];
 
@@ -61,7 +61,11 @@ function formatNum(n: number) {
 
 export default function Community() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  useEffect(() => {
+    dayjs.locale(i18n.language === "vi" ? "vi" : "en");
+  }, [i18n.language]);
   
   // Auth state
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -123,7 +127,7 @@ export default function Community() {
       setPosts(data || []);
     } catch (err) {
       console.error(err);
-      toast.error("Không thể tải danh sách bài viết.");
+      toast.error(t("community.error_load_posts"));
     } finally {
       setLoadingPosts(false);
     }
@@ -174,7 +178,7 @@ export default function Community() {
   // Handle Like post
   const handleLike = async (postId: string) => {
     if (!isLoggedIn) {
-      toast.error("Vui lòng đăng nhập để thích bài viết.");
+      toast.error(t("community.login_to_like"));
       navigate("/login");
       return;
     }
@@ -218,7 +222,7 @@ export default function Community() {
         setCommentsMap((prev) => ({ ...prev, [postId]: commentsList }));
       } catch (err) {
         console.error(err);
-        toast.error("Lỗi khi tải bình luận.");
+        toast.error(t("community.error_load_comments"));
       } finally {
         setLoadingCommentsMap((prev) => ({ ...prev, [postId]: false }));
       }
@@ -230,7 +234,7 @@ export default function Community() {
     const text = newCommentTextMap[postId]?.trim();
     if (!text) return;
     if (!isLoggedIn) {
-      toast.error("Vui lòng đăng nhập để bình luận.");
+      toast.error(t("community.login_to_comment"));
       navigate("/login");
       return;
     }
@@ -257,7 +261,7 @@ export default function Community() {
       );
     } catch (err) {
       console.error(err);
-      toast.error("Không thể đăng bình luận.");
+      toast.error(t("community.error_add_comment"));
     } finally {
       setSubmittingCommentMap((prev) => ({ ...prev, [postId]: false }));
     }
@@ -268,19 +272,19 @@ export default function Community() {
     try {
       const shareUrl = `${window.location.origin}/community/post/${postId}`;
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("Đã sao chép liên kết bài viết vào bộ nhớ tạm!");
+      toast.success(t("community.link_copied"));
       
       await socialPostService.shareSocialPost(postId);
     } catch (err) {
       console.error(err);
-      toast.error("Có lỗi xảy ra khi chia sẻ.");
+      toast.error(t("community.error_share"));
     }
   };
 
   // Toggle follow user
   const handleFollowToggle = async (postAuthorProfileId: string) => {
     if (!isLoggedIn) {
-      toast.error("Vui lòng đăng nhập để theo dõi.");
+      toast.error(t("community.login_to_follow"));
       navigate("/login");
       return;
     }
@@ -297,11 +301,11 @@ export default function Community() {
       );
 
       const res = await socialPostService.toggleFollow(postAuthorProfileId);
-      toast.success(res.followed ? "Đã theo dõi người dùng!" : "Đã hủy theo dõi người dùng.");
+      toast.success(res.followed ? t("community.followed_user") : t("community.unfollowed_user"));
       fetchLeaderboard();
     } catch (err) {
       console.error(err);
-      toast.error("Không thể thay đổi trạng thái theo dõi.");
+      toast.error(t("community.error_follow_toggle"));
       fetchPosts(TAB_VALUES[activeTabIdx]);
     }
   };
@@ -316,10 +320,10 @@ export default function Community() {
     try {
       const fileUrl = await socialPostService.uploadFile(file);
       setNewPostMedia((prev) => [...prev, fileUrl]);
-      toast.success("Tải file lên thành công!");
+      toast.success(t("community.upload_success"));
     } catch (err) {
       console.error(err);
-      toast.error("Tải file lên thất bại. Hãy thử lại!");
+      toast.error(t("community.upload_failed"));
     } finally {
       setIsUploading(false);
     }
@@ -354,15 +358,15 @@ export default function Community() {
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa bài viết này không?")) return;
+    if (!window.confirm(t("community.confirm_delete_post"))) return;
     try {
       await socialPostService.deleteSocialPost(postId);
-      toast.success("Đã xóa bài viết thành công!");
+      toast.success(t("community.delete_success"));
       fetchPosts(TAB_VALUES[activeTabIdx]);
       fetchLeaderboard();
     } catch (err) {
       console.error(err);
-      toast.error("Xóa bài viết thất bại. Hãy thử lại!");
+      toast.error(t("community.delete_failed"));
     }
   };
 
@@ -382,7 +386,7 @@ export default function Community() {
     e.preventDefault();
     if (!reportingPostId) return;
     if (!reportReason.trim()) {
-      toast.warning("Vui lòng nhập lý do báo cáo bài viết!");
+      toast.warning(t("community.warn_report_reason"));
       return;
     }
 
@@ -390,14 +394,14 @@ export default function Community() {
     try {
       const res = await socialPostService.reportPost(reportingPostId, reportReason);
       if (res.success || res.message) {
-        toast.success(res.message || "Đã gửi báo cáo bài viết thành công!");
+        toast.success(res.message || t("community.report_success"));
       } else {
-        toast.success("Báo cáo bài viết thành công!");
+        toast.success(t("community.report_success"));
       }
       handleCloseReportModal();
     } catch (err) {
       console.error(err);
-      toast.error("Gửi báo cáo thất bại. Hãy thử lại!");
+      toast.error(t("community.report_failed"));
     } finally {
       setIsSubmittingReport(false);
     }
@@ -407,7 +411,7 @@ export default function Community() {
   const handleCreatePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostContent.trim()) {
-      toast.warning("Vui lòng nhập nội dung đánh giá!");
+      toast.warning(t("community.warn_post_content"));
       return;
     }
 
@@ -420,7 +424,7 @@ export default function Community() {
           restaurantId: newPostRestaurantId || undefined,
           taggedItems: newPostTaggedItems.length > 0 ? newPostTaggedItems : undefined,
         });
-        toast.success("Cập nhật bài viết thành công!");
+        toast.success(t("community.update_success"));
       } else {
         await socialPostService.createSocialPost({
           content: newPostContent,
@@ -428,7 +432,7 @@ export default function Community() {
           restaurantId: newPostRestaurantId || undefined,
           taggedItems: newPostTaggedItems.length > 0 ? newPostTaggedItems : undefined,
         });
-        toast.success("Đăng bài review thành công!");
+        toast.success(t("community.create_success"));
       }
       
       handleCloseModal();
@@ -438,7 +442,7 @@ export default function Community() {
       fetchLeaderboard();
     } catch (err) {
       console.error(err);
-      toast.error(editingPost ? "Cập nhật bài viết thất bại. Hãy thử lại!" : "Đăng bài thất bại. Hãy thử lại!");
+      toast.error(editingPost ? t("community.update_failed") : t("community.create_failed"));
     } finally {
       setIsSubmittingPost(false);
     }
@@ -491,7 +495,7 @@ export default function Community() {
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-gray-600 text-xs font-semibold shrink-0">
-                Xóa
+                {t("community.clear")}
               </button>
             )}
           </div>
@@ -525,28 +529,28 @@ export default function Community() {
                 onClick={handleOpenCreateModal}
                 className="flex-1 text-left px-5 py-3 rounded-2xl bg-gray-50 border border-gray-100 text-sm text-gray-400 hover:bg-gray-100/50 transition-colors"
               >
-                Hôm nay bạn ăn gì? Hãy đăng bài viết review cùng ảnh/video nào...
+                {t("community.composer_placeholder")}
               </button>
               <button 
                 onClick={handleOpenCreateModal}
                 className="px-4 py-2.5 rounded-2xl text-xs font-bold text-white shrink-0 hover:opacity-90 transition-all"
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
-                Đăng bài
+                {t("community.post_btn")}
               </button>
             </div>
           ) : (
             <div className="bg-orange-50/50 rounded-3xl p-6 border border-orange-100/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
               <div>
-                <h3 className="font-bold text-gray-900 text-sm">Tham gia cộng đồng ẩm thực ẩm thực Savour</h3>
-                <p className="text-xs text-gray-500 mt-1">Đăng nhập để chia sẻ các món ăn ngon của bạn, tương tác và tích điểm nâng bậc huy hiệu!</p>
+                <h3 className="font-bold text-gray-900 text-sm">{t("community.join_banner_title")}</h3>
+                <p className="text-xs text-gray-500 mt-1">{t("community.join_banner_desc")}</p>
               </div>
               <button 
                 onClick={() => navigate("/login")}
                 className="px-5 py-2.5 rounded-2xl text-xs font-bold text-white shrink-0"
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
-                Đăng nhập ngay
+                {t("community.login_now")}
               </button>
             </div>
           )}
@@ -571,15 +575,15 @@ export default function Community() {
           ) : filteredPosts.length === 0 ? (
             <div className="bg-white rounded-3xl py-12 px-6 border border-gray-100 text-center space-y-3">
               <span className="text-4xl">🍜</span>
-              <h3 className="font-bold text-gray-700 text-sm">Chưa có bài viết nào</h3>
-              <p className="text-xs text-gray-400 max-w-sm mx-auto">Không tìm thấy bài viết nào phù hợp. Hãy là người đầu tiên chia sẻ review ăn uống của bạn!</p>
+              <h3 className="font-bold text-gray-700 text-sm">{t("community.no_posts_title")}</h3>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto">{t("community.no_posts_desc")}</p>
               {isLoggedIn && (
                 <button
                   onClick={handleOpenCreateModal}
                   className="mt-2 px-4 py-2 rounded-xl text-xs font-bold text-white"
                   style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                 >
-                  Đăng review đầu tiên
+                  {t("community.post_first_review")}
                 </button>
               )}
             </div>
@@ -642,7 +646,7 @@ export default function Community() {
                                     className="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-orange-500 transition-colors flex items-center gap-2"
                                   >
                                     <Edit className="w-3.5 h-3.5" />
-                                    Chỉnh sửa
+                                    {t("community.edit")}
                                   </button>
                                   <button
                                     onClick={() => {
@@ -652,7 +656,7 @@ export default function Community() {
                                     className="w-full px-4 py-2.5 text-left text-xs font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
-                                    Xóa bài viết
+                                    {t("community.delete")}
                                   </button>
                                 </>
                               ) : (
@@ -664,7 +668,7 @@ export default function Community() {
                                   className="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-red-500 transition-colors flex items-center gap-2"
                                 >
                                   <span className="text-red-500 font-normal">🚨</span>
-                                  Báo cáo bài viết
+                                  {t("community.report")}
                                 </button>
                               )}
                             </div>
@@ -685,12 +689,12 @@ export default function Community() {
                         {isFollowed ? (
                           <>
                             <UserCheck className="w-3.5 h-3.5" />
-                            Đang theo dõi
+                            {t("community.following_status")}
                           </>
                         ) : (
                           <>
                             <UserPlus className="w-3.5 h-3.5" />
-                            Theo dõi
+                            {t("community.follow")}
                           </>
                         )}
                       </button>
@@ -767,7 +771,7 @@ export default function Community() {
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-all"
                     >
                       <Share2 className="w-4 h-4" /> 
-                      Chia sẻ
+                      {t("community.share")}
                     </button>
                   </div>
 
@@ -781,7 +785,7 @@ export default function Community() {
                       ) : (
                         <div className="space-y-3.5 max-h-80 overflow-y-auto pr-1">
                           {(commentsMap[post.id] || []).length === 0 ? (
-                            <p className="text-xs text-gray-400 text-center py-2">Chưa có bình luận nào. Hãy bắt đầu cuộc thảo luận!</p>
+                            <p className="text-xs text-gray-400 text-center py-2">{t("community.no_comments")}</p>
                           ) : (
                             commentsMap[post.id].map((comment) => (
                               <div key={comment.id} className="flex gap-2.5 items-start">
@@ -809,7 +813,7 @@ export default function Community() {
                       {isLoggedIn ? (
                         <div className="flex gap-2 items-center">
                           <input
-                            placeholder="Viết bình luận của bạn..."
+                            placeholder={t("community.comment_placeholder")}
                             value={newCommentTextMap[post.id] || ""}
                             onChange={(e) => setNewCommentTextMap((prev) => ({ ...prev, [post.id]: e.target.value }))}
                             onKeyDown={(e) => {
@@ -834,7 +838,11 @@ export default function Community() {
                         </div>
                       ) : (
                         <p className="text-[11px] text-gray-400 text-center mt-1">
-                          Vui lòng <span onClick={() => navigate("/login")} className="text-[#FF4500] cursor-pointer font-bold hover:underline">đăng nhập</span> để bình luận bài viết này.
+                          {t("community.please_login_to_comment_prefix")}
+                          <span onClick={() => navigate("/login")} className="text-[#FF4500] cursor-pointer font-bold hover:underline">
+                            {t("community.please_login_to_comment_link")}
+                          </span>
+                          {t("community.please_login_to_comment_suffix")}
                         </p>
                       )}
                     </div>
@@ -851,7 +859,7 @@ export default function Community() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-5 h-5 text-yellow-400" />
-              <h2 className="font-bold text-gray-900 text-sm">Bảng xếp hạng Reviewer tích cực</h2>
+              <h2 className="font-bold text-gray-900 text-sm">{t("community.leaderboard_title")}</h2>
             </div>
             
             {loadingLeaderboard ? (
@@ -859,7 +867,7 @@ export default function Community() {
                 <Loader2 className="w-5 h-5 text-[#FF4500] animate-spin" />
               </div>
             ) : leaderboard.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">Chưa có bảng xếp hạng tuần này.</p>
+              <p className="text-xs text-gray-400 text-center py-4">{t("community.leaderboard_empty")}</p>
             ) : (
               <div className="space-y-4">
                 {leaderboard.map((user) => (
@@ -874,11 +882,11 @@ export default function Community() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-gray-900 text-xs truncate">{user.name}</p>
-                      <p className="text-[10px] text-gray-400">{user.posts} bài đăng</p>
+                      <p className="text-[10px] text-gray-400">{t("community.posts_count", { count: user.posts })}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-extrabold text-orange-500">{user.score} pts</p>
-                      <p className="text-[9px] text-gray-400">{user.followers} follow</p>
+                      <p className="text-[9px] text-gray-400">{t("community.followers_count", { count: user.followers })}</p>
                     </div>
                   </div>
                 ))}
@@ -890,7 +898,7 @@ export default function Community() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-5 h-5 text-[#FF4500]" />
-              <h2 className="font-bold text-gray-900 text-sm">Từ khóa thịnh hành</h2>
+              <h2 className="font-bold text-gray-900 text-sm">{t("community.trending_tags")}</h2>
             </div>
             {loadingStats ? (
               <div className="flex items-center justify-center py-4">
@@ -913,21 +921,21 @@ export default function Community() {
 
           {/* Posting Streak Card */}
           <div className="rounded-3xl p-5 text-white shadow-lg" style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255, 69, 0, 0.25)" }}>
-            <p className="text-orange-100 text-xs font-medium mb-1">Chuỗi đăng bài của bạn</p>
+            <p className="text-orange-100 text-xs font-medium mb-1">{t("community.posting_streak")}</p>
             {loadingStats ? (
               <div className="flex items-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin text-white/70" />
-                <span className="text-white/70 text-sm">Đang tải...</span>
+                <span className="text-white/70 text-sm">{t("community.loading")}</span>
               </div>
             ) : postingStreak === 0 ? (
               <>
-                <p className="text-2xl font-black">Chưa có chuỗi</p>
-                <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">Hãy đăng bài hôm nay để bắt đầu chuỗi review của bạn!</p>
+                <p className="text-2xl font-black">{t("community.no_streak")}</p>
+                <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">{t("community.no_streak_desc")}</p>
               </>
             ) : (
               <>
                 <p className="text-3xl font-black">{postingStreak} {t('common.days')}</p>
-                <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">Đăng bài liên tục mỗi ngày để nhận danh hiệu "Chiến thần Review"!</p>
+                <p className="text-orange-100 text-[11px] mt-1.5 leading-relaxed">{t("community.streak_desc")}</p>
                 <div className="flex gap-1 mt-4">
                   {[...Array(Math.min(postingStreak, 7))].map((_, i) => (
                     <div key={i} className="flex-1 h-1.5 rounded-full bg-white/80" />
@@ -957,7 +965,7 @@ export default function Community() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-extrabold text-gray-900 text-base">
-                {editingPost ? "Chỉnh sửa bài viết review" : "Đăng bài review món ăn"}
+                {editingPost ? t("community.edit_review_title") : t("community.create_review_title")}
               </h2>
               <button 
                 disabled={isSubmittingPost || isUploading}
@@ -972,9 +980,9 @@ export default function Community() {
             <form onSubmit={handleCreatePostSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* Post Description */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600">Đánh giá của bạn</label>
+                <label className="text-xs font-bold text-gray-600">{t("community.your_review")}</label>
                 <textarea
-                  placeholder="Hãy chia sẻ trải nghiệm chân thực của bạn về món ăn, dịch vụ và không gian quán..."
+                  placeholder={t("community.textarea_placeholder")}
                   value={newPostContent}
                   onChange={(e) => setNewPostContent(e.target.value)}
                   rows={4}
@@ -985,7 +993,7 @@ export default function Community() {
 
               {/* Tag Restaurant */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600">Gắn thẻ nhà hàng (Tùy chọn)</label>
+                <label className="text-xs font-bold text-gray-600">{t("community.tag_restaurant_label")}</label>
                 <select
                   value={newPostRestaurantId}
                   onChange={(e) => {
@@ -994,7 +1002,7 @@ export default function Community() {
                   }}
                   className="w-full text-sm px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-[#FF4500] transition-all cursor-pointer"
                 >
-                  <option value="">Chọn nhà hàng...</option>
+                  <option value="">{t("community.select_restaurant")}</option>
                   {restaurantsList.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name} - {r.address}
@@ -1006,7 +1014,7 @@ export default function Community() {
               {/* Tag Dishes */}
               {newPostRestaurantId && selectedRestaurantMenuItems.length > 0 && (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-600 block">Gắn thẻ món ăn review</label>
+                  <label className="text-xs font-bold text-gray-600 block">{t("community.tag_dishes_label")}</label>
                   <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-gray-50 border border-gray-200 rounded-xl">
                     {selectedRestaurantMenuItems.map((item: MenuItem) => {
                       const isTagged = newPostTaggedItems.some((t) => t.menuItemId === item.id);
@@ -1032,7 +1040,7 @@ export default function Community() {
 
               {/* Media File Upload */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-600 block">Hình ảnh / Video review</label>
+                <label className="text-xs font-bold text-gray-600 block">{t("community.media_label")}</label>
                 
                 {/* Media list preview */}
                 {newPostMedia.length > 0 && (
@@ -1079,7 +1087,7 @@ export default function Community() {
                     ) : (
                       <>
                         <ImageIcon className="w-4 h-4 text-gray-400" />
-                        Tải ảnh hoặc video lên
+                        {t("community.upload_media_btn")}
                       </>
                     )}
                   </button>
@@ -1094,7 +1102,7 @@ export default function Community() {
                   onClick={handleCloseModal}
                   className="flex-1 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  Hủy
+                  {t("community.cancel")}
                 </button>
                 <button
                   type="submit"
@@ -1105,7 +1113,7 @@ export default function Community() {
                   {isSubmittingPost ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    editingPost ? "Lưu thay đổi" : "Đăng bài viết"
+                    editingPost ? t("community.save_changes") : t("community.post_btn")
                   )}
                 </button>
               </div>
@@ -1126,7 +1134,7 @@ export default function Community() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-extrabold text-gray-900 text-base">
-                Báo cáo bài viết vi phạm
+                {t("community.report_modal_title")}
               </h2>
               <button 
                 disabled={isSubmittingReport}
@@ -1140,9 +1148,9 @@ export default function Community() {
             {/* Modal Form */}
             <form onSubmit={handleReportSubmit} className="p-5 space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-600 block">Nhập lý lý do báo cáo bài viết</label>
+                <label className="text-xs font-bold text-gray-600 block">{t("community.report_reason_label")}</label>
                 <textarea
-                  placeholder="Nhập lý do chi tiết ví dụ: thông tin sai sự thật, xúc phạm người khác, spam..."
+                  placeholder={t("community.report_placeholder")}
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   rows={4}
@@ -1152,10 +1160,10 @@ export default function Community() {
                 
                 <div className="flex flex-wrap gap-2 mt-2">
                   {[
-                    "Nội dung phản cảm",
-                    "Quảng cáo / Spam",
-                    "Xúc phạm / Vu khống",
-                    "Thông tin sai sự thật"
+                    t("community.report_reason_offensive"),
+                    t("community.report_reason_spam"),
+                    t("community.report_reason_abuse"),
+                    t("community.report_reason_false")
                   ].map((tag) => (
                     <button
                       key={tag}
@@ -1177,7 +1185,7 @@ export default function Community() {
                   onClick={handleCloseReportModal}
                   className="flex-1 py-3 text-sm font-bold text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
-                  Hủy
+                  {t("community.cancel")}
                 </button>
                 <button
                   type="submit"
@@ -1187,7 +1195,7 @@ export default function Community() {
                   {isSubmittingReport ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    "Gửi báo cáo"
+                    t("community.submit_report")
                   )}
                 </button>
               </div>

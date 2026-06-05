@@ -40,6 +40,70 @@ export default function Register() {
     phonenumber: "",
     address: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const handleFieldChange = (key: string, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    const nameRegex = /^[\p{L}\s]{1,16}$/u;
+
+    if (!form.firstname.trim()) {
+      newErrors.firstname = t("auth.errors.firstname_required");
+    } else if (!nameRegex.test(form.firstname.trim())) {
+      newErrors.firstname = t("auth.errors.firstname_invalid");
+    }
+
+    if (form.middlename.trim() && !nameRegex.test(form.middlename.trim())) {
+      newErrors.middlename = t("auth.errors.middlename_invalid");
+    }
+
+    if (!form.lastname.trim()) {
+      newErrors.lastname = t("auth.errors.lastname_required");
+    } else if (!nameRegex.test(form.lastname.trim())) {
+      newErrors.lastname = t("auth.errors.lastname_invalid");
+    }
+
+    if (!form.email.trim()) {
+      newErrors.email = t("auth.errors.email_required");
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      newErrors.email = t("auth.errors.email_invalid");
+    }
+
+    if (!form.phonenumber.trim()) {
+      newErrors.phonenumber = t("auth.errors.phone_required");
+    } else if (!/^(0|\+84)[35789][0-9]{8}$/.test(form.phonenumber)) {
+      newErrors.phonenumber = t("auth.errors.phone_invalid");
+    }
+
+    if (!form.address.trim()) {
+      newErrors.address = t("auth.errors.address_required");
+    }
+
+    if (!form.password) {
+      newErrors.password = t("auth.errors.password_required");
+    } else if (form.password.length < 8) {
+      newErrors.password = t("auth.errors.password_min");
+    }
+
+    if (!form.confirmpassword) {
+      newErrors.confirmpassword = t("auth.errors.confirm_password_required");
+    } else if (form.password !== form.confirmpassword) {
+      newErrors.confirmpassword = t("auth.errors.confirm_password_mismatch");
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const roles = [
     {
@@ -85,19 +149,20 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       await register({ ...form, role: selectedRole });
       navigate("/login", {
         state: {
-          successMessage: "Đăng ký tài khoản thành công! Vui lòng đăng nhập.",
+          successMessage: t("auth.register_success"),
         },
       });
-    } catch (_error) {
-      setError(
-        "Đăng ký thất bại. Email có thể đã được sử dụng hoặc thông tin không hợp lệ."
-      );
+    } catch {
+      setError(t("auth.register_failed"));
     } finally {
       setLoading(false);
     }
@@ -199,7 +264,7 @@ export default function Register() {
                                 : { backgroundColor: "#F3F4F6", color: "#6B7280" }
                             }
                           >
-                            Trang đăng ký riêng ✦
+                            {t("auth.separate_register_page")}
                           </span>
                         )}
                       </div>
@@ -223,8 +288,7 @@ export default function Register() {
               {/* Notice for Restaurant/Driver */}
               {activeRole?.route && (
                 <div className="mb-6 p-3 rounded-2xl bg-gray-50 border border-gray-200 text-xs text-gray-500">
-                  💡 Bạn sẽ được chuyển đến form đăng ký chuyên biệt dành cho{" "}
-                  <strong className="text-gray-700">{activeRole.label}</strong>.
+                  {t("auth.choose_role_redirect_notice", { role: activeRole.label })}
                 </div>
               )}
 
@@ -252,22 +316,25 @@ export default function Register() {
               <div className="space-y-4 mb-6">
                 {[
                   {
-                    label: t("auth.firstname", "First Name"),
+                    label: t("auth.firstname"),
                     key: "firstname",
                     type: "text",
-                    placeholder: t("auth.firstname_placeholder", "John"),
+                    placeholder: t("auth.firstname_placeholder"),
+                    maxLength: 16,
                   },
                   {
-                    label: t("auth.middlename", "Middle Name"),
+                    label: t("auth.middlename"),
                     key: "middlename",
                     type: "text",
-                    placeholder: t("auth.middlename_placeholder", "Quincy"),
+                    placeholder: t("auth.middlename_placeholder"),
+                    maxLength: 16,
                   },
                   {
-                    label: t("auth.lastname", "Last Name"),
+                    label: t("auth.lastname"),
                     key: "lastname",
                     type: "text",
-                    placeholder: t("auth.lastname_placeholder", "Doe"),
+                    placeholder: t("auth.lastname_placeholder"),
+                    maxLength: 16,
                   },
                   {
                     label: t("auth.email"),
@@ -276,54 +343,59 @@ export default function Register() {
                     placeholder: t("auth.email_placeholder"),
                   },
                   {
-                    label: t("auth.phonenumber", "Phone Number"),
+                    label: t("auth.phonenumber"),
                     key: "phonenumber",
                     type: "tel",
-                    placeholder: t(
-                      "auth.phonenumber_placeholder",
-                      "Your phone number"
-                    ),
+                    placeholder: t("auth.phonenumber_placeholder"),
                   },
                   {
-                    label: t("auth.address", "Address"),
+                    label: t("auth.address"),
                     key: "address",
                     type: "text",
-                    placeholder: t(
-                      "auth.address_placeholder",
-                      "Your address"
-                    ),
+                    placeholder: t("auth.address_placeholder"),
                   },
-                ].map((field) => (
-                  <div key={field.key}>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                      {field.label}
-                    </label>
-                    <input
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={form[field.key as keyof typeof form]}
-                      onChange={(e) =>
-                        setForm({ ...form, [field.key]: e.target.value })
-                      }
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
-                    />
-                  </div>
-                ))}
+                ].map((field) => {
+                  const hasError = !!errors[field.key];
+                  return (
+                    <div key={field.key}>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                        {field.label} {field.key !== "middlename" && <span className="text-red-400">*</span>}
+                      </label>
+                      <input
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={form[field.key as keyof typeof form]}
+                        onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                        maxLength={field.maxLength}
+                        className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all ${
+                          hasError
+                            ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                            : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                        }`}
+                      />
+                      {hasError && (
+                        <p className="text-xs text-red-500 mt-1">{errors[field.key]}</p>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {/* Password with eye toggle */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {t("auth.password")}
+                    {t("auth.password")} <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showPass ? "text" : "password"}
                       placeholder={t("auth.min_8_chars")}
                       value={form.password}
-                      onChange={(e) =>
-                        setForm({ ...form, password: e.target.value })
-                      }
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all pr-11"
+                      onChange={(e) => handleFieldChange("password", e.target.value)}
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all pr-11 ${
+                        errors.password
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      }`}
                     />
                     <button
                       type="button"
@@ -337,23 +409,27 @@ export default function Register() {
                       )}
                     </button>
                   </div>
+                  {errors.password && (
+                    <p className="text-xs text-red-500 mt-1">{errors.password}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {t("auth.confirm_password")}
+                    {t("auth.confirm_password")} <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type={showConfirm ? "text" : "password"}
-                      placeholder={t(
-                        "auth.confirmpassword_placeholder",
-                        "Confirm your password"
-                      )}
+                      placeholder={t("auth.confirmpassword_placeholder")}
                       value={form.confirmpassword}
                       onChange={(e) =>
-                        setForm({ ...form, confirmpassword: e.target.value })
+                        handleFieldChange("confirmpassword", e.target.value)
                       }
-                      className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all pr-11"
+                      className={`w-full px-4 py-3 rounded-2xl border bg-gray-50 text-sm outline-none transition-all pr-11 ${
+                        errors.confirmpassword
+                          ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                          : "border-gray-200 focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      }`}
                     />
                     <button
                       type="button"
@@ -367,6 +443,9 @@ export default function Register() {
                       )}
                     </button>
                   </div>
+                  {errors.confirmpassword && (
+                    <p className="text-xs text-red-500 mt-1">{errors.confirmpassword}</p>
+                  )}
                 </div>
               </div>
 
@@ -375,7 +454,7 @@ export default function Register() {
                 <a href="#" className="text-[#FF4500]">
                   {t("auth.terms_of_service")}
                 </a>{" "}
-                và{" "}
+                {t("auth.and")}{" "}
                 <a href="#" className="text-[#FF4500]">
                   {t("auth.privacy_policy")}
                 </a>
@@ -397,7 +476,7 @@ export default function Register() {
                 {loading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Đang đăng ký...
+                    {t("auth.register_submitting")}
                   </>
                 ) : (
                   t("auth.create_account_btn")

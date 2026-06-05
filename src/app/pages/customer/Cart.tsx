@@ -34,11 +34,11 @@ export default function Cart() {
             await useCartStore.getState().fetchCarts();
             // Clear URL param without reloading
             navigate(window.location.pathname, { replace: true });
-            toast.success("Bạn đã tham gia giỏ hàng nhóm thành công!");
+            toast.success(t("cart.join_group_success"));
           }
         } catch (err) {
           console.error("Failed to join group cart:", err);
-          toast.error("Không thể tham gia giỏ hàng nhóm. Mã chia sẻ không hợp lệ hoặc đã hết hạn.");
+          toast.error(t("cart.join_group_error"));
         }
       };
       joinGroupCart();
@@ -77,9 +77,9 @@ export default function Cart() {
       const shareLink = `${window.location.origin}${window.location.pathname}?token=${groupCartToken}`;
       const copied = await copyToClipboard(shareLink);
       if (copied) {
-        toast.success("Đã sao chép liên kết chia sẻ vào clipboard!");
+        toast.success(t("cart.copy_link_success"));
       } else {
-        toast.error("Không thể sao chép liên kết. Vui lòng thử sao chép thủ công.");
+        toast.error(t("cart.copy_link_error"));
       }
       return;
     }
@@ -90,7 +90,7 @@ export default function Cart() {
     if (!cartIdToShare) {
       const firstItem = items[0];
       if (!firstItem || !firstItem.cartId) {
-        toast.warning("Giỏ hàng của bạn đang trống, không thể chia sẻ!");
+        toast.warning(t("cart.empty_share_warning"));
         return;
       }
       cartIdToShare = firstItem.cartId;
@@ -105,14 +105,14 @@ export default function Cart() {
         const shareLink = `${window.location.origin}${window.location.pathname}?token=${token}`;
         const copied = await copyToClipboard(shareLink);
         if (copied) {
-          toast.success("Đã tạo và sao chép liên kết chia sẻ vào clipboard!");
+          toast.success(t("cart.create_share_success"));
         } else {
-          toast.success(`Đã tạo liên kết chia sẻ: ${shareLink}`);
+          toast.success(t("cart.create_share_msg", { link: shareLink }));
         }
       }
     } catch (err) {
       console.error("Failed to share cart:", err);
-      toast.error("Không thể chia sẻ giỏ hàng lúc này.");
+      toast.error(t("cart.share_error"));
     } finally {
       setSharing(false);
     }
@@ -135,7 +135,7 @@ export default function Cart() {
       if (group.isRequired) {
         const val = selectedOptionsState[group.name];
         if (!val || (Array.isArray(val) && val.length === 0)) {
-          toast.warning(`Vui lòng chọn ${group.name}`);
+          toast.warning(t("restaurant.select_required", { name: group.name }));
           return;
         }
       }
@@ -151,7 +151,7 @@ export default function Cart() {
       setIsModalOpen(false);
     } catch (err) {
       console.error("Failed to save options:", err);
-      toast.error("Không thể lưu tuỳ chỉnh món ăn");
+      toast.error(t("cart.save_options_error"));
     } finally {
       setIsSavingOptions(false);
     }
@@ -173,20 +173,20 @@ export default function Cart() {
           </div>
           <h1 className="text-2xl font-black text-gray-900 mb-2">{t('cart.your_cart')}</h1>
           <p className="text-gray-500 text-sm mb-8 leading-relaxed">
-            Bạn cần đăng nhập để xem giỏ hàng và đặt món.
+            {t("cart.login_required_desc")}
           </p>
           <button
             onClick={() => navigate("/login")}
             className="w-full py-3.5 rounded-2xl text-white font-bold text-sm mb-3 transition-all hover:opacity-90"
             style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
           >
-            Đăng nhập ngay
+            {t("auth.login_now")}
           </button>
           <button
             onClick={() => navigate("/explore")}
             className="w-full py-3.5 rounded-2xl text-gray-700 font-semibold text-sm border border-gray-200 hover:bg-gray-50 transition-all"
           >
-            Tiếp tục xem thực đơn
+            {t("cart.continue_browsing")}
           </button>
         </div>
       </div>
@@ -212,7 +212,7 @@ export default function Cart() {
 
   const handleProceedCheckout = () => {
     if (isMultiRestaurant) {
-      toast.warning("Vui lòng thanh toán riêng từng quán ăn");
+      toast.warning(t("cart.multi_restaurant_warning_toast"));
       return;
     }
     const rId = itemsByRestaurantKeys[0] || restaurantId || (items[0]?.restaurantId);
@@ -251,10 +251,10 @@ export default function Cart() {
             </div>
             <div className="flex-1">
               <p className="font-semibold text-gray-900 text-sm">
-                {groupCartToken ? "Đặt hàng nhóm (Đang hoạt động)" : t('cart.group_order')}
+                {groupCartToken ? t("cart.group_order_active") : t('cart.group_order')}
               </p>
               <p className="text-xs text-gray-400">
-                {groupCartToken ? "Người khác có thể thêm món vào giỏ hàng này" : t('cart.share_cart')}
+                {groupCartToken ? t("cart.group_order_desc") : t('cart.share_cart')}
               </p>
             </div>
             <div className="flex gap-2">
@@ -264,11 +264,11 @@ export default function Cart() {
                     e.stopPropagation();
                     useCartStore.getState().setGroupCartSession(null, null);
                     await useCartStore.getState().fetchCarts();
-                    toast.success("Đã rời giỏ hàng nhóm!");
+                    toast.success(t("cart.leave_group_success"));
                   }}
                   className="px-3 py-2 rounded-xl text-sm font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
                 >
-                  Rời nhóm
+                  {t("cart.leave_group")}
                 </button>
               )}
               <button
@@ -332,7 +332,7 @@ export default function Cart() {
                             }}
                             className="mt-2 text-xs font-bold text-[#FF4500] hover:underline flex items-center gap-1"
                           >
-                            Tùy chỉnh
+                            {t("cart.customize")}
                           </button>
                         )}
                         <p className="font-bold text-gray-900 mt-1">{(item.price * item.qty).toLocaleString()}đ</p>
@@ -351,7 +351,7 @@ export default function Cart() {
                 </div>
                 <div className="p-5 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Tổng tiền quán này</span>
+                    <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">{t("cart.subtotal_restaurant")}</span>
                     <p className="text-lg font-black text-gray-900">
                       {group.items.reduce((sum, item) => sum + item.price * item.qty, 0).toLocaleString()}đ
                     </p>
@@ -361,7 +361,7 @@ export default function Cart() {
                     className="px-6 py-3 rounded-2xl text-white font-bold text-sm transition-all hover:opacity-90 hover:scale-[1.02] shadow-sm flex items-center gap-1.5"
                     style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                   >
-                    Thanh toán quán này
+                    {t("cart.checkout_restaurant")}
                   </button>
                 </div>
               </div>
@@ -392,13 +392,13 @@ export default function Cart() {
                 <span>{subtotal.toLocaleString()}đ</span>
               </div>
               <p className="text-xs text-gray-400 leading-relaxed mt-1">
-                * Phí giao hàng và mã giảm giá sẽ được áp dụng ở màn hình thanh toán tiếp theo.
+                {t("cart.cart_notes")}
               </p>
             </div>
 
             {isMultiRestaurant ? (
               <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
-                Giỏ hàng của bạn chứa các món từ nhiều quán khác nhau. Vui lòng nhấn <strong>"Thanh toán quán này"</strong> ở từng phần giỏ hàng tương ứng để đặt hàng.
+                {t("cart.multi_restaurant_warning")}
               </div>
             ) : null}
 
@@ -416,7 +416,7 @@ export default function Cart() {
                   : { background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }
               }
             >
-              {isMultiRestaurant ? "Thanh toán riêng theo quán" : t('cart.proceed_checkout')}
+              {isMultiRestaurant ? t("cart.checkout_multi_restaurant") : t('cart.proceed_checkout')}
             </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">{t('cart.secure_payment')}</p>
@@ -466,10 +466,10 @@ export default function Cart() {
                       <p className="font-bold text-gray-800 text-sm">{group.name}</p>
                       {group.isRequired ? (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: "#FF4500" }}>
-                          Bắt buộc
+                          {t("restaurant.required")}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400 font-medium">Tuỳ chọn</span>
+                        <span className="text-xs text-gray-400 font-medium">{t("restaurant.optional")}</span>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -523,7 +523,7 @@ export default function Cart() {
                       })}
                     </div>
                     {!isSingle && (
-                      <p className="text-xs text-gray-400 mt-2">Chọn tối đa {group.maxChoices} lựa chọn</p>
+                      <p className="text-xs text-gray-400 mt-2">{t("restaurant.select_max", { max: group.maxChoices })}</p>
                     )}
                   </div>
                 );
@@ -536,7 +536,7 @@ export default function Cart() {
                 onClick={() => setIsModalOpen(false)}
                 className="flex-1 py-3.5 border border-gray-200 text-gray-600 rounded-2xl text-sm font-semibold hover:bg-gray-50 transition-colors"
               >
-                {t('cart.cancel') || "Hủy"}
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSaveOptions}
@@ -545,7 +545,7 @@ export default function Cart() {
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
                 {isSavingOptions && <Loader2 className="w-4 h-4 animate-spin" />}
-                {t('cart.save') || "Lưu thay đổi"}
+                {t('cart.save_changes')}
               </button>
             </div>
           </div>

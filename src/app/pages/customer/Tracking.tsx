@@ -63,7 +63,7 @@ export default function Tracking() {
     const lon = order.deliveryLongitude ? Number(order.deliveryLongitude) : null;
     if (lat && lon) return { latitude: lat, longitude: lon };
     
-    const coords = getStableCoords("delivery", order.deliveryAddress || "Vị trí giao hàng");
+    const coords = getStableCoords("delivery", order.deliveryAddress || t("tracking.delivery_location"));
     return { latitude: coords.latitude, longitude: coords.longitude };
   }, [order]);
 
@@ -132,19 +132,19 @@ export default function Tracking() {
   const getStatusDescription = (status: string) => {
     switch (status) {
       case "pending":
-        return "Đang chờ xác nhận từ nhà hàng... ⏳";
+        return t("tracking.status_pending_desc");
       case "accepted":
-        return "Nhà hàng đã nhận đơn... 👨‍🍳";
+        return t("tracking.status_accepted_desc");
       case "preparing":
-        return "Món ăn đang được chuẩn bị... 🍳";
+        return t("tracking.status_preparing_desc");
       case "ready":
-        return "Chuẩn bị xong! Đang chờ tài xế lấy hàng... 🛵";
+        return t("tracking.status_ready_desc");
       case "delivering":
-        return "Tài xế đang giao món ăn đến bạn... 🛵";
+        return t("tracking.status_delivering_desc");
       case "completed":
-        return "Đơn hàng đã giao thành công! 🎉";
+        return t("tracking.status_completed_desc");
       case "cancelled":
-        return "Đơn hàng đã bị hủy. ❌";
+        return t("tracking.status_cancelled_desc");
       default:
         return t('tracking.kitchen_working') + " 👨‍🍳";
     }
@@ -179,18 +179,18 @@ export default function Tracking() {
 
   const handleCancelOrder = async () => {
     if (!orderId) return;
-    const confirmCancel = window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này không?");
+    const confirmCancel = window.confirm(t("tracking.confirm_cancel"));
     if (!confirmCancel) return;
 
     try {
       setIsCancelling(true);
-      await orderService.cancelOrder(orderId, { reason: cancelReason || "Khách hàng tự hủy đơn" });
+      await orderService.cancelOrder(orderId, { reason: cancelReason || t("tracking.cancel_reason_default") });
       const updatedOrder = await orderService.getOrder(orderId);
       setOrder(updatedOrder);
-      toast.success("Hủy đơn hàng thành công!");
+      toast.success(t("tracking.cancel_success"));
       setShowCancelPrompt(false);
     } catch{
-      toast.error("Không thể hủy đơn hàng. Vui lòng thử lại sau.");
+      toast.error(t("tracking.cancel_error"));
     } finally {
       setIsCancelling(false);
     }
@@ -206,10 +206,10 @@ export default function Tracking() {
         driverRating: order?.driver ? driverRating : undefined,
         driverComment: (order?.driver && driverComment.trim()) ? driverComment.trim() : undefined,
       });
-      toast.success("Đánh giá của bạn đã được ghi nhận. Cảm ơn bạn!");
+      toast.success(t("tracking.review_success"));
       setReviewSubmitted(true);
     } catch {
-      toast.error("Gửi đánh giá thất bại. Vui lòng thử lại sau.");
+      toast.error(t("tracking.review_error"));
     } finally {
       setIsSubmittingReview(false);
     }
@@ -228,11 +228,11 @@ export default function Tracking() {
   const currentRank = order ? statusRank[order.status] ?? 1 : 1;
 
   const steps = [
-    { id: 1, label: "Chờ xác nhận", desc: "Đang chờ nhà hàng xác nhận đơn", icon: "⏳", done: currentRank > 1, active: currentRank === 1 },
-    { id: 2, label: "Đang chuẩn bị", desc: `${order?.restaurant?.name || "Nhà hàng"} đang chuẩn bị món`, icon: "👨‍🍳", done: currentRank > 2, active: currentRank === 2 },
-    { id: 3, label: "Chờ tài xế", desc: "Món ăn đã xong, chờ tài xế đến lấy", icon: "📦", done: currentRank > 3, active: currentRank === 3 },
-    { id: 4, label: "Đang giao", desc: order?.driver ? `${order.driver.profile?.fullName || "Tài xế"} đang giao đến bạn` : "Tài xế đang giao đến bạn", icon: "🛵", done: currentRank > 4, active: currentRank === 4 },
-    { id: 5, label: "Hoàn thành", desc: "Chúc bạn ngon miệng!", icon: "🎉", done: currentRank === 5, active: currentRank === 5 },
+    { id: 1, label: t("tracking.step_pending"), desc: t("tracking.step_pending_desc"), icon: "⏳", done: currentRank > 1, active: currentRank === 1 },
+    { id: 2, label: t("tracking.step_preparing"), desc: t("tracking.step_preparing_desc", { restaurant: order?.restaurant?.name || t("home.restaurant_label") }), icon: "👨‍🍳", done: currentRank > 2, active: currentRank === 2 },
+    { id: 3, label: t("tracking.step_ready"), desc: t("tracking.step_ready_desc"), icon: "📦", done: currentRank > 3, active: currentRank === 3 },
+    { id: 4, label: t("tracking.step_delivering"), desc: order?.driver ? t("tracking.step_delivering_desc", { driver: order.driver.profile?.fullName || t("auth.driver") }) : t("tracking.step_delivering_desc_fallback"), icon: "🛵", done: currentRank > 4, active: currentRank === 4 },
+    { id: 5, label: t("tracking.step_completed"), desc: t("tracking.step_completed_desc"), icon: "🎉", done: currentRank === 5, active: currentRank === 5 },
   ];
 
   const currentStep = steps.findIndex((s) => s.active) + 1 || 1;
@@ -271,9 +271,9 @@ export default function Tracking() {
               className="rounded-3xl p-6 text-white overflow-hidden relative bg-red-500"
             >
               <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10" />
-              <p className="text-red-100 text-sm mb-1">Trạng thái đơn hàng</p>
-              <p className="text-3xl font-black mb-1">ĐÃ HỦY ĐƠN</p>
-              <p className="text-red-100 text-sm">Đơn hàng này đã bị hủy.</p>
+              <p className="text-red-100 text-sm mb-1">{t("tracking.order_status")}</p>
+              <p className="text-3xl font-black mb-1">{t("tracking.order_cancelled_title")}</p>
+              <p className="text-red-100 text-sm">{t("tracking.order_cancelled_desc")}</p>
             </div>
           ) : (
             <div
@@ -343,10 +343,10 @@ export default function Tracking() {
                 <div className="flex-1">
                   <p className="font-bold text-gray-900">{order.driver.profile?.fullName || "Assigned Driver"}</p>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" /> {order.driver.rating ? Number(order.driver.rating).toFixed(1) : "5.0"} · Tài xế Savour
+                    <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" /> {order.driver.rating ? Number(order.driver.rating).toFixed(1) : "5.0"} · {t("tracking.savour_driver")}
                   </div>
                   <p className="text-xs text-gray-400 mt-1">
-                    🏍️ {order.driver.vehicleInfo || "Xe máy"} {order.driver.licensePlate ? `· BKS: ${order.driver.licensePlate}` : ""}
+                    🏍️ {order.driver.vehicleInfo || t("tracking.vehicle_motorbike")} {order.driver.licensePlate ? `· BKS: ${order.driver.licensePlate}` : ""}
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -376,8 +376,8 @@ export default function Tracking() {
           {/* Cancel Order Section */}
           {order && order.status === "pending" && (
             <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4 animate-in fade-in duration-300">
-              <h3 className="font-bold text-gray-900 text-sm">Hủy đơn hàng</h3>
-              <p className="text-xs text-gray-400">Bạn chỉ có thể tự hủy đơn hàng khi nhà hàng chưa nhận và chuẩn bị món ăn.</p>
+              <h3 className="font-bold text-gray-900 text-sm">{t("tracking.cancel_order")}</h3>
+              <p className="text-xs text-gray-400">{t("tracking.cancel_order_condition")}</p>
               
               {showCancelPrompt ? (
                 <div className="space-y-3">
@@ -385,7 +385,7 @@ export default function Tracking() {
                     type="text"
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder="Nhập lý do hủy đơn (không bắt buộc)..."
+                    placeholder={t("tracking.cancel_reason_placeholder")}
                     className="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all text-gray-800"
                   />
                   <div className="flex gap-2">
@@ -393,14 +393,14 @@ export default function Tracking() {
                       onClick={() => setShowCancelPrompt(false)}
                       className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
                     >
-                      Bỏ qua
+                      {t("common.dismiss")}
                     </button>
                     <button
                       onClick={handleCancelOrder}
                       disabled={isCancelling}
                       className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
                     >
-                      {isCancelling ? "Đang hủy..." : "Xác nhận hủy"}
+                      {isCancelling ? t("tracking.cancelling") : t("tracking.confirm_cancel_btn")}
                     </button>
                   </div>
                 </div>
@@ -409,7 +409,7 @@ export default function Tracking() {
                   onClick={() => setShowCancelPrompt(true)}
                   className="w-full py-3 rounded-2xl bg-red-50 text-red-500 font-bold text-sm hover:bg-red-100 transition-colors"
                 >
-                  Hủy đơn hàng
+                  {t("tracking.cancel_order")}
                 </button>
               )}
             </div>
@@ -431,7 +431,7 @@ export default function Tracking() {
                     lat: deliveryCoords.latitude,
                     lng: deliveryCoords.longitude,
                   }}
-                  addressName={order?.deliveryAddress || "Vị trí giao hàng"}
+                  addressName={order?.deliveryAddress || t("tracking.delivery_location")}
                 />
                 <RestaurantMarkers
                   restaurants={[
@@ -441,7 +441,7 @@ export default function Tracking() {
                       address: order?.restaurant?.address || "Restaurant Address",
                       latitude: restaurantCoords.latitude.toString(),
                       longitude: restaurantCoords.longitude.toString(),
-                      description: "Điểm lấy hàng",
+                      description: t("checkout.pickup_point"),
                     },
                   ]}
                 />
@@ -449,8 +449,8 @@ export default function Tracking() {
                   <Marker position={[driverLoc.latitude, driverLoc.longitude]} icon={driverIcon}>
                     <Popup>
                       <div className="p-1">
-                        <p className="font-bold text-xs text-gray-900">Tài xế của bạn</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">Đang di chuyển...</p>
+                        <p className="font-bold text-xs text-gray-900">{t("tracking.your_driver")}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{t("tracking.in_progress")}</p>
                       </div>
                     </Popup>
                   </Marker>
@@ -459,7 +459,7 @@ export default function Tracking() {
               </MapView>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-50 text-sm text-gray-400">
-                Đang tải bản đồ...
+                {t("tracking.loading_map")}
               </div>
             )}
             <div className="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur rounded-2xl px-4 py-2 flex items-center gap-2 z-[1000]">
@@ -504,11 +504,11 @@ export default function Tracking() {
           {/* Real Review Section */}
           {order?.status === "completed" && !reviewSubmitted && (
             <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-5 animate-in fade-in duration-300">
-              <h2 className="font-bold text-gray-900 text-sm">{t('tracking.rate_experience', 'Đánh giá đơn hàng')}</h2>
+              <h2 className="font-bold text-gray-900 text-sm">{t('tracking.rate_experience')}</h2>
 
               {/* Restaurant Review */}
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-600">Đánh giá nhà hàng ({order.restaurant?.name})</p>
+                <p className="text-xs font-semibold text-gray-600">{t("tracking.rate_restaurant")} ({order.restaurant?.name})</p>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5].map((s) => (
                     <button key={s} onClick={() => setRestaurantRating(s)} className="p-0.5 transition-transform hover:scale-110">
@@ -519,7 +519,7 @@ export default function Tracking() {
                 <textarea
                   value={restaurantComment}
                   onChange={(e) => setRestaurantComment(e.target.value)}
-                  placeholder="Nhập nhận xét về món ăn & nhà hàng..."
+                  placeholder={t("tracking.restaurant_review_placeholder")}
                   rows={2}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
                 />
@@ -528,7 +528,7 @@ export default function Tracking() {
               {/* Driver Review */}
               {order.driver && (
                 <div className="space-y-2 border-t border-gray-100 pt-3">
-                  <p className="text-xs font-semibold text-gray-600">Đánh giá tài xế ({order.driver.profile?.fullName || "Tài xế"})</p>
+                  <p className="text-xs font-semibold text-gray-600">{t("tracking.rate_driver")} ({order.driver.profile?.fullName || t("auth.driver")})</p>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((s) => (
                       <button key={s} onClick={() => setDriverRating(s)} className="p-0.5 transition-transform hover:scale-110">
@@ -539,7 +539,7 @@ export default function Tracking() {
                   <textarea
                     value={driverComment}
                     onChange={(e) => setDriverComment(e.target.value)}
-                    placeholder="Nhập nhận xét về tài xế..."
+                    placeholder={t("tracking.driver_review_placeholder")}
                     rows={2}
                     className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition-all resize-none text-gray-800"
                   />
@@ -552,7 +552,7 @@ export default function Tracking() {
                 className="w-full py-3 rounded-2xl text-white font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2"
                 style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
               >
-                {isSubmittingReview ? "Đang gửi..." : "Gửi đánh giá"}
+                {isSubmittingReview ? t("tracking.submitting") : t("tracking.submit_review")}
               </button>
             </div>
           )}
@@ -560,13 +560,13 @@ export default function Tracking() {
           {order?.status === "completed" && reviewSubmitted && (
             <div className="bg-green-50 rounded-3xl p-5 border border-green-100 flex items-center gap-3 animate-in fade-in duration-300">
               <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-              <p className="text-xs font-medium text-green-700">{t('tracking.thanks_for_rating', 'Cảm ơn bạn đã gửi đánh giá!')}</p>
+              <p className="text-xs font-medium text-green-700">{t('tracking.thanks_for_rating')}</p>
             </div>
           )}
 
           {order && order.status !== "completed" && order.status !== "cancelled" && (
             <div className="bg-gray-50 rounded-3xl p-5 border border-gray-200 text-center">
-              <p className="text-xs text-gray-500">Đánh giá nhà hàng & tài xế sẽ hiển thị khi đơn hàng hoàn thành. 🍽️</p>
+              <p className="text-xs text-gray-500">{t("tracking.review_completed_hint")}</p>
             </div>
           )}
         </div>
