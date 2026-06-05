@@ -21,6 +21,7 @@ export interface CartItem {
   optionGroups?: OptionGroup[];
   restaurantLatitude?: number;
   restaurantLongitude?: number;
+  selected?: boolean;
 }
 
 interface CartStoreState {
@@ -32,14 +33,18 @@ interface CartStoreState {
   groupCartToken: string | null;
   setGroupCartSession: (cartId: string | null, token: string | null) => void;
   addItem: (
-    item: Omit<CartItem, "qty" | "restaurantId" | "restaurantName" | "cartItemId" | "cartId">,
+    item: Omit<CartItem, "qty" | "restaurantId" | "restaurantName" | "cartItemId" | "cartId" | "selected">,
     restaurantId: string,
     restaurantName: string,
     selectedOptions?: Record<string, OptionChoice | OptionChoice[]>
   ) => Promise<void>;
   removeItem: (id: string, restaurantId?: string) => Promise<void>;
   updateQty: (id: string, delta: number, restaurantId?: string) => Promise<void>;
+  setQty: (id: string, qty: number, restaurantId?: string) => Promise<void>;
   clearCart: (restaurantId?: string | null) => Promise<void>;
+  clearSelectedItems: (restaurantId?: string | null) => Promise<void>;
+  toggleSelectItem: (id: string) => void;
+  toggleSelectAll: (restaurantId: string, checked: boolean) => void;
   getTotal: () => number;
   getItemCount: () => number;
   fetchCarts: () => Promise<void>;
@@ -82,6 +87,7 @@ export const useCartStore = create<CartStoreState>()(
             carts = res || [];
           }
 
+          const prevItems = get().items || [];
           const items: CartItem[] = [];
 
           carts.forEach((cart) => {
@@ -103,6 +109,7 @@ export const useCartStore = create<CartStoreState>()(
                   }
                 }
               }
+              const prevItem = prevItems.find((pi) => pi.cartItemId === item.id);
               items.push({
                 id: item.menuItem.id,
                 cartItemId: item.id,
@@ -119,6 +126,7 @@ export const useCartStore = create<CartStoreState>()(
                 optionGroups: item.menuItem.optionGroups || [],
                 restaurantLatitude: cart.restaurant.latitude ? Number(cart.restaurant.latitude) : undefined,
                 restaurantLongitude: cart.restaurant.longitude ? Number(cart.restaurant.longitude) : undefined,
+                selected: prevItem ? (prevItem.selected ?? true) : true,
               });
             });
           });
@@ -234,6 +242,32 @@ export const useCartStore = create<CartStoreState>()(
         }
       },
 
+      setQty: async (id, qty, restaurantId) => {
+        const currentUser = useAuthStore.getState().user;
+        if (!currentUser) return;
+
+        try {
+          const targetItem = get().items.find(
+            (item) =>
+              item.cartItemId === id ||
+              (restaurantId
+                ? item.id === id && item.restaurantId === restaurantId
+                : item.id === id)
+          );
+
+          if (targetItem && targetItem.cartItemId && targetItem.cartId) {
+            if (qty > 0) {
+              await cartService.updateCartItem(targetItem.cartId, targetItem.cartItemId, { quantity: qty });
+            } else {
+              await cartService.removeCartItem(targetItem.cartId, targetItem.cartItemId);
+            }
+            await get().fetchCarts();
+          }
+        } catch (error) {
+          console.error("Failed to set quantity:", error);
+        }
+      },
+
       clearCart: async (targetRestaurantId?: string | null) => {
         const currentUser = useAuthStore.getState().user;
         if (!currentUser) return;
@@ -270,6 +304,44 @@ export const useCartStore = create<CartStoreState>()(
         } catch (error) {
           console.error("Failed to clear cart:", error);
         }
+      },
+
+      clearSelectedItems: async (targetRestaurantId?: string | null) => {
+        const currentUser = useAuthStore.getState().user;
+        if (!currentUser) return;
+
+        try {
+          const itemsToDelete = get().items.filter(
+            (item) => item.selected && (!targetRestaurantId || item.restaurantId === targetRestaurantId)
+          );
+
+          for (const item of itemsToDelete) {
+            if (item.cartId && item.cartItemId) {
+              await cartService.removeCartItem(item.cartId, item.cartItemId);
+            }
+          }
+          await get().fetchCarts();
+        } catch (error) {
+          console.error("Failed to clear selected items:", error);
+        }
+      },
+
+      toggleSelectItem: (id) => {
+        const items = get().items.map((item) =>
+          item.cartItemId === id || item.id === id
+            ? { ...item, selected: !item.selected }
+            : item
+        );
+        set({ items });
+      },
+
+      toggleSelectAll: (restaurantId, checked) => {
+        const items = get().items.map((item) =>
+          item.restaurantId === restaurantId
+            ? { ...item, selected: checked }
+            : item
+        );
+        set({ items });
       },
 
       getTotal: () =>

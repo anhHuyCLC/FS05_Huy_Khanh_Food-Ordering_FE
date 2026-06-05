@@ -131,12 +131,30 @@
     "faq_title": "Frequently asked questions",
     "faq_subtitle": "Everything you need to know about Savour",
     "faq_items": [
-      { "q": "How fast is delivery?", "a": "Most orders arrive within 15-35 minutes. Our AI optimizes routes in real-time to ensure the fastest possible delivery." },
-      { "q": "What payment methods are accepted?", "a": "We accept cash, all major credit/debit cards, and popular e-wallets including Apple Pay, Google Pay, and PayPal." },
-      { "q": "Can I track my order in real-time?", "a": "Yes! Once your order is placed, you can track the preparation status and your driver's live location on the map." },
-      { "q": "How do I become a restaurant partner?", "a": "Sign up through our Partner portal. We'll review your application within 24 hours and get you set up with full onboarding support." },
-      { "q": "Is there a minimum order amount?", "a": "Minimum order amounts vary by restaurant, typically starting at $5. No minimums for platform fees." },
-      { "q": "How does the rewards program work?", "a": "Earn Savour Points on every order. Reach milestones to unlock badges, exclusive discounts, and priority delivery." }
+      {
+        "q": "How fast is delivery?",
+        "a": "Most orders arrive within 15-35 minutes. Our AI optimizes routes in real-time to ensure the fastest possible delivery."
+      },
+      {
+        "q": "What payment methods are accepted?",
+        "a": "We accept cash, all major credit/debit cards, and popular e-wallets including Apple Pay, Google Pay, and PayPal."
+      },
+      {
+        "q": "Can I track my order in real-time?",
+        "a": "Yes! Once your order is placed, you can track the preparation status and your driver's live location on the map."
+      },
+      {
+        "q": "How do I become a restaurant partner?",
+        "a": "Sign up through our Partner portal. We'll review your application within 24 hours and get you set up with full onboarding support."
+      },
+      {
+        "q": "Is there a minimum order amount?",
+        "a": "Minimum order amounts vary by restaurant, typically starting at $5. No minimums for platform fees."
+      },
+      {
+        "q": "How does the rewards program work?",
+        "a": "Earn Savour Points on every order. Reach milestones to unlock badges, exclusive discounts, and priority delivery."
+      }
     ],
     "ready_to_get_started": "Ready to get started?",
     "join_happy_customers": "Join 2 million+ happy customers and experience food delivery reimagined.",
@@ -404,7 +422,10 @@
     "leave_group_success": "Left the group cart successfully!",
     "copy_link": "Copy Link",
     "login_required_desc": "You need to log in to view your cart and order.",
-    "save_changes": "Save Changes"
+    "save_changes": "Save Changes",
+    "delete_selected": "Delete selected",
+    "delete_selected_success": "Delete selected success",
+    "no_items_selected": "No items selected"
   },
   "checkout": {
     "checkout": "Checkout",
@@ -1278,10 +1299,26 @@
     "language": "🌍 English (US)",
     "currency": "$ USD",
     "company_title": "Company",
-    "company_links": ["About", "Careers", "Blog", "Press", "Contact"],
+    "company_links": [
+      "About",
+      "Careers",
+      "Blog",
+      "Press",
+      "Contact"
+    ],
     "partners_title": "Partners",
-    "partners_links": ["Restaurant Partners", "Driver Signup", "Pricing", "API Docs"],
+    "partners_links": [
+      "Restaurant Partners",
+      "Driver Signup",
+      "Pricing",
+      "API Docs"
+    ],
     "legal_title": "Legal",
-    "legal_links": ["Privacy Policy", "Terms of Service", "Cookie Policy", "Accessibility"]
+    "legal_links": [
+      "Privacy Policy",
+      "Terms of Service",
+      "Cookie Policy",
+      "Accessibility"
+    ]
   }
 }

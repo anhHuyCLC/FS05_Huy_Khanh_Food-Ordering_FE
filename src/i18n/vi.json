@@ -412,7 +412,10 @@
     "leave_group_success": "Đã rời giỏ hàng nhóm!",
     "copy_link": "Copy Link",
     "login_required_desc": "Bạn cần đăng nhập để xem giỏ hàng và đặt món.",
-    "save_changes": "Lưu thay đổi"
+    "save_changes": "Lưu thay đổi",
+    "delete_selected": "Xóa đã chọn",
+    "delete_selected_success": "Đã xóa khỏi giỏ hàng thành công",
+    "no_items_selected": "Không có sản phẩm nào trong giỏ hàng"
   },
   "checkout": {
     "checkout": "Thanh toán",

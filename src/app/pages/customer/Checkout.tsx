@@ -26,15 +26,16 @@ const payMethods = [
 export default function Checkout() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { items, clearCart } = useCartStore();
+  const { items, clearSelectedItems } = useCartStore();
 
   // Get restaurantId from URL parameter or fall back to first item
   const queryParams = new URLSearchParams(window.location.search);
   const queryRestaurantId = queryParams.get("restaurantId");
 
   const filteredItems = useMemo(() => {
-    if (!queryRestaurantId) return items;
-    return items.filter((item) => item.restaurantId === queryRestaurantId);
+    const selectedItems = items.filter((item) => item.selected);
+    if (!queryRestaurantId) return selectedItems;
+    return selectedItems.filter((item) => item.restaurantId === queryRestaurantId);
   }, [items, queryRestaurantId]);
 
   const restaurantId = queryRestaurantId || (filteredItems.length > 0 ? filteredItems[0].restaurantId : null);
@@ -432,7 +433,7 @@ export default function Checkout() {
 
       const order = await orderService.createOrder(payload);
       toast.success(t('checkout.place_order_success') || "Order placed successfully!");
-      await clearCart(restaurantId);
+      await clearSelectedItems(restaurantId);
       
       if (payMethod === "vnpay" && order.paymentUrl) {
         window.location.href = order.paymentUrl;

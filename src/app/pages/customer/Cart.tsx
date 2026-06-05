@@ -10,7 +10,18 @@ import type { OptionChoice, OptionGroup } from "../../types/restaurant";
 
 export default function Cart() {
   const navigate = useNavigate();
-  const { items, updateQty, getTotal, getItemCount, restaurantId, restaurantName, groupCartToken } = useCartStore();
+  const { 
+    items, 
+    updateQty, 
+    setQty, 
+    getItemCount, 
+    restaurantId, 
+    restaurantName, 
+    groupCartToken,
+    toggleSelectItem,
+    toggleSelectAll,
+    clearSelectedItems
+  } = useCartStore();
   const user = useAuthStore((state) => state.user);
   
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
@@ -20,6 +31,9 @@ export default function Cart() {
   const [isSavingOptions, setIsSavingOptions] = useState(false);
   const [sharing, setSharing] = useState(false);
   const { t } = useTranslation();
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -43,7 +57,7 @@ export default function Cart() {
       };
       joinGroupCart();
     }
-  }, [user, navigate]);
+  }, [user, navigate, t]);
 
   const copyToClipboard = async (text: string) => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -118,7 +132,6 @@ export default function Cart() {
     }
   };
 
-
   const handleUpdateQty = useCallback(async (id: string, delta: number, itemRestaurantId?: string) => {
     if (loadingItemId) return;
     setLoadingItemId(id);
@@ -128,6 +141,49 @@ export default function Cart() {
       setLoadingItemId(null);
     }
   }, [loadingItemId, updateQty]);
+
+  const handleSaveQty = async (item: CartItem) => {
+    const itemId = item.cartItemId ?? item.id;
+    const val = parseInt(editingValue, 10);
+    setEditingItemId(null);
+
+    if (isNaN(val) || val < 0) {
+      return; // Revert, do nothing
+    }
+
+    if (val === 0) {
+      setLoadingItemId(itemId);
+      try {
+        await useCartStore.getState().removeItem(itemId, item.restaurantId);
+      } finally {
+        setLoadingItemId(null);
+      }
+      return;
+    }
+
+    if (val !== item.qty) {
+      setLoadingItemId(itemId);
+      try {
+        await setQty(itemId, val, item.restaurantId);
+      } finally {
+        setLoadingItemId(null);
+      }
+    }
+  };
+
+  const handleDeleteSelected = async (rId?: string) => {
+    if (loadingItemId) return;
+    setLoadingItemId("delete-selected");
+    try {
+      await clearSelectedItems(rId);
+      toast.success(t("cart.delete_selected_success") || "Đã xóa các sản phẩm được chọn thành công!");
+    } catch (err) {
+      console.error(err);
+      toast.error(t("cart.delete_selected_error") || "Không thể xóa các sản phẩm được chọn.");
+    } finally {
+      setLoadingItemId(null);
+    }
+  };
 
   const handleSaveOptions = async () => {
     if (!selectedItem) return;
@@ -157,7 +213,6 @@ export default function Cart() {
     }
   };
 
-  const subtotal = getTotal();
   const itemCount = getItemCount();
 
   // Chưa đăng nhập → hiển thị màn hình yêu cầu đăng nhập
@@ -207,21 +262,41 @@ export default function Cart() {
     return acc;
   }, {} as Record<string, { restaurantName: string, items: typeof items }>);
 
-  const itemsByRestaurantKeys = Object.keys(itemsByRestaurant);
-  const isMultiRestaurant = itemsByRestaurantKeys.length > 1;
+  // Selected state logic
+  const selectedItems = items.filter((item) => item.selected);
+  const selectedItemsByRestaurant = selectedItems.reduce((acc, item) => {
+    const rId = item.restaurantId || 'unknown';
+    if (!acc[rId]) {
+      acc[rId] = [];
+    }
+    acc[rId].push(item);
+    return acc;
+  }, {} as Record<string, typeof items>);
+
+  const selectedRestaurantKeys = Object.keys(selectedItemsByRestaurant);
+  const isMultiRestaurantSelected = selectedRestaurantKeys.length > 1;
+  const hasSelectedItems = selectedItems.length > 0;
 
   const handleProceedCheckout = () => {
-    if (isMultiRestaurant) {
-      toast.warning(t("cart.multi_restaurant_warning_toast"));
+    if (!hasSelectedItems) {
+      toast.warning(t("cart.no_items_selected_toast") || "Vui lòng chọn ít nhất một sản phẩm để thanh toán.");
       return;
     }
-    const rId = itemsByRestaurantKeys[0] || restaurantId || (items[0]?.restaurantId);
+    if (isMultiRestaurantSelected) {
+      toast.warning(t("cart.multi_restaurant_warning_toast") || "Bạn chỉ có thể đặt hàng từ một cửa hàng cùng lúc.");
+      return;
+    }
+    const rId = selectedRestaurantKeys[0];
     if (rId && rId !== 'unknown') {
       navigate(`/checkout?restaurantId=${rId}`);
     } else {
       navigate("/checkout");
     }
   };
+
+  const selectedSubtotal = selectedItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const selectedItemCount = selectedItems.reduce((sum, item) => sum + item.qty, 0);
+  const subtotal = selectedSubtotal;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -294,13 +369,41 @@ export default function Cart() {
           ) : (
             Object.entries(itemsByRestaurant).map(([rId, group]) => (
               <div key={rId} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden mb-6">
-                <div className="p-5 border-b border-gray-50">
-                  <p className="font-bold text-gray-900">{group.restaurantName}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{t('cart.estimated_delivery')}</p>
+                <div className="p-5 border-b border-gray-50 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={group.items.every((item) => item.selected)}
+                      onChange={(e) => toggleSelectAll(rId, e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-5 h-5 rounded border-gray-300 text-[#FF4500] focus:ring-[#FF4500] cursor-pointer"
+                    />
+                    <div>
+                      <p className="font-bold text-gray-900">{group.restaurantName}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{t('cart.estimated_delivery')}</p>
+                    </div>
+                  </div>
+                  {group.items.some((item) => item.selected) && (
+                    <button
+                      onClick={() => handleDeleteSelected(rId)}
+                      disabled={loadingItemId === "delete-selected"}
+                      className="text-xs font-bold text-red-500 hover:text-[#FF4500] flex items-center gap-1 bg-red-50 px-3 py-1.5 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {t('cart.delete_selected') || "Xóa đã chọn"}
+                    </button>
+                  )}
                 </div>
                 <div className="divide-y divide-gray-50">
                   {group.items.map((item) => (
                     <div key={item.cartItemId || item.id} className="flex items-center gap-4 p-5">
+                      <input
+                        type="checkbox"
+                        checked={!!item.selected}
+                        onChange={() => toggleSelectItem(item.cartItemId ?? item.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-5 h-5 rounded border-gray-300 text-[#FF4500] focus:ring-[#FF4500] cursor-pointer shrink-0"
+                      />
                       <img src={item.image} alt={item.name} className="w-16 h-16 rounded-2xl object-cover shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 truncate">{item.name}</p>
@@ -341,7 +444,32 @@ export default function Cart() {
                         <button onClick={() => handleUpdateQty(item.cartItemId ?? item.id, -1, item.restaurantId)} disabled={loadingItemId === (item.cartItemId ?? item.id)} aria-label={item.qty === 1 ? "Xoá" : "Giảm"} className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-500 hover:border-red-300 hover:text-red-400 transition-colors disabled:opacity-50">
                           {loadingItemId === (item.cartItemId ?? item.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : item.qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
                         </button>
-                        <span className="w-5 text-center font-bold text-gray-900">{item.qty}</span>
+                        {editingItemId === (item.cartItemId ?? item.id) ? (
+                          <input
+                            type="number"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleSaveQty(item)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveQty(item);
+                              if (e.key === "Escape") setEditingItemId(null);
+                            }}
+                            className="w-12 text-center font-bold text-gray-950 bg-gray-50 border border-gray-300 rounded-lg outline-none py-1 focus:ring-1 focus:ring-orange-500 focus:border-orange-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-sans"
+                            autoFocus
+                            min="1"
+                          />
+                        ) : (
+                          <span
+                            onClick={() => {
+                              setEditingItemId(item.cartItemId ?? item.id);
+                              setEditingValue(String(item.qty));
+                            }}
+                            className="w-8 text-center font-bold text-gray-900 cursor-pointer hover:bg-gray-100 py-1 rounded transition-colors"
+                            title={t("cart.click_to_edit_qty") || "Click to edit quantity"}
+                          >
+                            {item.qty}
+                          </span>
+                        )}
                         <button onClick={() => handleUpdateQty(item.cartItemId ?? item.id, 1, item.restaurantId)} disabled={loadingItemId === (item.cartItemId ?? item.id)} aria-label="Tăng" className="w-10 h-10 rounded-full flex items-center justify-center text-white transition-all hover:opacity-90 disabled:opacity-50 brand-gradient-bg">
                           {loadingItemId === (item.cartItemId ?? item.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                         </button>
@@ -353,12 +481,22 @@ export default function Cart() {
                   <div>
                     <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">{t("cart.subtotal_restaurant")}</span>
                     <p className="text-lg font-black text-gray-900">
-                      {group.items.reduce((sum, item) => sum + item.price * item.qty, 0).toLocaleString()}đ
+                      {group.items.reduce((sum, item) => sum + (item.selected ? item.price * item.qty : 0), 0).toLocaleString()}đ
                     </p>
                   </div>
                   <button
-                    onClick={() => navigate(`/checkout?restaurantId=${rId}`)}
-                    className="px-6 py-3 rounded-2xl text-white font-bold text-sm transition-all hover:opacity-90 hover:scale-[1.02] shadow-sm flex items-center gap-1.5"
+                    onClick={() => {
+                      const hasSel = group.items.some(item => item.selected);
+                      if (!hasSel) {
+                        group.items.forEach(item => {
+                          if (!item.selected) {
+                            toggleSelectItem(item.cartItemId ?? item.id);
+                          }
+                        });
+                      }
+                      navigate(`/checkout?restaurantId=${rId}`);
+                    }}
+                    className="px-6 py-3 rounded-2xl text-white font-bold text-sm transition-all hover:opacity-90 hover:scale-[1.02] shadow-sm flex items-center gap-1.5 cursor-pointer"
                     style={{ background: "linear-gradient(135deg, #FF4500, #FF6B35)" }}
                   >
                     {t("cart.checkout_restaurant")}
@@ -373,7 +511,7 @@ export default function Cart() {
             <button
               key={rId}
               onClick={() => navigate(`/restaurant/${rId}`)}
-              className="w-full py-4 rounded-3xl border-2 border-dashed border-gray-200 text-sm font-semibold text-[#FF4500] hover:border-orange-300 hover:bg-orange-50 transition-all"
+              className="w-full py-4 rounded-3xl border-2 border-dashed border-gray-200 text-sm font-semibold text-[#FF4500] hover:border-orange-300 hover:bg-orange-50 transition-all cursor-pointer"
             >
               {t('cart.add_more')} {group.restaurantName}
             </button>
@@ -388,7 +526,7 @@ export default function Cart() {
             {/* Breakdown */}
             <div className="space-y-2.5 mb-5">
               <div className="flex justify-between text-sm font-bold text-gray-900">
-                <span>{t('cart.subtotal')} ({itemCount} {t('cart.items')})</span>
+                <span>{t('cart.subtotal')} ({selectedItemCount} {t('cart.items')})</span>
                 <span>{subtotal.toLocaleString()}đ</span>
               </div>
               <p className="text-xs text-gray-400 leading-relaxed mt-1">
@@ -396,27 +534,31 @@ export default function Cart() {
               </p>
             </div>
 
-            {isMultiRestaurant ? (
+            {isMultiRestaurantSelected ? (
               <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
-                {t("cart.multi_restaurant_warning")}
+                {t("cart.multi_restaurant_warning") || "Giỏ hàng của bạn chứa các món từ nhiều quán khác nhau. Vui lòng thanh toán riêng từng quán."}
               </div>
             ) : null}
 
             <button
               onClick={handleProceedCheckout}
-              disabled={isMultiRestaurant}
+              disabled={!hasSelectedItems || isMultiRestaurantSelected}
               className={`w-full py-4 rounded-2xl text-white font-bold text-base transition-all ${
-                isMultiRestaurant
+                !hasSelectedItems || isMultiRestaurantSelected
                   ? "bg-gray-300 cursor-not-allowed opacity-60"
                   : "hover:opacity-90 hover:scale-[1.01]"
               }`}
               style={
-                isMultiRestaurant
+                !hasSelectedItems || isMultiRestaurantSelected
                   ? {}
                   : { background: "linear-gradient(135deg, #FF4500, #FF6B35)", boxShadow: "0 8px 24px rgba(255,69,0,0.3)" }
               }
             >
-              {isMultiRestaurant ? t("cart.checkout_multi_restaurant") : t('cart.proceed_checkout')}
+              {!hasSelectedItems 
+                ? (t("cart.no_items_selected") || "Chọn sản phẩm") 
+                : isMultiRestaurantSelected 
+                  ? (t("cart.checkout_multi_restaurant") || "Thanh toán riêng") 
+                  : t('cart.proceed_checkout')}
             </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">{t('cart.secure_payment')}</p>

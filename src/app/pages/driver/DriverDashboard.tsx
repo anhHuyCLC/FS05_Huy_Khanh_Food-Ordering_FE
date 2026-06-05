@@ -185,7 +185,7 @@ export default function DriverDashboard() {
     error,
     orderHistory,
   } = useAppSelector((s) => s.driver);
-  // eslint-disable-next-line no-console
+
   console.log("[FRONTEND DEBUG] activeOrders state length:", activeOrders?.length, "list:", activeOrders, "profileId:", profile?.id);
   const token = useAppSelector(
     (s) => s.auth.token ?? localStorage.getItem("token") ?? "",
