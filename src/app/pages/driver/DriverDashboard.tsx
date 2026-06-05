@@ -98,7 +98,7 @@ import {
 import * as driverService from "../../services/driverService";
 import type { DeliveryStatus, EarningsPeriod, Order } from "../../types/driver";
 import React from "react";
-import { Wallet, Building2, User as UserIcon, FileText, Copy, CheckCircle2, Clock3 } from "lucide-react";
+import { Wallet, Building2, User as UserIcon, FileText, Clock3 } from "lucide-react";
 
 // ── Biểu đồ thu nhập theo ngày (fallback khi chưa có data từ API) ─────────────
 const SAMPLE_CHART: { day: string; earnings: number }[] = [
@@ -208,7 +208,6 @@ export default function DriverDashboard() {
   const [bankOwner, setBankOwner] = useState("");
   const [walletNote, setWalletNote] = useState("");
   const [isWalletLoading, setIsWalletLoading] = useState(false);
-  const [isVNPayRedirecting, setIsVNPayRedirecting] = useState(false);
   const historySkipRef = useRef(0);
 
 
@@ -725,7 +724,6 @@ export default function DriverDashboard() {
       const res = await driverService.requestDeposit(amount);
       if (res.success && res.data?.paymentUrl) {
         closeWalletModal();
-        setIsVNPayRedirecting(true);
         // Mở VNPay trong tab hiện tại — VNPay sẽ redirect về trang này sau khi thanh toán
         window.location.href = res.data.paymentUrl;
       }
@@ -771,11 +769,9 @@ export default function DriverDashboard() {
       dispatch(loadDriverDashboard()); // Refresh dashboard data to update wallet balance and codDebt
       // Xóa query params khỏi URL
       window.history.replaceState({}, "", window.location.pathname);
-      setIsVNPayRedirecting(false);
     } else if (walletStatus === "failed") {
       notify.error("Thanh toán VNPay thất bại hoặc bị hủy. Vui lòng thử lại.");
       window.history.replaceState({}, "", window.location.pathname);
-      setIsVNPayRedirecting(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

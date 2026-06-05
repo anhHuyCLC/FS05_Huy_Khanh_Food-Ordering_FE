@@ -603,7 +603,7 @@ export default function Profile() {
 
                 return (
                   <div key={r.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate(`/restaurant/${r.id}`)}>
-                    <img src={r.imageUrl} alt={r.name} className="w-full h-32 object-cover" />
+                    <img src={r.imageUrl ?? undefined} alt={r.name} className="w-full h-32 object-cover" />
                     <div className="p-4">
                       <p className="font-bold text-gray-900">{r.name}</p>
                       <div className="flex items-center justify-between text-sm text-gray-400 mt-1">
