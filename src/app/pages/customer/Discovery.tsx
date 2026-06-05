@@ -437,7 +437,7 @@ export default function Discovery() {
         uniques.set(order.restaurant.id, {
           id: order.restaurant.id,
           name: order.restaurant.name,
-          logo: order.restaurant.logo,
+          logo: order.restaurant.imageUrl || order.restaurant.logo,
           address: order.restaurant.address,
           rating: restaurants?.find((res) => res.id === order.restaurant?.id)?.rating || null,
         });

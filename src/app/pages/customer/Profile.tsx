@@ -501,7 +501,7 @@ export default function Profile() {
                   className="bg-white rounded-2xl p-4 flex items-center gap-4 border border-gray-100 hover:border-orange-200 transition-all cursor-pointer"
                   onClick={() => navigate(`/tracking?orderId=${order.id}`)}
                 >
-                  <img src={order.restaurant?.logo} alt={order.restaurant?.name || "Restaurant"} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                  <img src={order.restaurant?.imageUrl || order.restaurant?.logo} alt={order.restaurant?.name || "Restaurant"} className="w-14 h-14 rounded-2xl object-cover shrink-0" />
                   <div className="flex-1">
                     <p className="font-semibold text-gray-900">{order.restaurant?.name || "Restaurant"}</p>
                     <p className="text-sm text-gray-400">#{order.id.slice(0, 8).toUpperCase()} · {dayjs(order.createdAt).format("MMM D, YYYY")}</p>
