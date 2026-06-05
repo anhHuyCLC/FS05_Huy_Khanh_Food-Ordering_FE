@@ -8,6 +8,11 @@ import type {
   Order, OrderStatusHistory, OrderMeta,CreateOrderInput, CancelOrderInput, UpdateOrderStatusInput
 } from "../types/order";
 
+const getErrorMessage = (e: unknown): string => {
+  const err = e as { response?: { data?: { message?: string } }; message?: string };
+  return err.response?.data?.message ?? err.message ?? "An error occurred";
+};
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 interface OrderState {
@@ -44,9 +49,7 @@ export const fetchMyOrders = createAsyncThunk<
     try {
       return await getMyOrders();
     } catch (e) {
-      return rejectWithValue(
-        e.response?.data?.message ?? e.message
-      );
+      return rejectWithValue(getErrorMessage(e));
     }
   }
 );
@@ -59,7 +62,7 @@ export const fetchOrder = createAsyncThunk<
   "orders/fetchOne",
   async (orderId: string, { rejectWithValue }) => {
     try { return await getOrder(orderId); }
-    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(getErrorMessage(e)); }
   }
 );
 
@@ -71,7 +74,7 @@ export const placeOrder = createAsyncThunk<
   "orders/create",
   async (data: CreateOrderInput, { rejectWithValue }) => {
     try { return await createOrder(data); }
-    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(getErrorMessage(e)); }
   }
 );
 
@@ -83,7 +86,7 @@ export const cancelMyOrder = createAsyncThunk<
   "orders/cancel",
   async ({ orderId, data }: { orderId: string; data: CancelOrderInput }, { rejectWithValue }) => {
     try { return await cancelOrder(orderId, data); }
-    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(getErrorMessage(e)); }
   }
 );
 
@@ -95,7 +98,7 @@ export const changeOrderStatus = createAsyncThunk<
   "orders/updateStatus",
   async ({ orderId, data }: { orderId: string; data: UpdateOrderStatusInput }, { rejectWithValue }) => {
     try { return await updateOrderStatus(orderId, data); }
-    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(getErrorMessage(e)); }
   }
 );
 
@@ -107,7 +110,7 @@ export const fetchRestaurantOrders = createAsyncThunk<
   "orders/fetchForRestaurant",
   async ({ restaurantId, params }: { restaurantId: string; params?: { status?: string; page?: number; limit?: number } }, { rejectWithValue }) => {
     try { return await getRestaurantOrdersPaginated(restaurantId, params); }
-    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(getErrorMessage(e)); }
   }
 );
 
@@ -119,7 +122,7 @@ export const fetchOrderHistory = createAsyncThunk<
   "orders/fetchHistory",
   async (orderId: string, { rejectWithValue }) => {
     try { return await getOrderHistory(orderId); }
-    catch (e) { return rejectWithValue(e.response?.data?.message ?? e.message); }
+    catch (e) { return rejectWithValue(getErrorMessage(e)); }
   }
 );
 
