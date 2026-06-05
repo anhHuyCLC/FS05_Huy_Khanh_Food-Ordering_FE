@@ -6,15 +6,26 @@ const parseResponse = <T>(response: unknown): T => {
   return resObj?.data?.data ?? (resObj?.data as T);
 };
 
+export interface CheckPromotionResponse {
+  success: boolean;
+  discountAmount: number;
+  promotionCode?: string;
+  promotionType?: string;
+  foodDiscount: number;
+  shippingDiscount: number;
+  foodPromo?: { code: string; promotionType: string } | null;
+  shippingPromo?: { code: string; promotionType: string } | null;
+}
+
 export const orderService = {
   createOrder: async (data: CreateOrderInput): Promise<Order> => {
     const response = await apiClient.post('/v1/orders', data);
     return parseResponse<Order>(response);
   },
 
-  checkPromotion: async (data: { promotionCode?: string; shippingPromotionCode?: string; restaurantId: string; totalAmount: number; deliveryFee?: number }) => {
+  checkPromotion: async (data: { promotionCode?: string; shippingPromotionCode?: string; restaurantId: string; totalAmount: number; deliveryFee?: number }): Promise<CheckPromotionResponse> => {
     const response = await apiClient.post('/v1/orders/check-promotion', data);
-    return response.data;
+    return parseResponse<CheckPromotionResponse>(response);
   },
 
    getPromotions: async (restaurantId?: string): Promise<Promotion[]> => {

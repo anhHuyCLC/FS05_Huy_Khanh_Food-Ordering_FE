@@ -452,19 +452,41 @@ export default function Checkout() {
   }, [filteredItems]);
   const delivery = routeState ? calculateDeliveryFee(routeState.distance / 1000) : deliveryFee;
 
-  const handleApplyPromo = async (codeToApply: string) => {
+  const handleApplyPromo = async (codeToApply: string, forceType?: "food" | "shipping") => {
     if (!codeToApply.trim() || !restaurantId) return;
     setIsCheckingPromo(true);
     try {
-      // Validate code by passing both fields in query. The BE checkPromotion expects it.
-      // To determine whether the code is food or shipping, we pass it appropriately.
-      // We can also call checkPromotion by checking it against the backend.
-      const res = await orderService.checkPromotion({
-        promotionCode: codeToApply,
-        restaurantId: restaurantId,
+      let promoType: "food" | "shipping" = "food";
+      if (forceType) {
+        promoType = forceType;
+      } else {
+        const found = promotions.find(
+          (p) => p.code.toLowerCase() === codeToApply.trim().toLowerCase()
+        );
+        if (found) {
+          promoType = found.promotionType === "shipping" ? "shipping" : "food";
+        }
+      }
+
+      const payload: {
+        promotionCode?: string;
+        shippingPromotionCode?: string;
+        restaurantId: string;
+        totalAmount: number;
+        deliveryFee?: number;
+      } = {
+        restaurantId,
         totalAmount: subtotal,
-        deliveryFee: delivery
-      });
+        deliveryFee: delivery,
+      };
+
+      if (promoType === "shipping") {
+        payload.shippingPromotionCode = codeToApply.trim();
+      } else {
+        payload.promotionCode = codeToApply.trim();
+      }
+
+      const res = await orderService.checkPromotion(payload);
 
       // Backend returns details of checked promos in res
       const hasDiscount = res.success ? (res.discountAmount !== undefined) : (res.discountAmount !== undefined);
@@ -473,11 +495,11 @@ export default function Checkout() {
 
       if (hasDiscount) {
         if (typeVal === "shipping") {
-          setShippingPromoCode(codeToApply);
+          setShippingPromoCode(codeToApply.trim());
           setShippingPromoApplied(true);
           setShippingDiscountAmount(discountVal);
         } else {
-          setFoodPromoCode(codeToApply);
+          setFoodPromoCode(codeToApply.trim());
           setFoodPromoApplied(true);
           setFoodDiscountAmount(discountVal);
         }
@@ -1142,7 +1164,7 @@ export default function Checkout() {
                                 if (isApplied) {
                                   handleRemoveFoodPromo();
                                 } else {
-                                  handleApplyPromo(p.code);
+                                  handleApplyPromo(p.code, "food");
                                 }
                               }}
                               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
@@ -1209,7 +1231,7 @@ export default function Checkout() {
                                 if (isApplied) {
                                   handleRemoveShippingPromo();
                                 } else {
-                                  handleApplyPromo(p.code);
+                                  handleApplyPromo(p.code, "shipping");
                                 }
                               }}
                               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${

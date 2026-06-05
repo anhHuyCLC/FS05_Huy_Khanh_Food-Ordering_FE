@@ -508,7 +508,8 @@
     "applied": "Applied",
     "no_dish_vouchers": "No food vouchers available.",
     "no_delivery_vouchers": "No shipping vouchers available.",
-    "selected_position": "Selected position"
+    "selected_position": "Selected position",
+    "apply": "Apply"
   },
   "discovery": {
     "search_placeholder": "Search restaurants, cuisines, dishes...",
